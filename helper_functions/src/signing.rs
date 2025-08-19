@@ -25,6 +25,10 @@ use types::{
     },
     config::Config,
     deneb::containers::BeaconBlock as DenebBeaconBlock,
+    eip7732::{
+        consts::{DOMAIN_BEACON_BUILDER, DOMAIN_PTC_ATTESTER},
+        containers::{ExecutionPayloadHeader, PayloadAttestationData},
+    },
     electra::containers::{
         AggregateAndProof as ElectraAggregateAndProof, BeaconBlock as ElectraBeaconBlock,
     },
@@ -424,4 +428,27 @@ impl<P: Preset> SignForSingleFork<P> for VoluntaryExit {
 impl<P: Preset> SignForSingleForkAtSlot<P> for H256 {
     const DOMAIN_TYPE: DomainType = DOMAIN_SYNC_COMMITTEE;
     const SIGNATURE_KIND: SignatureKind = SignatureKind::SyncCommitteeMessage;
+}
+
+/// ePBS: ExecutionPayloadHeader signing for builders
+impl<P: Preset> SignForSingleFork<P> for ExecutionPayloadHeader {
+    const DOMAIN_TYPE: DomainType = DOMAIN_BEACON_BUILDER;
+    const SIGNATURE_KIND: SignatureKind = SignatureKind::BeaconBuilder;
+
+    fn epoch(&self) -> Epoch {
+        // ExecutionPayloadHeader needs to be signed at the slot's epoch
+        // The slot should be passed in context, but for now we'll need to handle this differently
+        // This is a placeholder - the actual implementation will need the slot context
+        0 // TODO: Need slot context for proper epoch calculation
+    }
+}
+
+/// ePBS: PayloadAttestationData signing for PTC members
+impl<P: Preset> SignForSingleFork<P> for PayloadAttestationData {
+    const DOMAIN_TYPE: DomainType = DOMAIN_PTC_ATTESTER;
+    const SIGNATURE_KIND: SignatureKind = SignatureKind::PtcAttester;
+
+    fn epoch(&self) -> Epoch {
+        misc::compute_epoch_at_slot::<P>(self.slot)
+    }
 }

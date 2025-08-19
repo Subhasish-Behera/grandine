@@ -91,4 +91,8 @@ pub enum SignatureKind {
     SyncCommitteeSelectionProof,
     #[display("voluntary exit signature")]
     VoluntaryExit,
+    #[display("beacon builder signature")]
+    BeaconBuilder,
+    #[display("PTC attester signature")]
+    PtcAttester,
 }
