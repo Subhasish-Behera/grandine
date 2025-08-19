@@ -171,6 +171,9 @@ pub trait Preset: Copy + Eq + Ord + Hash + Default + Debug + Send + Sync + 'stat
         + Send
         + Sync;
 
+    // ePBS / EIP-7732
+    type PtcSize: BitVectorBits + MerkleBits + Eq + Debug + Send + Sync;
+
     // Derived type-level variables
     type MaxAttestersPerSlot: MerkleElements<ValidatorIndex>
         + MerkleBits
@@ -291,6 +294,9 @@ impl Preset for Mainnet {
     type PendingConsolidationsLimit = U262144;
     type PendingPartialWithdrawalsLimit = U134217728;
 
+    // ePBS / EIP-7732
+    type PtcSize = U512;
+
     // Derived type-level variables
     type MaxAttestersPerSlot = Prod<Self::MaxValidatorsPerCommittee, Self::MaxCommitteesPerSlot>;
 
@@ -381,6 +387,9 @@ impl Preset for Minimal {
 
     // Derived type-level variables
     type MaxAttestersPerSlot = Prod<Self::MaxValidatorsPerCommittee, Self::MaxCommitteesPerSlot>;
+    
+    // ePBS - manual override (delegate not working?)
+    type PtcSize = U512;
 
     // Meta
     const NAME: PresetName = PresetName::Minimal;
@@ -454,6 +463,9 @@ impl Preset for Medalla {
         type PendingDepositsLimit;
         type PendingConsolidationsLimit;
         type PendingPartialWithdrawalsLimit;
+
+        // ePBS / EIP-7732
+        type PtcSize;
 
         // Derived type-level variables
         type MaxAttestersPerSlot;

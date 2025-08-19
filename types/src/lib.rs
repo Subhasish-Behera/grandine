@@ -67,6 +67,16 @@ pub mod deneb {
 
 pub mod eip7594;
 
+pub mod eip7732 {
+
+    pub mod consts;
+    pub mod containers;
+    pub mod primitives;
+
+    #[cfg(test)]
+    mod spec_tests;
+}
+
 pub mod electra {
     pub mod beacon_state;
     pub mod consts;
