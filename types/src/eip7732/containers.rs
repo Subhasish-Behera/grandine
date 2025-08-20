@@ -5,11 +5,16 @@ use serde_utils;
 use typenum::U4;
 
 use crate::{
+    altair::containers::SyncAggregate,
+    capella::containers::SignedBlsToExecutionChange,
     deneb::containers::ExecutionPayload,
     deneb::primitives::KzgCommitment,
     eip7732::primitives::BuilderIndex,
-    electra::containers::ExecutionRequests,
-    phase0::primitives::{Epoch, ExecutionAddress, Gwei, Slot, ValidatorIndex, H256},
+    electra::containers::{Attestation, AttesterSlashing, ExecutionRequests},
+    phase0::{
+        containers::{Deposit, Eth1Data, ProposerSlashing, SignedVoluntaryExit},
+        primitives::{Epoch, ExecutionAddress, Gwei, Slot, ValidatorIndex, H256},
+    },
     preset::Preset,
 };
 
@@ -120,3 +125,47 @@ pub struct BuilderPendingPayment {
     pub weight: Gwei,
     pub withdrawal: BuilderPendingWithdrawal,
 }
+
+// Beacon Block Containers
+
+#[derive(Clone, PartialEq, Eq, Debug, Default, Deserialize, Serialize, Ssz)]
+#[serde(bound = "", deny_unknown_fields)]
+pub struct BeaconBlock<P: Preset> {
+    #[serde(with = "serde_utils::string_or_native")]
+    pub slot: Slot,
+    #[serde(with = "serde_utils::string_or_native")]
+    pub proposer_index: ValidatorIndex,
+    pub parent_root: H256,
+    pub state_root: H256,
+    pub body: BeaconBlockBody<P>,
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Default, Deserialize, Serialize, Ssz)]
+#[serde(bound = "", deny_unknown_fields)]
+pub struct BeaconBlockBody<P: Preset> {
+    pub randao_reveal: SignatureBytes,
+    pub eth1_data: Eth1Data,
+    pub graffiti: H256,
+    pub proposer_slashings: ContiguousList<ProposerSlashing, P::MaxProposerSlashings>,
+    pub attester_slashings: ContiguousList<AttesterSlashing<P>, P::MaxAttesterSlashingsElectra>,
+    pub attestations: ContiguousList<Attestation<P>, P::MaxAttestationsElectra>,
+    pub deposits: ContiguousList<Deposit, P::MaxDeposits>,
+    pub voluntary_exits: ContiguousList<SignedVoluntaryExit, P::MaxVoluntaryExits>,
+    pub sync_aggregate: SyncAggregate<P>,
+    // Note: execution_payload moved to ExecutionPayloadEnvelope
+    pub bls_to_execution_changes:
+        ContiguousList<SignedBlsToExecutionChange, P::MaxBlsToExecutionChanges>,
+    // Note: blob_kzg_commitments moved to ExecutionPayloadEnvelope
+    // Note: execution_requests moved to ExecutionPayloadEnvelope
+    
+    // ePBS specific fields:
+    pub signed_execution_payload_header: SignedExecutionPayloadHeader,
+    pub payload_attestations: ContiguousList<PayloadAttestation<P>, P::MaxPayloadAttestations>,
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Deserialize, Serialize, Ssz)]
+#[serde(bound = "", deny_unknown_fields)]
+pub struct SignedBeaconBlock<P: Preset> {
+    pub message: BeaconBlock<P>,
+    pub signature: SignatureBytes,
+
