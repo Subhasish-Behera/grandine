@@ -68,7 +68,7 @@ pub mod deneb {
 pub mod eip7594;
 
 pub mod eip7732 {
-
+    pub mod beacon_state;
     pub mod consts;
     pub mod containers;
     pub mod primitives;

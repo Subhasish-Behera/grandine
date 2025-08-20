@@ -78,6 +78,13 @@ use crate::{
             SignedBlindedBeaconBlock as ElectraSignedBlindedBeaconBlock, SingleAttestation,
         },
     },
+    eip7732::{
+        beacon_state::BeaconState as Eip7732BeaconState,
+        containers::{
+            BeaconBlock as Eip7732BeaconBlock,
+            SignedBeaconBlock as Eip7732SignedBeaconBlock,
+        },
+    },
     nonstandard::Phase,
     phase0::{
         beacon_state::BeaconState as Phase0BeaconState,
@@ -111,6 +118,7 @@ pub enum BeaconState<P: Preset> {
     Capella(Hc<CapellaBeaconState<P>>),
     Deneb(Hc<DenebBeaconState<P>>),
     Electra(Hc<ElectraBeaconState<P>>),
+    Eip7732(Hc<Eip7732BeaconState<P>>),
 }
 
 // This assertion will become incorrect if later phases don't modify `BeaconState`.
@@ -358,6 +366,7 @@ pub enum SignedBeaconBlock<P: Preset> {
     Capella(CapellaSignedBeaconBlock<P>),
     Deneb(DenebSignedBeaconBlock<P>),
     Electra(ElectraSignedBeaconBlock<P>),
+    Eip7732(Eip7732SignedBeaconBlock<P>),
 }
 
 // This assertion will become incorrect if later phases don't modify `SignedBeaconBlock`.
@@ -376,6 +385,7 @@ impl<P: Preset> SszSize for SignedBeaconBlock<P> {
         CapellaSignedBeaconBlock::<P>::SIZE,
         DenebSignedBeaconBlock::<P>::SIZE,
         ElectraSignedBeaconBlock::<P>::SIZE,
+        Eip7732SignedBeaconBlock::<P>::SIZE,
     ]);
 }
 
@@ -513,6 +523,7 @@ pub enum BeaconBlock<P: Preset> {
     Capella(CapellaBeaconBlock<P>),
     Deneb(DenebBeaconBlock<P>),
     Electra(ElectraBeaconBlock<P>),
+    Eip7732(Eip7732BeaconBlock<P>),
 }
 
 // This assertion will become incorrect if later phases don't modify `BeaconBlock`.
@@ -528,6 +539,7 @@ impl<P: Preset> SszSize for BeaconBlock<P> {
         CapellaBeaconBlock::<P>::SIZE,
         DenebBeaconBlock::<P>::SIZE,
         ElectraBeaconBlock::<P>::SIZE,
+        Eip7732BeaconBlock::<P>::SIZE,
     ]);
 }
 
