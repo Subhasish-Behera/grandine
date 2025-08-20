@@ -5,6 +5,9 @@ use crate::phase0::primitives::{DomainType, H32};
 pub const DOMAIN_BEACON_BUILDER: DomainType = H32(hex!("1B000000"));
 pub const DOMAIN_PTC_ATTESTER: DomainType = H32(hex!("1C000000"));
 
+// Builder withdrawal prefix
+pub const BUILDER_WITHDRAWAL_PREFIX: &[u8] = &hex!("03");
+
 // ePBS timing constants  
 pub const PAYLOAD_TIMELY_THRESHOLD: u64 = 3; // slots
 pub const PAYLOAD_REVEAL_DEADLINE: u64 = 2; // seconds into slot

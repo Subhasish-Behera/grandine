@@ -1,4 +1,4 @@
-use bls::{PublicKeyBytes, SignatureBytes};
+use bls::{AggregateSignatureBytes, PublicKeyBytes, SignatureBytes};
 use serde::{Deserialize, Serialize};
 use ssz::{BitVector, ContiguousList, Ssz};
 use serde_utils;
@@ -9,7 +9,7 @@ use crate::{
     deneb::primitives::KzgCommitment,
     eip7732::primitives::BuilderIndex,
     electra::containers::ExecutionRequests,
-    phase0::primitives::{Gwei, Slot, ValidatorIndex, H256},
+    phase0::primitives::{Epoch, ExecutionAddress, Gwei, Slot, ValidatorIndex, H256},
     preset::Preset,
 };
 
@@ -21,6 +21,7 @@ pub struct ExecutionPayloadHeader {
     pub parent_block_hash: H256,
     pub parent_block_root: H256,
     pub block_hash: H256,
+    pub fee_recipient: ExecutionAddress,
     #[serde(with = "serde_utils::string_or_native")]
     pub gas_limit: u64,
     #[serde(with = "serde_utils::string_or_native")]
@@ -68,7 +69,8 @@ pub struct PayloadAttestationData {
     pub beacon_block_root: H256,
     #[serde(with = "serde_utils::string_or_native")]
     pub slot: Slot,
-    pub payload_status: u8,
+    pub payload_present: bool,
+    pub blob_data_available: bool,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Deserialize, Serialize, Ssz)]
@@ -85,7 +87,7 @@ pub struct PayloadAttestationMessage {
 pub struct PayloadAttestation<P: Preset> {
     pub aggregation_bits: BitVector<P::PtcSize>,  // PTC_SIZE = 512
     pub data: PayloadAttestationData,
-    pub signature: SignatureBytes,
+    pub signature: AggregateSignatureBytes,  // Aggregate signature from PTC members
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Deserialize, Serialize)]
@@ -94,23 +96,27 @@ pub struct IndexedPayloadAttestation {
     #[serde(with = "serde_utils::string_or_native_sequence")]
     pub attesting_indices: ContiguousList<ValidatorIndex, U4>,  // MAX_PAYLOAD_ATTESTATIONS = 4
     pub data: PayloadAttestationData,
-    pub signature: SignatureBytes,
+    pub signature: AggregateSignatureBytes,  // Aggregate signature from indexed validators
 }
 
 // Builder-Related Containers
 
-#[derive(Clone, PartialEq, Eq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Deserialize, Serialize, Ssz)]
 #[serde(deny_unknown_fields)]
-pub struct BuilderBid {
-    pub header: ExecutionPayloadHeader,
+pub struct BuilderPendingWithdrawal {
+    pub fee_recipient: ExecutionAddress,
     #[serde(with = "serde_utils::string_or_native")]
-    pub value: Gwei,
-    pub pubkey: PublicKeyBytes,
+    pub amount: Gwei,
+    #[serde(with = "serde_utils::string_or_native")]
+    pub builder_index: BuilderIndex,
+    #[serde(with = "serde_utils::string_or_native")]
+    pub withdrawable_epoch: Epoch,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Deserialize, Serialize, Ssz)]
 #[serde(deny_unknown_fields)]
-pub struct SignedBuilderBid {
-    pub message: BuilderBid,
-    pub signature: SignatureBytes,
+pub struct BuilderPendingPayment {
+    #[serde(with = "serde_utils::string_or_native")]
+    pub weight: Gwei,
+    pub withdrawal: BuilderPendingWithdrawal,
 }
