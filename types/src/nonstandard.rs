@@ -61,6 +61,7 @@ pub enum Phase {
     Capella,
     Deneb,
     Electra,
+    Eip7732,
 }
 
 impl Phase {
@@ -70,7 +71,7 @@ impl Phase {
             Self::Phase0 | Self::Altair | Self::Bellatrix | Self::Capella | Self::Deneb => {
                 config.max_blobs_per_block
             }
-            Self::Electra => config.max_blobs_per_block_electra,
+            Self::Electra | Self::Eip7732 => config.max_blobs_per_block_electra,
         };
 
         max_blobs
@@ -547,6 +548,7 @@ mod tests {
             Phase::Capella,
             Phase::Deneb,
             Phase::Electra,
+            Phase::Eip7732,
         ];
 
         assert_eq!(expected_order.len(), Phase::CARDINALITY);

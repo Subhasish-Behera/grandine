@@ -50,7 +50,8 @@ use crate::{
         primitives::WithdrawalIndex,
     },
     collections::{
-        Balances, EpochParticipation, Eth1DataVotes, HistoricalRoots, InactivityScores,
+        BuilderPendingPayments, BuilderPendingWithdrawals, Balances, EpochParticipation,
+        Eth1DataVotes, HistoricalRoots, HistoricalSummaries, InactivityScores,
         PendingConsolidations, PendingDeposits, PendingPartialWithdrawals, RandaoMixes,
         RecentRoots, Slashings, Validators,
     },
@@ -82,6 +83,14 @@ use crate::{
             BlindedBeaconBlockBody as ElectraBlindedBeaconBlockBody, ExecutionRequests,
             IndexedAttestation as ElectraIndexedAttestation,
         },
+    },
+    eip7732::{
+        beacon_state::BeaconState as Eip7732BeaconState,
+        containers::{
+            BeaconBlockBody as Eip7732BeaconBlockBody, PayloadAttestation,
+            SignedExecutionPayloadHeader,
+        },
+        primitives::BuilderIndex,
     },
     nonstandard::Phase,
     phase0::{
@@ -675,6 +684,78 @@ impl<parameters> PostElectraBeaconState<P> for implementor {
     }
 }
 
+pub trait PostEip7732BeaconState<P: Preset>: PostElectraBeaconState<P> {
+    fn latest_builder_index(&self) -> BuilderIndex;
+    fn builder_pending_payments(&self) -> &BuilderPendingPayments<P>;
+    fn builder_pending_withdrawals(&self) -> &BuilderPendingWithdrawals<P>;
+    fn last_withdrawal_index(&self) -> WithdrawalIndex;
+    fn last_withdrawable_builder_index(&self) -> BuilderIndex;
+
+    fn latest_builder_index_mut(&mut self) -> &mut BuilderIndex;
+    fn builder_pending_payments_mut(&mut self) -> &mut BuilderPendingPayments<P>;
+    fn builder_pending_withdrawals_mut(&mut self) -> &mut BuilderPendingWithdrawals<P>;
+    fn last_withdrawal_index_mut(&mut self) -> &mut WithdrawalIndex;
+    fn last_withdrawable_builder_index_mut(&mut self) -> &mut BuilderIndex;
+}
+
+#[duplicate_item(
+    implementor
+    get_copy(field)
+    get_ref(field)
+    get_ref_mut(field, method);
+
+    [P: Preset, S: PostEip7732BeaconState<P>]
+    [Hc<S>]
+    [self.as_ref().field()]
+    [self.as_ref().field()]
+    [self.as_mut().method()];
+
+    [P: Preset]
+    [Eip7732BeaconState<P>]
+    [self.field]
+    [&self.field]
+    [&mut self.field];
+)]
+impl<parameters> PostEip7732BeaconState<P> for implementor {
+    #[duplicate_item(
+        field                           return_type;
+        [latest_builder_index]          [BuilderIndex];
+        [last_withdrawal_index]         [WithdrawalIndex];
+        [last_withdrawable_builder_index] [BuilderIndex];
+    )]
+    fn field(&self) -> return_type {
+        get_copy([field])
+    }
+
+    #[duplicate_item(
+        field                       return_type;
+        [builder_pending_payments]  [BuilderPendingPayments<P>];
+        [builder_pending_withdrawals] [BuilderPendingWithdrawals<P>];
+    )]
+    fn field(&self) -> &return_type {
+        get_ref([field])
+    }
+
+    #[duplicate_item(
+        field                          method                              return_type;
+        [latest_builder_index]         [latest_builder_index_mut]          [BuilderIndex];
+        [last_withdrawal_index]        [last_withdrawal_index_mut]         [WithdrawalIndex];
+        [last_withdrawable_builder_index] [last_withdrawable_builder_index_mut] [BuilderIndex];
+    )]
+    fn method(&mut self) -> &mut return_type {
+        get_ref_mut([field], [method])
+    }
+
+    #[duplicate_item(
+        field                          method                               return_type;
+        [builder_pending_payments]     [builder_pending_payments_mut]      [BuilderPendingPayments<P>];
+        [builder_pending_withdrawals]  [builder_pending_withdrawals_mut]   [BuilderPendingWithdrawals<P>];
+    )]
+    fn method(&mut self) -> &mut return_type {
+        get_ref_mut([field], [method])
+    }
+}
+
 pub trait SignedBeaconBlock<P: Preset>: Debug + Send + Sync {
     type Message: BeaconBlock<P> + ?Sized;
 
@@ -856,6 +937,7 @@ pub trait BeaconBlockBody<P: Preset>: SszHash<PackingFactor = U1> {
     fn post_bellatrix(&self) -> Option<&dyn PostBellatrixBeaconBlockBody<P>>;
     fn post_deneb(&self) -> Option<&dyn PostDenebBeaconBlockBody<P>>;
     fn post_electra(&self) -> Option<&dyn PostElectraBeaconBlockBody<P>>;
+    fn post_eip7732(&self) -> Option<&dyn PostEip7732BeaconBlockBody<P>>;
 
     fn combined_attester_slashings(
         &self,
@@ -865,21 +947,22 @@ pub trait BeaconBlockBody<P: Preset>: SszHash<PackingFactor = U1> {
 }
 
 #[duplicate_item(
-    implementor                          pre_electra_body post_altair_body post_bellatrix_body post_deneb_body post_electra_body;
+    implementor                          pre_electra_body post_altair_body post_bellatrix_body post_deneb_body post_electra_body post_eip7732_body;
 
-    [Phase0BeaconBlockBody<P>]           [Some(self)]     [None]           [None]              [None]          [None];
-    [AltairBeaconBlockBody<P>]           [Some(self)]     [Some(self)]     [None]              [None]          [None];
-    [BellatrixBeaconBlockBody<P>]        [Some(self)]     [Some(self)]     [Some(self)]        [None]          [None];
-    [CapellaBeaconBlockBody<P>]          [Some(self)]     [Some(self)]     [Some(self)]        [None]          [None];
-    [DenebBeaconBlockBody<P>]            [Some(self)]     [Some(self)]     [Some(self)]        [Some(self)]    [None];
-    [ElectraBeaconBlockBody<P>]          [None]           [Some(self)]     [Some(self)]        [Some(self)]    [Some(self)];
+    [Phase0BeaconBlockBody<P>]           [Some(self)]     [None]           [None]              [None]          [None]           [None];
+    [AltairBeaconBlockBody<P>]           [Some(self)]     [Some(self)]     [None]              [None]          [None]           [None];
+    [BellatrixBeaconBlockBody<P>]        [Some(self)]     [Some(self)]     [Some(self)]        [None]          [None]           [None];
+    [CapellaBeaconBlockBody<P>]          [Some(self)]     [Some(self)]     [Some(self)]        [None]          [None]           [None];
+    [DenebBeaconBlockBody<P>]            [Some(self)]     [Some(self)]     [Some(self)]        [Some(self)]    [None]           [None];
+    [ElectraBeaconBlockBody<P>]          [None]           [Some(self)]     [Some(self)]        [Some(self)]    [Some(self)]     [None];
+    [Eip7732BeaconBlockBody<P>]          [None]           [Some(self)]     [None]              [None]          [Some(self)]     [Some(self)];
 
     // `BlindedBeaconBlockBody` does not implement `PostBellatrixBeaconBlockBody`
     // because it does not have an `execution_payload` field.
-    [BellatrixBlindedBeaconBlockBody<P>] [Some(self)]     [Some(self)]     [None]              [None]          [None];
-    [CapellaBlindedBeaconBlockBody<P>]   [Some(self)]     [Some(self)]     [None]              [None]          [None];
-    [DenebBlindedBeaconBlockBody<P>]     [Some(self)]     [Some(self)]     [None]              [Some(self)]    [None];
-    [ElectraBlindedBeaconBlockBody<P>]   [None]           [Some(self)]     [None]              [Some(self)]    [Some(self)];
+    [BellatrixBlindedBeaconBlockBody<P>] [Some(self)]     [Some(self)]     [None]              [None]          [None]           [None];
+    [CapellaBlindedBeaconBlockBody<P>]   [Some(self)]     [Some(self)]     [None]              [None]          [None]           [None];
+    [DenebBlindedBeaconBlockBody<P>]     [Some(self)]     [Some(self)]     [None]              [Some(self)]    [None]           [None];
+    [ElectraBlindedBeaconBlockBody<P>]   [None]           [Some(self)]     [None]              [Some(self)]    [Some(self)]     [None];
 )]
 impl<P: Preset> BeaconBlockBody<P> for implementor {
     fn randao_reveal(&self) -> SignatureBytes {
@@ -940,6 +1023,10 @@ impl<P: Preset> BeaconBlockBody<P> for implementor {
 
     fn post_electra(&self) -> Option<&dyn PostElectraBeaconBlockBody<P>> {
         post_electra_body
+    }
+
+    fn post_eip7732(&self) -> Option<&dyn PostEip7732BeaconBlockBody<P>> {
+        post_eip7732_body
     }
 
     fn combined_attester_slashings(
@@ -1290,6 +1377,21 @@ impl<P: Preset> PostElectraBeaconBlockBody<P> for ElectraBlindedBeaconBlockBody<
 
     fn execution_requests(&self) -> &ExecutionRequests<P> {
         &self.execution_requests
+    }
+}
+
+pub trait PostEip7732BeaconBlockBody<P: Preset>: PostElectraBeaconBlockBody<P> {
+    fn signed_execution_payload_header(&self) -> &SignedExecutionPayloadHeader;
+    fn payload_attestations(&self) -> &ContiguousList<PayloadAttestation<P>, P::MaxPayloadAttestations>;
+}
+
+impl<P: Preset> PostEip7732BeaconBlockBody<P> for Eip7732BeaconBlockBody<P> {
+    fn signed_execution_payload_header(&self) -> &SignedExecutionPayloadHeader {
+        &self.signed_execution_payload_header
+    }
+
+    fn payload_attestations(&self) -> &ContiguousList<PayloadAttestation<P>, P::MaxPayloadAttestations> {
+        &self.payload_attestations
     }
 }
 
