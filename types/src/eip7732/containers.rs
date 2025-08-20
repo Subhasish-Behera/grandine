@@ -1,4 +1,4 @@
-use bls::{AggregateSignatureBytes, PublicKeyBytes, SignatureBytes};
+use bls::SignatureBytes;
 use serde::{Deserialize, Serialize};
 use ssz::{BitVector, ContiguousList, Ssz};
 use serde_utils;
@@ -45,7 +45,7 @@ pub struct SignedExecutionPayloadHeader {
     pub signature: SignatureBytes,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Deserialize, Serialize)]
+#[derive(Clone, PartialEq, Eq, Debug, Deserialize, Serialize, Ssz)]
 #[serde(bound = "", deny_unknown_fields)]
 pub struct ExecutionPayloadEnvelope<P: Preset> {
     pub payload: ExecutionPayload<P>,
@@ -59,7 +59,7 @@ pub struct ExecutionPayloadEnvelope<P: Preset> {
     pub state_root: H256,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Deserialize, Serialize)]
+#[derive(Clone, PartialEq, Eq, Debug, Deserialize, Serialize, Ssz)]
 #[serde(bound = "", deny_unknown_fields)]
 pub struct SignedExecutionPayloadEnvelope<P: Preset> {
     pub message: ExecutionPayloadEnvelope<P>,
@@ -87,21 +87,21 @@ pub struct PayloadAttestationMessage {
     pub signature: SignatureBytes,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Deserialize, Serialize)]
+#[derive(Clone, PartialEq, Eq, Debug, Deserialize, Serialize, Ssz)]
 #[serde(bound = "", deny_unknown_fields)]
 pub struct PayloadAttestation<P: Preset> {
     pub aggregation_bits: BitVector<P::PtcSize>,  // PTC_SIZE = 512
     pub data: PayloadAttestationData,
-    pub signature: AggregateSignatureBytes,  // Aggregate signature from PTC members
+    pub signature: SignatureBytes,  // Aggregate signature from PTC members
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Deserialize, Serialize)]
+#[derive(Clone, PartialEq, Eq, Debug, Deserialize, Serialize, Ssz)]
 #[serde(deny_unknown_fields)]
 pub struct IndexedPayloadAttestation {
     #[serde(with = "serde_utils::string_or_native_sequence")]
     pub attesting_indices: ContiguousList<ValidatorIndex, U4>,  // MAX_PAYLOAD_ATTESTATIONS = 4
     pub data: PayloadAttestationData,
-    pub signature: AggregateSignatureBytes,  // Aggregate signature from indexed validators
+    pub signature: SignatureBytes,  // Aggregate signature from indexed validators
 }
 
 // Builder-Related Containers
@@ -168,4 +168,5 @@ pub struct BeaconBlockBody<P: Preset> {
 pub struct SignedBeaconBlock<P: Preset> {
     pub message: BeaconBlock<P>,
     pub signature: SignatureBytes,
+}
 
