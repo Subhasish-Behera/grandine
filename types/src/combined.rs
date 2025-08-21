@@ -149,6 +149,7 @@ impl<P: Preset> SszSize for BeaconState<P> {
         CapellaBeaconState::<P>::SIZE,
         DenebBeaconState::<P>::SIZE,
         ElectraBeaconState::<P>::SIZE,
+        Eip7732BeaconState::<P>::SIZE,
     ]);
 }
 
