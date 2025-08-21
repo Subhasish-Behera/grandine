@@ -66,6 +66,25 @@ pub struct SignedExecutionPayloadEnvelope<P: Preset> {
     pub signature: SignatureBytes,
 }
 
+#[derive(Clone, PartialEq, Eq, Debug, Deserialize, Serialize, Ssz)]
+#[serde(bound = "", deny_unknown_fields)]
+pub struct BlindedPayloadEnvelope<P: Preset> {
+    #[serde(with = "serde_utils::string_or_native")]
+    pub builder_index: BuilderIndex,
+    pub beacon_block_root: H256,
+    #[serde(with = "serde_utils::string_or_native")]
+    pub slot: Slot,
+    pub blob_kzg_commitments: ContiguousList<KzgCommitment, P::MaxBlobCommitmentsPerBlock>,
+    pub state_root: H256,
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Deserialize, Serialize, Ssz)]
+#[serde(bound = "", deny_unknown_fields)]
+pub struct SignedBlindedPayloadEnvelope<P: Preset> {
+    pub message: BlindedPayloadEnvelope<P>,
+    pub signature: SignatureBytes,
+}
+
 // Payload Attestation Containers (PTC)
 
 #[derive(Clone, PartialEq, Eq, Debug, Default, Deserialize, Serialize, Ssz)]

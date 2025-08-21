@@ -51,7 +51,7 @@ use crate::{
     },
     collections::{
         BuilderPendingPayments, BuilderPendingWithdrawals, Balances, EpochParticipation,
-        Eth1DataVotes, HistoricalRoots, HistoricalSummaries, InactivityScores,
+        Eth1DataVotes, HistoricalRoots, InactivityScores,
         PendingConsolidations, PendingDeposits, PendingPartialWithdrawals, RandaoMixes,
         RecentRoots, Slashings, Validators,
     },
@@ -85,14 +85,13 @@ use crate::{
         },
     },
     eip7732::{
-        beacon_state::BeaconState as Eip7732BeaconState,
         containers::{
-            BeaconBlockBody as Eip7732BeaconBlockBody, PayloadAttestation,
-            SignedExecutionPayloadHeader,
+            BeaconBlock as Eip7732BeaconBlock, BeaconBlockBody as Eip7732BeaconBlockBody,
+            PayloadAttestation, SignedExecutionPayloadHeader,
         },
-        primitives::BuilderIndex,
     },
     nonstandard::Phase,
+    preset::SlotsPerHistoricalRoot,
     phase0::{
         beacon_state::BeaconState as Phase0BeaconState,
         consts::JustificationBitsLength,
@@ -685,17 +684,17 @@ impl<parameters> PostElectraBeaconState<P> for implementor {
 }
 
 pub trait PostEip7732BeaconState<P: Preset>: PostElectraBeaconState<P> {
-    fn latest_builder_index(&self) -> BuilderIndex;
+    fn execution_payload_availability(&self) -> &BitVector<SlotsPerHistoricalRoot<P>>;
     fn builder_pending_payments(&self) -> &BuilderPendingPayments<P>;
     fn builder_pending_withdrawals(&self) -> &BuilderPendingWithdrawals<P>;
-    fn last_withdrawal_index(&self) -> WithdrawalIndex;
-    fn last_withdrawable_builder_index(&self) -> BuilderIndex;
+    fn latest_block_hash(&self) -> H256;
+    fn latest_withdrawals_root(&self) -> H256;
 
-    fn latest_builder_index_mut(&mut self) -> &mut BuilderIndex;
+    fn execution_payload_availability_mut(&mut self) -> &mut BitVector<SlotsPerHistoricalRoot<P>>;
     fn builder_pending_payments_mut(&mut self) -> &mut BuilderPendingPayments<P>;
     fn builder_pending_withdrawals_mut(&mut self) -> &mut BuilderPendingWithdrawals<P>;
-    fn last_withdrawal_index_mut(&mut self) -> &mut WithdrawalIndex;
-    fn last_withdrawable_builder_index_mut(&mut self) -> &mut BuilderIndex;
+    fn latest_block_hash_mut(&mut self) -> &mut H256;
+    fn latest_withdrawals_root_mut(&mut self) -> &mut H256;
 }
 
 #[duplicate_item(
@@ -719,37 +718,37 @@ pub trait PostEip7732BeaconState<P: Preset>: PostElectraBeaconState<P> {
 impl<parameters> PostEip7732BeaconState<P> for implementor {
     #[duplicate_item(
         field                           return_type;
-        [latest_builder_index]          [BuilderIndex];
-        [last_withdrawal_index]         [WithdrawalIndex];
-        [last_withdrawable_builder_index] [BuilderIndex];
+        [latest_block_hash]             [H256];
+        [latest_withdrawals_root]       [H256];
     )]
     fn field(&self) -> return_type {
         get_copy([field])
     }
 
     #[duplicate_item(
-        field                       return_type;
-        [builder_pending_payments]  [BuilderPendingPayments<P>];
-        [builder_pending_withdrawals] [BuilderPendingWithdrawals<P>];
+        field                              return_type;
+        [execution_payload_availability]  [BitVector<SlotsPerHistoricalRoot<P>>];
+        [builder_pending_payments]         [BuilderPendingPayments<P>];
+        [builder_pending_withdrawals]      [BuilderPendingWithdrawals<P>];
     )]
     fn field(&self) -> &return_type {
         get_ref([field])
     }
 
     #[duplicate_item(
-        field                          method                              return_type;
-        [latest_builder_index]         [latest_builder_index_mut]          [BuilderIndex];
-        [last_withdrawal_index]        [last_withdrawal_index_mut]         [WithdrawalIndex];
-        [last_withdrawable_builder_index] [last_withdrawable_builder_index_mut] [BuilderIndex];
+        field                          method                                   return_type;
+        [latest_block_hash]            [latest_block_hash_mut]                 [H256];
+        [latest_withdrawals_root]      [latest_withdrawals_root_mut]           [H256];
     )]
     fn method(&mut self) -> &mut return_type {
         get_ref_mut([field], [method])
     }
 
     #[duplicate_item(
-        field                          method                               return_type;
-        [builder_pending_payments]     [builder_pending_payments_mut]      [BuilderPendingPayments<P>];
-        [builder_pending_withdrawals]  [builder_pending_withdrawals_mut]   [BuilderPendingWithdrawals<P>];
+        field                              method                                       return_type;
+        [execution_payload_availability]   [execution_payload_availability_mut]        [BitVector<SlotsPerHistoricalRoot<P>>];
+        [builder_pending_payments]         [builder_pending_payments_mut]              [BuilderPendingPayments<P>];
+        [builder_pending_withdrawals]      [builder_pending_withdrawals_mut]           [BuilderPendingWithdrawals<P>];
     )]
     fn method(&mut self) -> &mut return_type {
         get_ref_mut([field], [method])
@@ -786,6 +785,7 @@ impl<P: Preset> SignedBeaconBlock<P> for CombinedSignedBeaconBlock<P> {
             Self::Capella(block) => &block.message,
             Self::Deneb(block) => &block.message,
             Self::Electra(block) => &block.message,
+            Self::Eip7732(block) => &block.message,
         }
     }
 
@@ -797,6 +797,7 @@ impl<P: Preset> SignedBeaconBlock<P> for CombinedSignedBeaconBlock<P> {
             Self::Capella(block) => block.signature,
             Self::Deneb(block) => block.signature,
             Self::Electra(block) => block.signature,
+            Self::Eip7732(block) => block.signature,
         }
     }
 }
@@ -850,6 +851,7 @@ pub trait BeaconBlock<P: Preset>: SszHash<PackingFactor = U1> {
     [CapellaBeaconBlock<P>]          [self.field]    [&self.field];
     [DenebBeaconBlock<P>]            [self.field]    [&self.field];
     [ElectraBeaconBlock<P>]          [self.field]    [&self.field];
+    [Eip7732BeaconBlock<P>]          [self.field]    [&self.field];
 
     [BellatrixBlindedBeaconBlock<P>] [self.field]    [&self.field];
     [CapellaBlindedBeaconBlock<P>]   [self.field]    [&self.field];
@@ -865,6 +867,7 @@ pub trait BeaconBlock<P: Preset>: SszHash<PackingFactor = U1> {
             Self::Capella(block) => block.field,
             Self::Deneb(block) => block.field,
             Self::Electra(block) => block.field,
+            Self::Eip7732(block) => block.field,
         }
     ]
     [
@@ -875,6 +878,7 @@ pub trait BeaconBlock<P: Preset>: SszHash<PackingFactor = U1> {
             Self::Capella(block) => &block.field,
             Self::Deneb(block) => &block.field,
             Self::Electra(block) => &block.field,
+            Self::Eip7732(block) => &block.field,
         }
     ];
 

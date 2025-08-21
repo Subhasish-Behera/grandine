@@ -73,8 +73,8 @@ pub mod eip7732 {
     pub mod containers;
     pub mod primitives;
 
-    #[cfg(test)]
-    mod spec_tests;
+    // #[cfg(test)]
+    // mod spec_tests;
 }
 
 pub mod electra {

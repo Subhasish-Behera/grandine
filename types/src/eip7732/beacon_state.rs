@@ -15,13 +15,12 @@ use crate::{
         RecentRoots, Slashings, Validators,
     },
     deneb::containers::ExecutionPayloadHeader,
-    eip7732::primitives::BuilderIndex,
     phase0::{
         consts::JustificationBitsLength,
         containers::{BeaconBlockHeader, Checkpoint, Eth1Data, Fork},
         primitives::{DepositIndex, Epoch, Gwei, Slot, UnixSeconds, ValidatorIndex, H256},
     },
-    preset::Preset,
+    preset::{Preset, SlotsPerHistoricalRoot},
 };
 
 #[derive(Clone, Debug, Default, Derivative, Deserialize, Serialize, Ssz)]
@@ -107,15 +106,12 @@ pub struct BeaconState<P: Preset> {
     pub pending_partial_withdrawals: PendingPartialWithdrawals<P>,
     pub pending_consolidations: PendingConsolidations<P>,
 
-    // > ePBS fields (new in EIP-7732)
-    #[serde(with = "serde_utils::string_or_native")]
-    pub latest_builder_index: BuilderIndex,
+    // > ePBS fields (new in Gloas:EIP7732)
+    pub execution_payload_availability: BitVector<SlotsPerHistoricalRoot<P>>,
     pub builder_pending_payments: BuilderPendingPayments<P>,
     pub builder_pending_withdrawals: BuilderPendingWithdrawals<P>,
-    #[serde(with = "serde_utils::string_or_native")]
-    pub last_withdrawal_index: WithdrawalIndex,
-    #[serde(with = "serde_utils::string_or_native")]
-    pub last_withdrawable_builder_index: BuilderIndex,
+    pub latest_block_hash: H256,
+    pub latest_withdrawals_root: H256,
 
     // Cache
     #[derivative(PartialEq = "ignore")]

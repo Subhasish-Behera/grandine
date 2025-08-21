@@ -34,7 +34,7 @@ use crate::{
         primitives::{Blob, KzgCommitment},
     },
     eip7594::Cell,
-    eip7732::containers::{BuilderPendingPayment, BuilderPendingWithdrawal, PayloadAttestation},
+    eip7732::containers::{BuilderPendingWithdrawal, PayloadAttestation},
     electra::containers::{
         Attestation as ElectraAttestation, AttesterSlashing as ElectraAttesterSlashing,
         ConsolidationRequest, DepositRequest, PendingConsolidation, PendingDeposit,
@@ -175,7 +175,6 @@ pub trait Preset: Copy + Eq + Ord + Hash + Default + Debug + Send + Sync + 'stat
     // ePBS / EIP-7732
     type PtcSize: BitVectorBits + MerkleBits + Eq + Debug + Send + Sync;
     type MaxPayloadAttestations: MerkleElements<PayloadAttestation<Self>> + Eq + Debug + Send + Sync;
-    type MaxBuilderPendingPayments: MerkleElements<BuilderPendingPayment> + Eq + Debug + Send + Sync;
     type BuilderPendingWithdrawalsLimit: MerkleElements<BuilderPendingWithdrawal> + Eq + Debug + Send + Sync;
 
     // Derived type-level variables
@@ -301,7 +300,6 @@ impl Preset for Mainnet {
     // ePBS / EIP-7732
     type PtcSize = U512;
     type MaxPayloadAttestations = U4;
-    type MaxBuilderPendingPayments = U1048576;  // 2^20
     type BuilderPendingWithdrawalsLimit = U134217728;  // 2^27
 
     // Derived type-level variables
@@ -398,7 +396,6 @@ impl Preset for Minimal {
     // ePBS - manual override (delegate not working?)
     type PtcSize = U512;
     type MaxPayloadAttestations = U4;
-    type MaxBuilderPendingPayments = U1048576;  // 2^20
     type BuilderPendingWithdrawalsLimit = U134217728;  // 2^27
 
     // Meta
@@ -476,6 +473,8 @@ impl Preset for Medalla {
 
         // ePBS / EIP-7732
         type PtcSize;
+        type MaxPayloadAttestations;
+        type BuilderPendingWithdrawalsLimit;
 
         // Derived type-level variables
         type MaxAttestersPerSlot;

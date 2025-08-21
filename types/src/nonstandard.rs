@@ -11,7 +11,7 @@ use serde_with::{DeserializeFromStr, SerializeDisplay};
 use smallvec::SmallVec;
 use ssz::ContiguousList;
 use static_assertions::assert_eq_size;
-use strum::{AsRefStr, Display, EnumString};
+use strum::{AsRefStr, Display, EnumCount, EnumString};
 
 use crate::{
     altair::{
@@ -50,6 +50,7 @@ pub type Publishable = bool;
     AsRefStr,
     Display,
     EnumString,
+    EnumCount,
     DeserializeFromStr,
     SerializeDisplay,
 )]

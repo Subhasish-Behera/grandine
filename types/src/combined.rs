@@ -231,7 +231,7 @@ impl<P: Preset> BeaconState<P> {
             (_, header) => {
                 // This match arm will silently match any new phases.
                 // Cause a compilation error if a new phase is added.
-                const_assert_eq!(Phase::CARDINALITY, 6);
+                const_assert_eq!(Phase::CARDINALITY, 7);
 
                 return Err(StatePhaseError {
                     state_phase: self.phase(),
@@ -672,7 +672,7 @@ impl<P: Preset> BeaconBlock<P> {
             (_, payload) => {
                 // This match arm will silently match any new phases.
                 // Cause a compilation error if a new phase is added.
-                const_assert_eq!(Phase::CARDINALITY, 6);
+                const_assert_eq!(Phase::CARDINALITY, 7);
 
                 return Err(BlockPhaseError {
                     block_phase: self.phase(),
@@ -699,7 +699,7 @@ impl<P: Preset> BeaconBlock<P> {
             _ => {
                 // This match arm will silently match any new phases.
                 // Cause a compilation error if a new phase is added.
-                const_assert_eq!(Phase::CARDINALITY, 6);
+                const_assert_eq!(Phase::CARDINALITY, 7);
             }
         }
 
@@ -720,7 +720,7 @@ impl<P: Preset> BeaconBlock<P> {
             _ => {
                 // This match arm will silently match any new phases.
                 // Cause a compilation error if a new phase is added.
-                const_assert_eq!(Phase::CARDINALITY, 6);
+                const_assert_eq!(Phase::CARDINALITY, 7);
             }
         }
 
@@ -753,7 +753,7 @@ impl<P: Preset> BeaconBlock<P> {
             (block, header) => {
                 // This match arm will silently match any new phases.
                 // Cause a compilation error if a new phase is added.
-                const_assert_eq!(Phase::CARDINALITY, 6);
+                const_assert_eq!(Phase::CARDINALITY, 7);
 
                 Err(BlockPhaseError {
                     block_phase: block.phase(),
@@ -1076,7 +1076,7 @@ impl<P: Preset> BlindedBeaconBlock<P> {
             (block, payload) => {
                 // This match arm will silently match any new phases.
                 // Cause a compilation error if a new phase is added.
-                const_assert_eq!(Phase::CARDINALITY, 6);
+                const_assert_eq!(Phase::CARDINALITY, 7);
 
                 Err(BlockPhaseError {
                     block_phase: block.phase(),
@@ -1096,7 +1096,7 @@ impl<P: Preset> BlindedBeaconBlock<P> {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, From, Deserialize, Serialize)]
+#[derive(Clone, PartialEq, Eq, Debug, Deserialize, Serialize)]
 #[serde(
     bound = "",
     deny_unknown_fields,
@@ -1108,6 +1108,24 @@ pub enum ExecutionPayload<P: Preset> {
     Bellatrix(BellatrixExecutionPayload<P>),
     Capella(CapellaExecutionPayload<P>),
     Deneb(DenebExecutionPayload<P>),
+}
+
+impl<P: Preset> From<BellatrixExecutionPayload<P>> for ExecutionPayload<P> {
+    fn from(payload: BellatrixExecutionPayload<P>) -> Self {
+        Self::Bellatrix(payload)
+    }
+}
+
+impl<P: Preset> From<CapellaExecutionPayload<P>> for ExecutionPayload<P> {
+    fn from(payload: CapellaExecutionPayload<P>) -> Self {
+        Self::Capella(payload)
+    }
+}
+
+impl<P: Preset> From<DenebExecutionPayload<P>> for ExecutionPayload<P> {
+    fn from(payload: DenebExecutionPayload<P>) -> Self {
+        Self::Deneb(payload)
+    }
 }
 
 impl<P: Preset> SszHash for ExecutionPayload<P> {
@@ -1125,10 +1143,11 @@ impl<P: Preset> SszHash for ExecutionPayload<P> {
 impl<P: Preset> SszSize for ExecutionPayload<P> {
     // The const parameter should be `Self::VARIANT_COUNT`, but `Self` refers to a generic type.
     // Type parameters cannot be used in `const` contexts until `generic_const_exprs` is stable.
-    const SIZE: Size = Size::for_untagged_union::<{ Phase::CARDINALITY - 3 }>([
+    const SIZE: Size = Size::for_untagged_union::<{ Phase::CARDINALITY - 2 }>([
         BellatrixExecutionPayload::<P>::SIZE,
         CapellaExecutionPayload::<P>::SIZE,
         DenebExecutionPayload::<P>::SIZE,
+        DenebExecutionPayload::<P>::SIZE,  // Eip7732 reuses Deneb
     ]);
 }
 
@@ -1147,7 +1166,7 @@ impl<P: Preset> SszRead<Phase> for ExecutionPayload<P> {
             }
             Phase::Bellatrix => Self::Bellatrix(SszReadDefault::from_ssz_default(bytes)?),
             Phase::Capella => Self::Capella(SszReadDefault::from_ssz_default(bytes)?),
-            Phase::Deneb | Phase::Electra => Self::Deneb(SszReadDefault::from_ssz_default(bytes)?),
+            Phase::Deneb | Phase::Electra | Phase::Eip7732 => Self::Deneb(SszReadDefault::from_ssz_default(bytes)?),
         };
 
         Ok(block)
@@ -1160,7 +1179,7 @@ impl<P: Preset> ExecutionPayload<P> {
             (self, phase),
             (Self::Bellatrix(_), Phase::Bellatrix)
                 | (Self::Capella(_), Phase::Capella)
-                | (Self::Deneb(_), Phase::Deneb | Phase::Electra)
+                | (Self::Deneb(_), Phase::Deneb | Phase::Electra | Phase::Eip7732)
         )
     }
 
