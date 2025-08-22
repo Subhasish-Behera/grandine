@@ -256,6 +256,16 @@ pub trait BeaconState<P: Preset>: SszHash<PackingFactor = U1> + Send + Sync {
     [true];
 
     [P: Preset]
+    [Eip7732BeaconState<P>]
+    [self.field]
+    [&self.field]
+    [&mut self.field]
+    [(&mut self.validators, &self.balances)]
+    [(&mut self.balances, &self.slashings)]
+    [true]
+    [true];
+
+    [P: Preset]
     [CombinedBeaconState<P>]
     [
         match self {

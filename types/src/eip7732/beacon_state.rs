@@ -22,8 +22,6 @@ use crate::{
     },
     preset::Preset,
 };
-use crate::preset::SlotsPerHistoricalRoot;
-use crate::eip7732::containers::BuilderPendingPayment;
 #[derive(Clone, Debug, Default, Derivative, Deserialize, Serialize, Ssz)]
 #[derivative(PartialEq, Eq)]
 #[serde(bound = "", deny_unknown_fields)]
@@ -108,9 +106,8 @@ pub struct BeaconState<P: Preset> {
     pub pending_consolidations: PendingConsolidations<P>,
 
     // > ePBS fields (new in Gloas:EIP7732)
-    pub execution_payload_availability: BitVector<P::SlotsPerHistoricalRoot>,
-    // pub builder_pending_payments: BuilderPendingPayments<P>,
-    pub builder_pending_payments: BitVector<BuilderPendingPayment, P::BuilderPendingPaymentsLimit>,
+    pub execution_payload_availability: BitVector<<P as Preset>::SlotsPerHistoricalRoot>,
+    pub builder_pending_payments: BuilderPendingPayments<P>,
     pub builder_pending_withdrawals: BuilderPendingWithdrawals<P>,
     pub latest_block_hash: H256,
     pub latest_withdrawals_root: H256,

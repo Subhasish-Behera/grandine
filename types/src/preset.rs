@@ -175,7 +175,7 @@ pub trait Preset: Copy + Eq + Ord + Hash + Default + Debug + Send + Sync + 'stat
     // ePBS / EIP-7732
     type PtcSize: BitVectorBits + MerkleBits + Eq + Debug + Send + Sync;
     type MaxPayloadAttestations: MerkleElements<PayloadAttestation<Self>> + Eq + Debug + Send + Sync;
-    type SlotsPerHistoricalRoot: BitVectorBits + Debug + Send + Sync + NonZero;
+    type SlotsPerHistoricalRoot: BitVectorBits + Debug + Send + Sync;
     type BuilderPendingPaymentsLimit: PersistentVectorElements<BuilderPendingPayment, UnhashedBundleSize<BuilderPendingPayment>>
         + Debug
         + Send
