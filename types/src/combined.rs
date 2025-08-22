@@ -188,6 +188,7 @@ impl<P: Preset> SszWrite for BeaconState<P> {
             Self::Capella(state) => state.write_variable(bytes),
             Self::Deneb(state) => state.write_variable(bytes),
             Self::Electra(state) => state.write_variable(bytes),
+            Self::Eip7732(state) => state.write_variable(bytes),
         }
     }
 }
@@ -203,6 +204,7 @@ impl<P: Preset> SszHash for BeaconState<P> {
             Self::Capella(state) => state.hash_tree_root(),
             Self::Deneb(state) => state.hash_tree_root(),
             Self::Electra(state) => state.hash_tree_root(),
+            Self::Eip7732(state) => state.hash_tree_root(),
         }
     }
 }
@@ -252,6 +254,7 @@ impl<P: Preset> BeaconState<P> {
             Self::Capella(_) => Phase::Capella,
             Self::Deneb(_) => Phase::Deneb,
             Self::Electra(_) => Phase::Electra,
+            Self::Eip7732(_) => Phase::Eip7732,
         }
     }
 
@@ -269,6 +272,7 @@ impl<P: Preset> BeaconState<P> {
             Self::Capella(state) => Some(state),
             Self::Deneb(state) => Some(state),
             Self::Electra(state) => Some(state),
+            Self::Eip7732(state) => Some(state),
         }
     }
 
@@ -280,6 +284,7 @@ impl<P: Preset> BeaconState<P> {
             Self::Capella(state) => Some(state),
             Self::Deneb(state) => Some(state),
             Self::Electra(state) => Some(state),
+            Self::Eip7732(state) => Some(state),
         }
     }
 
@@ -290,6 +295,7 @@ impl<P: Preset> BeaconState<P> {
             Self::Capella(state) => Some(state),
             Self::Deneb(state) => Some(state),
             Self::Electra(state) => Some(state),
+            Self::Eip7732(state) => Some(state),
         }
     }
 
@@ -300,6 +306,7 @@ impl<P: Preset> BeaconState<P> {
             Self::Capella(state) => Some(state),
             Self::Deneb(state) => Some(state),
             Self::Electra(state) => Some(state),
+            Self::Eip7732(state) => Some(state),
         }
     }
 
@@ -309,6 +316,7 @@ impl<P: Preset> BeaconState<P> {
             Self::Capella(state) => Some(state),
             Self::Deneb(state) => Some(state),
             Self::Electra(state) => Some(state),
+            Self::Eip7732(state) => Some(state),
         }
     }
 
@@ -320,6 +328,7 @@ impl<P: Preset> BeaconState<P> {
             | Self::Capella(_)
             | Self::Deneb(_) => None,
             Self::Electra(state) => Some(state),
+            Self::Eip7732(state) => Some(state),
         }
     }
 
@@ -331,6 +340,7 @@ impl<P: Preset> BeaconState<P> {
             | Self::Capella(_)
             | Self::Deneb(_) => None,
             Self::Electra(state) => Some(state),
+            Self::Eip7732(state) => Some(state),
         }
     }
 
@@ -342,6 +352,7 @@ impl<P: Preset> BeaconState<P> {
             Self::Capella(state) => state.set_cached_root(root),
             Self::Deneb(state) => state.set_cached_root(root),
             Self::Electra(state) => state.set_cached_root(root),
+            Self::Eip7732(state) => state.set_cached_root(root),
         }
     }
 
@@ -354,6 +365,7 @@ impl<P: Preset> BeaconState<P> {
             | Self::Capella(_)
             | Self::Deneb(_) => None,
             Self::Electra(state) => Some(state.deposit_requests_start_index),
+            Self::Eip7732(state) => Some(state.deposit_requests_start_index),
         }
     }
 }

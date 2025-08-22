@@ -34,7 +34,7 @@ use crate::{
         primitives::{Blob, KzgCommitment},
     },
     eip7594::Cell,
-    eip7732::containers::{BuilderPendingWithdrawal, PayloadAttestation},
+    eip7732::containers::{BuilderPendingPayment, BuilderPendingWithdrawal, PayloadAttestation},
     electra::containers::{
         Attestation as ElectraAttestation, AttesterSlashing as ElectraAttesterSlashing,
         ConsolidationRequest, DepositRequest, PendingConsolidation, PendingDeposit,
@@ -175,6 +175,11 @@ pub trait Preset: Copy + Eq + Ord + Hash + Default + Debug + Send + Sync + 'stat
     // ePBS / EIP-7732
     type PtcSize: BitVectorBits + MerkleBits + Eq + Debug + Send + Sync;
     type MaxPayloadAttestations: MerkleElements<PayloadAttestation<Self>> + Eq + Debug + Send + Sync;
+    type SlotsPerHistoricalRoot: BitVectorBits + Debug + Send + Sync + NonZero;
+    type BuilderPendingPaymentsLimit: PersistentVectorElements<BuilderPendingPayment, UnhashedBundleSize<BuilderPendingPayment>>
+        + Debug
+        + Send
+        + Sync;
     type BuilderPendingWithdrawalsLimit: MerkleElements<BuilderPendingWithdrawal> + Eq + Debug + Send + Sync;
 
     // Derived type-level variables
@@ -300,6 +305,8 @@ impl Preset for Mainnet {
     // ePBS / EIP-7732
     type PtcSize = U512;
     type MaxPayloadAttestations = U4;
+    type SlotsPerHistoricalRoot = U8192;  // 256 epochs * 32 slots
+    type BuilderPendingPaymentsLimit = U64;  // 2 * SlotsPerEpoch = 2 * 32
     type BuilderPendingWithdrawalsLimit = U134217728;  // 2^27
 
     // Derived type-level variables
@@ -396,6 +403,8 @@ impl Preset for Minimal {
     // ePBS - manual override (delegate not working?)
     type PtcSize = U512;
     type MaxPayloadAttestations = U4;
+    type SlotsPerHistoricalRoot = U64;  // 8 epochs * 8 slots (minimal)
+    type BuilderPendingPaymentsLimit = U64;  // 2 * SlotsPerEpoch = 2 * 32
     type BuilderPendingWithdrawalsLimit = U134217728;  // 2^27
 
     // Meta
@@ -474,6 +483,8 @@ impl Preset for Medalla {
         // ePBS / EIP-7732
         type PtcSize;
         type MaxPayloadAttestations;
+        type SlotsPerHistoricalRoot;
+        type BuilderPendingPaymentsLimit;
         type BuilderPendingWithdrawalsLimit;
 
         // Derived type-level variables

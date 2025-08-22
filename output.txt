@@ -1,0 +1,1194 @@
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> ssz_derive/src/ssz_type.rs:137:23
+    |
+137 |     fn split_for_impl(&self) -> (ImplGenerics, TypeGenerics, Option<WhereClause>) {
+    |                       ^^^^^      ------------  ------------ the same lifetime is hidden here
+    |                       |          |
+    |                       |          the same lifetime is hidden here
+    |                       the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+    = note: `#[warn(mismatched_lifetime_syntaxes)]` on by default
+help: use `'_` for type paths
+    |
+137 |     fn split_for_impl(&self) -> (ImplGenerics<'_>, TypeGenerics<'_>, Option<WhereClause>) {
+    |                                              ++++              ++++
+
+warning: `#[must_use]` has no effect when applied to a provided trait method
+  --> std_ext/src/lib.rs:43:5
+   |
+43 |     #[must_use]
+   |     ^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_attributes)]` on by default
+
+warning: `#[must_use]` has no effect when applied to a provided trait method
+  --> std_ext/src/lib.rs:51:5
+   |
+51 |     #[must_use]
+   |     ^^^^^^^^^^^
+
+warning: `ssz_derive` (lib) generated 1 warning (run `cargo fix --lib -p ssz_derive` to apply 1 suggestion)
+warning: `std_ext` (lib) generated 2 warnings
+warning: `#[must_use]` has no effect when applied to a provided trait method
+  --> arithmetic/src/lib.rs:20:5
+   |
+20 |     #[must_use]
+   |     ^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_attributes)]` on by default
+
+warning: `#[must_use]` has no effect when applied to a provided trait method
+  --> arithmetic/src/lib.rs:28:5
+   |
+28 |     #[must_use]
+   |     ^^^^^^^^^^^
+
+warning: `#[must_use]` has no effect when applied to a provided trait method
+  --> arithmetic/src/lib.rs:40:5
+   |
+40 |     #[must_use]
+   |     ^^^^^^^^^^^
+
+warning: `#[must_use]` has no effect when applied to a provided trait method
+  --> arithmetic/src/lib.rs:46:5
+   |
+46 |     #[must_use]
+   |     ^^^^^^^^^^^
+
+warning: `#[must_use]` has no effect when applied to a provided trait method
+  --> arithmetic/src/lib.rs:52:5
+   |
+52 |     #[must_use]
+   |     ^^^^^^^^^^^
+
+warning: `#[must_use]` has no effect when applied to a provided trait method
+  --> arithmetic/src/lib.rs:58:5
+   |
+58 |     #[must_use]
+   |     ^^^^^^^^^^^
+
+warning: `#[must_use]` has no effect when applied to a provided trait method
+  --> arithmetic/src/lib.rs:70:5
+   |
+70 |     #[must_use]
+   |     ^^^^^^^^^^^
+
+warning: `#[must_use]` has no effect when applied to a provided trait method
+  --> arithmetic/src/lib.rs:76:5
+   |
+76 |     #[must_use]
+   |     ^^^^^^^^^^^
+
+warning: `#[must_use]` has no effect when applied to a provided trait method
+  --> arithmetic/src/lib.rs:82:5
+   |
+82 |     #[must_use]
+   |     ^^^^^^^^^^^
+
+warning: `#[must_use]` has no effect when applied to a provided trait method
+  --> arithmetic/src/lib.rs:88:5
+   |
+88 |     #[must_use]
+   |     ^^^^^^^^^^^
+
+warning: `#[must_use]` has no effect when applied to a provided trait method
+  --> arithmetic/src/lib.rs:94:5
+   |
+94 |     #[must_use]
+   |     ^^^^^^^^^^^
+
+warning: `#[must_use]` has no effect when applied to a provided trait method
+   --> arithmetic/src/lib.rs:100:5
+    |
+100 |     #[must_use]
+    |     ^^^^^^^^^^^
+
+warning: `#[must_use]` has no effect when applied to a provided trait method
+   --> arithmetic/src/lib.rs:112:5
+    |
+112 |     #[must_use]
+    |     ^^^^^^^^^^^
+
+warning: `arithmetic` (lib) generated 13 warnings
+warning: unused macro definition: `implement_backend`
+ --> bls/src/lib.rs:3:14
+  |
+3 | macro_rules! implement_backend {
+  |              ^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_macros)]` on by default
+
+warning: `bls` (lib) generated 1 warning
+   Compiling types v0.0.0 (/home/greendior/gran_pry/hello/types)
+error[E0432]: unresolved import `bls::AggregateSignatureBytes`
+  --> types/src/traits.rs:15:11
+   |
+15 | use bls::{AggregateSignatureBytes, SignatureBytes};
+   |           ^^^^^^^^^^^^^^^^^^^^^^^ no `AggregateSignatureBytes` in the root
+
+error[E0432]: unresolved import `bls::AggregateSignatureBytes`
+ --> types/src/phase0/containers.rs:1:11
+  |
+1 | use bls::{AggregateSignatureBytes, PublicKeyBytes, SignatureBytes};
+  |           ^^^^^^^^^^^^^^^^^^^^^^^ no `AggregateSignatureBytes` in the root
+
+error[E0432]: unresolved imports `bls::AggregatePublicKeyBytes`, `bls::AggregateSignatureBytes`
+ --> types/src/altair/containers.rs:1:11
+  |
+1 | use bls::{AggregatePublicKeyBytes, AggregateSignatureBytes, PublicKeyBytes, SignatureBytes};
+  |           ^^^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^^^ no `AggregateSignatureBytes` in the root
+  |           |
+  |           no `AggregatePublicKeyBytes` in the root
+
+error[E0432]: unresolved import `bls::AggregateSignatureBytes`
+ --> types/src/altair/container_impls.rs:1:40
+  |
+1 | use bls::{traits::SignatureBytes as _, AggregateSignatureBytes};
+  |                                        ^^^^^^^^^^^^^^^^^^^^^^^ no `AggregateSignatureBytes` in the root
+
+error[E0432]: unresolved import `bls::AggregateSignatureBytes`
+ --> types/src/electra/containers.rs:1:11
+  |
+1 | use bls::{AggregateSignatureBytes, PublicKeyBytes, SignatureBytes};
+  |           ^^^^^^^^^^^^^^^^^^^^^^^ no `AggregateSignatureBytes` in the root
+
+error[E0782]: expected a type, found a trait
+  --> types/src/cache.rs:33:45
+   |
+33 |     pub validator_indices: OnceCell<HashMap<PublicKeyBytes, ValidatorIndex>>,
+   |                                             ^^^^^^^^^^^^^^
+   |
+help: you can add the `dyn` keyword if you want a trait object
+   |
+33 |     pub validator_indices: OnceCell<HashMap<dyn PublicKeyBytes, ValidatorIndex>>,
+   |                                             +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/nonstandard.rs:465:20
+    |
+465 |     pub signature: Signature,
+    |                    ^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+465 |     pub signature: dyn Signature,
+    |                    +++
+
+error[E0782]: expected a type, found a trait
+  --> types/src/phase0/containers.rs:27:26
+   |
+27 |     pub selection_proof: SignatureBytes,
+   |                          ^^^^^^^^^^^^^^
+   |
+help: you can add the `dyn` keyword if you want a trait object
+   |
+27 |     pub selection_proof: dyn SignatureBytes,
+   |                          +++
+
+error[E0782]: expected a type, found a trait
+  --> types/src/phase0/containers.rs:74:24
+   |
+74 |     pub randao_reveal: SignatureBytes,
+   |                        ^^^^^^^^^^^^^^
+   |
+help: you might be missing a type parameter
+   |
+73 ~ pub struct BeaconBlockBody<P: Preset, T: SignatureBytes> {
+74 ~     pub randao_reveal: T,
+   |
+
+error[E0782]: expected a type, found a trait
+   --> types/src/phase0/containers.rs:116:17
+    |
+116 |     pub pubkey: PublicKeyBytes,
+    |                 ^^^^^^^^^^^^^^
+    |
+help: you might be missing a type parameter
+    |
+115 ~ pub struct DepositData<T: PublicKeyBytes> {
+116 ~     pub pubkey: T,
+    |
+
+error[E0782]: expected a type, found a trait
+   --> types/src/phase0/containers.rs:120:20
+    |
+120 |     pub signature: SignatureBytes,
+    |                    ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+120 |     pub signature: dyn SignatureBytes,
+    |                    +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/phase0/containers.rs:126:17
+    |
+126 |     pub pubkey: PublicKeyBytes,
+    |                 ^^^^^^^^^^^^^^
+    |
+help: you might be missing a type parameter
+    |
+125 ~ pub struct DepositMessage<T: PublicKeyBytes> {
+126 ~     pub pubkey: T,
+    |
+
+error[E0782]: expected a type, found a trait
+   --> types/src/phase0/containers.rs:195:20
+    |
+195 |     pub signature: SignatureBytes,
+    |                    ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+195 |     pub signature: dyn SignatureBytes,
+    |                    +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/phase0/containers.rs:202:20
+    |
+202 |     pub signature: SignatureBytes,
+    |                    ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+202 |     pub signature: dyn SignatureBytes,
+    |                    +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/phase0/containers.rs:209:20
+    |
+209 |     pub signature: SignatureBytes,
+    |                    ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+209 |     pub signature: dyn SignatureBytes,
+    |                    +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/phase0/containers.rs:216:20
+    |
+216 |     pub signature: SignatureBytes,
+    |                    ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+216 |     pub signature: dyn SignatureBytes,
+    |                    +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/phase0/containers.rs:229:17
+    |
+229 |     pub pubkey: PublicKeyBytes,
+    |                 ^^^^^^^^^^^^^^
+    |
+help: you might be missing a type parameter
+    |
+228 ~ pub struct Validator<T: PublicKeyBytes> {
+229 ~     pub pubkey: T,
+    |
+
+error[E0782]: expected a type, found a trait
+  --> types/src/altair/containers.rs:36:24
+   |
+36 |     pub randao_reveal: SignatureBytes,
+   |                        ^^^^^^^^^^^^^^
+   |
+help: you might be missing a type parameter
+   |
+35 ~ pub struct BeaconBlockBody<P: Preset, T: SignatureBytes> {
+36 ~     pub randao_reveal: T,
+   |
+
+error[E0782]: expected a type, found a trait
+  --> types/src/altair/containers.rs:53:26
+   |
+53 |     pub selection_proof: SignatureBytes,
+   |                          ^^^^^^^^^^^^^^
+   |
+help: you can add the `dyn` keyword if you want a trait object
+   |
+53 |     pub selection_proof: dyn SignatureBytes,
+   |                          +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/altair/containers.rs:107:20
+    |
+107 |     pub signature: SignatureBytes,
+    |                    ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+107 |     pub signature: dyn SignatureBytes,
+    |                    +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/altair/containers.rs:114:20
+    |
+114 |     pub signature: SignatureBytes,
+    |                    ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+114 |     pub signature: dyn SignatureBytes,
+    |                    +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/altair/containers.rs:138:39
+    |
+138 |     pub pubkeys: Box<ContiguousVector<PublicKeyBytes, P::SyncCommitteeSize>>,
+    |                                       ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+138 |     pub pubkeys: Box<ContiguousVector<dyn PublicKeyBytes, P::SyncCommitteeSize>>,
+    |                                       +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/altair/containers.rs:162:20
+    |
+162 |     pub signature: SignatureBytes,
+    |                    ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+162 |     pub signature: dyn SignatureBytes,
+    |                    +++
+
+error[E0782]: expected a type, found a trait
+  --> types/src/bellatrix/containers.rs:42:24
+   |
+42 |     pub randao_reveal: SignatureBytes,
+   |                        ^^^^^^^^^^^^^^
+   |
+help: you might be missing a type parameter
+   |
+41 ~ pub struct BeaconBlockBody<P: Preset, T: SignatureBytes> {
+42 ~     pub randao_reveal: T,
+   |
+
+error[E0782]: expected a type, found a trait
+  --> types/src/bellatrix/containers.rs:69:24
+   |
+69 |     pub randao_reveal: SignatureBytes,
+   |                        ^^^^^^^^^^^^^^
+   |
+help: you might be missing a type parameter
+   |
+68 ~ pub struct BlindedBeaconBlockBody<P: Preset, T: SignatureBytes> {
+69 ~     pub randao_reveal: T,
+   |
+
+error[E0782]: expected a type, found a trait
+   --> types/src/bellatrix/containers.rs:145:20
+    |
+145 |     pub signature: SignatureBytes,
+    |                    ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+145 |     pub signature: dyn SignatureBytes,
+    |                    +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/bellatrix/containers.rs:152:20
+    |
+152 |     pub signature: SignatureBytes,
+    |                    ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+152 |     pub signature: dyn SignatureBytes,
+    |                    +++
+
+error[E0782]: expected a type, found a trait
+  --> types/src/capella/containers.rs:48:24
+   |
+48 |     pub randao_reveal: SignatureBytes,
+   |                        ^^^^^^^^^^^^^^
+   |
+help: you might be missing a type parameter
+   |
+47 ~ pub struct BeaconBlockBody<P: Preset, T: SignatureBytes> {
+48 ~     pub randao_reveal: T,
+   |
+
+error[E0782]: expected a type, found a trait
+  --> types/src/capella/containers.rs:77:24
+   |
+77 |     pub randao_reveal: SignatureBytes,
+   |                        ^^^^^^^^^^^^^^
+   |
+help: you might be missing a type parameter
+   |
+76 ~ pub struct BlindedBeaconBlockBody<P: Preset, T: SignatureBytes> {
+77 ~     pub randao_reveal: T,
+   |
+
+error[E0782]: expected a type, found a trait
+  --> types/src/capella/containers.rs:96:26
+   |
+96 |     pub from_bls_pubkey: PublicKeyBytes,
+   |                          ^^^^^^^^^^^^^^
+   |
+help: you might be missing a type parameter
+   |
+93 ~ pub struct BlsToExecutionChange<T: PublicKeyBytes> {
+94 |     #[serde(with = "serde_utils::string_or_native")]
+95 |     pub validator_index: ValidatorIndex,
+96 ~     pub from_bls_pubkey: T,
+   |
+
+error[E0782]: expected a type, found a trait
+   --> types/src/capella/containers.rs:218:20
+    |
+218 |     pub signature: SignatureBytes,
+    |                    ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+218 |     pub signature: dyn SignatureBytes,
+    |                    +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/capella/containers.rs:225:20
+    |
+225 |     pub signature: SignatureBytes,
+    |                    ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+225 |     pub signature: dyn SignatureBytes,
+    |                    +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/capella/containers.rs:232:20
+    |
+232 |     pub signature: SignatureBytes,
+    |                    ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+232 |     pub signature: dyn SignatureBytes,
+    |                    +++
+
+error[E0782]: expected a type, found a trait
+  --> types/src/deneb/containers.rs:50:24
+   |
+50 |     pub randao_reveal: SignatureBytes,
+   |                        ^^^^^^^^^^^^^^
+   |
+help: you might be missing a type parameter
+   |
+49 ~ pub struct BeaconBlockBody<P: Preset, T: SignatureBytes> {
+50 ~     pub randao_reveal: T,
+   |
+
+error[E0782]: expected a type, found a trait
+  --> types/src/deneb/containers.rs:80:24
+   |
+80 |     pub randao_reveal: SignatureBytes,
+   |                        ^^^^^^^^^^^^^^
+   |
+help: you might be missing a type parameter
+   |
+79 ~ pub struct BlindedBeaconBlockBody<P: Preset, T: SignatureBytes> {
+80 ~     pub randao_reveal: T,
+   |
+
+error[E0782]: expected a type, found a trait
+   --> types/src/deneb/containers.rs:230:20
+    |
+230 |     pub signature: SignatureBytes,
+    |                    ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+230 |     pub signature: dyn SignatureBytes,
+    |                    +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/deneb/containers.rs:237:20
+    |
+237 |     pub signature: SignatureBytes,
+    |                    ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+237 |     pub signature: dyn SignatureBytes,
+    |                    +++
+
+error[E0782]: expected a type, found a trait
+  --> types/src/electra/containers.rs:30:26
+   |
+30 |     pub selection_proof: SignatureBytes,
+   |                          ^^^^^^^^^^^^^^
+   |
+help: you can add the `dyn` keyword if you want a trait object
+   |
+30 |     pub selection_proof: dyn SignatureBytes,
+   |                          +++
+
+error[E0782]: expected a type, found a trait
+  --> types/src/electra/containers.rs:64:24
+   |
+64 |     pub randao_reveal: SignatureBytes,
+   |                        ^^^^^^^^^^^^^^
+   |
+help: you might be missing a type parameter
+   |
+63 ~ pub struct BeaconBlockBody<P: Preset, T: SignatureBytes> {
+64 ~     pub randao_reveal: T,
+   |
+
+error[E0782]: expected a type, found a trait
+  --> types/src/electra/containers.rs:95:24
+   |
+95 |     pub randao_reveal: SignatureBytes,
+   |                        ^^^^^^^^^^^^^^
+   |
+help: you might be missing a type parameter
+   |
+94 ~ pub struct BlindedBeaconBlockBody<P: Preset, T: SignatureBytes> {
+95 ~     pub randao_reveal: T,
+   |
+
+error[E0782]: expected a type, found a trait
+   --> types/src/electra/containers.rs:114:17
+    |
+114 |     pub pubkey: PublicKeyBytes,
+    |                 ^^^^^^^^^^^^^^
+    |
+help: you might be missing a type parameter
+    |
+113 ~ pub struct DepositRequest<T: PublicKeyBytes> {
+114 ~     pub pubkey: T,
+    |
+
+error[E0782]: expected a type, found a trait
+   --> types/src/electra/containers.rs:118:20
+    |
+118 |     pub signature: SignatureBytes,
+    |                    ^^^^^^^^^^^^^^
+    |
+help: you might be missing a type parameter
+    |
+113 ~ pub struct DepositRequest<T: SignatureBytes> {
+114 |     pub pubkey: PublicKeyBytes,
+...
+117 |     pub amount: Gwei,
+118 ~     pub signature: T,
+    |
+
+error[E0782]: expected a type, found a trait
+   --> types/src/electra/containers.rs:127:27
+    |
+127 |     pub validator_pubkey: PublicKeyBytes,
+    |                           ^^^^^^^^^^^^^^
+    |
+help: you might be missing a type parameter
+    |
+125 ~ pub struct WithdrawalRequest<T: PublicKeyBytes> {
+126 |     pub source_address: ExecutionAddress,
+127 ~     pub validator_pubkey: T,
+    |
+
+error[E0782]: expected a type, found a trait
+   --> types/src/electra/containers.rs:201:17
+    |
+201 |     pub pubkey: PublicKeyBytes,
+    |                 ^^^^^^^^^^^^^^
+    |
+help: you might be missing a type parameter
+    |
+200 ~ pub struct PendingDeposit<T: PublicKeyBytes> {
+201 ~     pub pubkey: T,
+    |
+
+error[E0782]: expected a type, found a trait
+   --> types/src/electra/containers.rs:205:20
+    |
+205 |     pub signature: SignatureBytes,
+    |                    ^^^^^^^^^^^^^^
+    |
+help: you might be missing a type parameter
+    |
+200 ~ pub struct PendingDeposit<T: SignatureBytes> {
+201 |     pub pubkey: PublicKeyBytes,
+...
+204 |     pub amount: Gwei,
+205 ~     pub signature: T,
+    |
+
+error[E0782]: expected a type, found a trait
+   --> types/src/electra/containers.rs:234:20
+    |
+234 |     pub signature: SignatureBytes,
+    |                    ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+234 |     pub signature: dyn SignatureBytes,
+    |                    +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/electra/containers.rs:241:20
+    |
+241 |     pub signature: SignatureBytes,
+    |                    ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+241 |     pub signature: dyn SignatureBytes,
+    |                    +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/electra/containers.rs:248:20
+    |
+248 |     pub signature: SignatureBytes,
+    |                    ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+248 |     pub signature: dyn SignatureBytes,
+    |                    +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/electra/containers.rs:259:20
+    |
+259 |     pub signature: SignatureBytes,
+    |                    ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+259 |     pub signature: dyn SignatureBytes,
+    |                    +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/electra/containers.rs:266:24
+    |
+266 |     pub source_pubkey: PublicKeyBytes,
+    |                        ^^^^^^^^^^^^^^
+    |
+help: you might be missing a type parameter
+    |
+264 ~ pub struct ConsolidationRequest<T: PublicKeyBytes> {
+265 |     pub source_address: ExecutionAddress,
+266 ~     pub source_pubkey: T,
+    |
+
+error[E0782]: expected a type, found a trait
+   --> types/src/electra/containers.rs:267:24
+    |
+267 |     pub target_pubkey: PublicKeyBytes,
+    |                        ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+267 |     pub target_pubkey: dyn PublicKeyBytes,
+    |                        +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/traits.rs:682:28
+    |
+682 |     fn signature(&self) -> SignatureBytes;
+    |                            ^^^^^^^^^^^^^^
+    |
+help: `SignatureBytes` is dyn-incompatible, use `impl SignatureBytes` to return an opaque type, as long as you return a single underlying type
+    |
+682 |     fn signature(&self) -> impl SignatureBytes;
+    |                            ++++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/traits.rs:841:32
+    |
+841 |     fn randao_reveal(&self) -> SignatureBytes;
+    |                                ^^^^^^^^^^^^^^
+    |
+help: `SignatureBytes` is dyn-incompatible, use `impl SignatureBytes` to return an opaque type, as long as you return a single underlying type
+    |
+841 |     fn randao_reveal(&self) -> impl SignatureBytes;
+    |                                ++++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/combined.rs:437:44
+    |
+437 |     pub fn split(self) -> (BeaconBlock<P>, SignatureBytes) {
+    |                                            ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+437 |     pub fn split(self) -> (BeaconBlock<P>, dyn SignatureBytes) {
+    |                                            +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/combined.rs:614:44
+    |
+614 |     pub fn with_signature(self, signature: SignatureBytes) -> SignedBeaconBlock<P> {
+    |                                            ^^^^^^^^^^^^^^
+    |
+    = note: `SignatureBytes` is dyn-incompatible, otherwise a trait object could be used
+help: use a new generic type parameter, constrained by `SignatureBytes`
+    |
+614 -     pub fn with_signature(self, signature: SignatureBytes) -> SignedBeaconBlock<P> {
+614 +     pub fn with_signature<T: SignatureBytes>(self, signature: T) -> SignedBeaconBlock<P> {
+    |
+help: you can also use an opaque type, but users won't be able to specify the type parameter when calling the `fn`, having to rely exclusively on type inference
+    |
+614 |     pub fn with_signature(self, signature: impl SignatureBytes) -> SignedBeaconBlock<P> {
+    |                                            ++++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/combined.rs:935:51
+    |
+935 |     pub fn split(self) -> (BlindedBeaconBlock<P>, SignatureBytes) {
+    |                                                   ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+935 |     pub fn split(self) -> (BlindedBeaconBlock<P>, dyn SignatureBytes) {
+    |                                                   +++
+
+error[E0782]: expected a type, found a trait
+    --> types/src/combined.rs:1024:44
+     |
+1024 |     pub fn with_signature(self, signature: SignatureBytes) -> SignedBlindedBeaconBlock<P> {
+     |                                            ^^^^^^^^^^^^^^
+     |
+     = note: `SignatureBytes` is dyn-incompatible, otherwise a trait object could be used
+help: use a new generic type parameter, constrained by `SignatureBytes`
+     |
+1024 -     pub fn with_signature(self, signature: SignatureBytes) -> SignedBlindedBeaconBlock<P> {
+1024 +     pub fn with_signature<T: SignatureBytes>(self, signature: T) -> SignedBlindedBeaconBlock<P> {
+     |
+help: you can also use an opaque type, but users won't be able to specify the type parameter when calling the `fn`, having to rely exclusively on type inference
+     |
+1024 |     pub fn with_signature(self, signature: impl SignatureBytes) -> SignedBlindedBeaconBlock<P> {
+     |                                            ++++
+
+error[E0782]: expected a type, found a trait
+    --> types/src/combined.rs:1441:44
+     |
+1441 |     pub const fn selection_proof(&self) -> SignatureBytes {
+     |                                            ^^^^^^^^^^^^^^
+     |
+help: `SignatureBytes` is dyn-incompatible, use `impl SignatureBytes` to return an opaque type, as long as you return a single underlying type
+     |
+1441 |     pub const fn selection_proof(&self) -> impl SignatureBytes {
+     |                                            ++++
+
+error[E0782]: expected a type, found a trait
+    --> types/src/combined.rs:1525:38
+     |
+1525 |     pub const fn signature(&self) -> SignatureBytes {
+     |                                      ^^^^^^^^^^^^^^
+     |
+help: `SignatureBytes` is dyn-incompatible, use `impl SignatureBytes` to return an opaque type, as long as you return a single underlying type
+     |
+1525 |     pub const fn signature(&self) -> impl SignatureBytes {
+     |                                      ++++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/traits.rs:692:28
+    |
+692 |     fn signature(&self) -> SignatureBytes {
+    |                            ^^^^^^^^^^^^^^
+    |
+help: `SignatureBytes` is dyn-incompatible, use `impl SignatureBytes` to return an opaque type, as long as you return a single underlying type
+    |
+692 |     fn signature(&self) -> impl SignatureBytes {
+    |                            ++++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/traits.rs:711:28
+    |
+711 |     fn signature(&self) -> SignatureBytes {
+    |                            ^^^^^^^^^^^^^^
+    |
+help: `SignatureBytes` is dyn-incompatible, use `impl SignatureBytes` to return an opaque type, as long as you return a single underlying type
+    |
+711 |     fn signature(&self) -> impl SignatureBytes {
+    |                            ++++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/traits.rs:735:28
+    |
+735 |     fn signature(&self) -> SignatureBytes {
+    |                            ^^^^^^^^^^^^^^
+    |
+help: `SignatureBytes` is dyn-incompatible, use `impl SignatureBytes` to return an opaque type, as long as you return a single underlying type
+    |
+735 |     fn signature(&self) -> impl SignatureBytes {
+    |                            ++++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/traits.rs:885:32
+    |
+885 |     fn randao_reveal(&self) -> SignatureBytes {
+    |                                ^^^^^^^^^^^^^^
+    |
+help: `SignatureBytes` is dyn-incompatible, use `impl SignatureBytes` to return an opaque type, as long as you return a single underlying type
+    |
+885 |     fn randao_reveal(&self) -> impl SignatureBytes {
+    |                                ++++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/preset.rs:103:36
+    |
+103 |         + ContiguousVectorElements<PublicKeyBytes>
+    |                                    ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+103 |         + ContiguousVectorElements<dyn PublicKeyBytes>
+    |                                    +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/preset.rs:104:26
+    |
+104 |         + MerkleElements<PublicKeyBytes>
+    |                          ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+104 |         + MerkleElements<dyn PublicKeyBytes>
+    |                          +++
+
+error[E0782]: expected a type, found a trait
+  --> types/src/phase0/container_impls.rs:10:50
+   |
+10 |     pub const fn with_signature(self, signature: SignatureBytes) -> SignedBeaconBlockHeader {
+   |                                                  ^^^^^^^^^^^^^^
+   |
+   = note: `SignatureBytes` is dyn-incompatible, otherwise a trait object could be used
+help: use a new generic type parameter, constrained by `SignatureBytes`
+   |
+10 -     pub const fn with_signature(self, signature: SignatureBytes) -> SignedBeaconBlockHeader {
+10 +     pub const fn with_signature<T: SignatureBytes>(self, signature: T) -> SignedBeaconBlockHeader {
+   |
+help: you can also use an opaque type, but users won't be able to specify the type parameter when calling the `fn`, having to rely exclusively on type inference
+   |
+10 |     pub const fn with_signature(self, signature: impl SignatureBytes) -> SignedBeaconBlockHeader {
+   |                                                  ++++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/combined.rs:387:47
+    |
+387 |         let slot_start = Offset::SIZE.get() + SignatureBytes::SIZE.get();
+    |                                               ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+387 |         let slot_start = Offset::SIZE.get() + <dyn SignatureBytes>::SIZE.get();
+    |                                               ++++               +
+
+error[E0782]: expected a type, found a trait
+   --> types/src/combined.rs:611:29
+    |
+611 |         self.with_signature(SignatureBytes::zero())
+    |                             ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+611 |         self.with_signature(<dyn SignatureBytes>::zero())
+    |                             ++++               +
+
+error[E0782]: expected a type, found a trait
+   --> types/src/combined.rs:815:28
+    |
+815 |                 signature: SignatureBytes::default(),
+    |                            ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+815 |                 signature: <dyn SignatureBytes>::default(),
+    |                            ++++               +
+
+error[E0782]: expected a type, found a trait
+   --> types/src/combined.rs:820:28
+    |
+820 |                 signature: SignatureBytes::default(),
+    |                            ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+820 |                 signature: <dyn SignatureBytes>::default(),
+    |                            ++++               +
+
+error[E0782]: expected a type, found a trait
+   --> types/src/combined.rs:825:28
+    |
+825 |                 signature: SignatureBytes::default(),
+    |                            ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+825 |                 signature: <dyn SignatureBytes>::default(),
+    |                            ++++               +
+
+error[E0782]: expected a type, found a trait
+   --> types/src/combined.rs:830:28
+    |
+830 |                 signature: SignatureBytes::default(),
+    |                            ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+830 |                 signature: <dyn SignatureBytes>::default(),
+    |                            ++++               +
+
+error[E0782]: expected a type, found a trait
+   --> types/src/combined.rs:835:28
+    |
+835 |                 signature: SignatureBytes::default(),
+    |                            ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+835 |                 signature: <dyn SignatureBytes>::default(),
+    |                            ++++               +
+
+error[E0782]: expected a type, found a trait
+   --> types/src/combined.rs:840:28
+    |
+840 |                 signature: SignatureBytes::default(),
+    |                            ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+840 |                 signature: <dyn SignatureBytes>::default(),
+    |                            ++++               +
+
+error[E0782]: expected a type, found a trait
+  --> types/src/phase0/containers.rs:74:24
+   |
+74 |     pub randao_reveal: SignatureBytes,
+   |                        ^^^^^^^^^^^^^^
+   |
+help: you can add the `dyn` keyword if you want a trait object
+   |
+74 |     pub randao_reveal: dyn SignatureBytes,
+   |                        +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/phase0/containers.rs:116:17
+    |
+116 |     pub pubkey: PublicKeyBytes,
+    |                 ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+116 |     pub pubkey: dyn PublicKeyBytes,
+    |                 +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/phase0/containers.rs:126:17
+    |
+126 |     pub pubkey: PublicKeyBytes,
+    |                 ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+126 |     pub pubkey: dyn PublicKeyBytes,
+    |                 +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/phase0/containers.rs:229:17
+    |
+229 |     pub pubkey: PublicKeyBytes,
+    |                 ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+229 |     pub pubkey: dyn PublicKeyBytes,
+    |                 +++
+
+error[E0782]: expected a type, found a trait
+  --> types/src/altair/containers.rs:36:24
+   |
+36 |     pub randao_reveal: SignatureBytes,
+   |                        ^^^^^^^^^^^^^^
+   |
+help: you can add the `dyn` keyword if you want a trait object
+   |
+36 |     pub randao_reveal: dyn SignatureBytes,
+   |                        +++
+
+error[E0782]: expected a type, found a trait
+  --> types/src/bellatrix/containers.rs:42:24
+   |
+42 |     pub randao_reveal: SignatureBytes,
+   |                        ^^^^^^^^^^^^^^
+   |
+help: you can add the `dyn` keyword if you want a trait object
+   |
+42 |     pub randao_reveal: dyn SignatureBytes,
+   |                        +++
+
+error[E0782]: expected a type, found a trait
+  --> types/src/bellatrix/containers.rs:69:24
+   |
+69 |     pub randao_reveal: SignatureBytes,
+   |                        ^^^^^^^^^^^^^^
+   |
+help: you can add the `dyn` keyword if you want a trait object
+   |
+69 |     pub randao_reveal: dyn SignatureBytes,
+   |                        +++
+
+error[E0782]: expected a type, found a trait
+  --> types/src/capella/containers.rs:48:24
+   |
+48 |     pub randao_reveal: SignatureBytes,
+   |                        ^^^^^^^^^^^^^^
+   |
+help: you can add the `dyn` keyword if you want a trait object
+   |
+48 |     pub randao_reveal: dyn SignatureBytes,
+   |                        +++
+
+error[E0782]: expected a type, found a trait
+  --> types/src/capella/containers.rs:77:24
+   |
+77 |     pub randao_reveal: SignatureBytes,
+   |                        ^^^^^^^^^^^^^^
+   |
+help: you can add the `dyn` keyword if you want a trait object
+   |
+77 |     pub randao_reveal: dyn SignatureBytes,
+   |                        +++
+
+error[E0782]: expected a type, found a trait
+  --> types/src/capella/containers.rs:96:26
+   |
+96 |     pub from_bls_pubkey: PublicKeyBytes,
+   |                          ^^^^^^^^^^^^^^
+   |
+help: you can add the `dyn` keyword if you want a trait object
+   |
+96 |     pub from_bls_pubkey: dyn PublicKeyBytes,
+   |                          +++
+
+error[E0782]: expected a type, found a trait
+  --> types/src/deneb/containers.rs:50:24
+   |
+50 |     pub randao_reveal: SignatureBytes,
+   |                        ^^^^^^^^^^^^^^
+   |
+help: you can add the `dyn` keyword if you want a trait object
+   |
+50 |     pub randao_reveal: dyn SignatureBytes,
+   |                        +++
+
+error[E0782]: expected a type, found a trait
+  --> types/src/deneb/containers.rs:80:24
+   |
+80 |     pub randao_reveal: SignatureBytes,
+   |                        ^^^^^^^^^^^^^^
+   |
+help: you can add the `dyn` keyword if you want a trait object
+   |
+80 |     pub randao_reveal: dyn SignatureBytes,
+   |                        +++
+
+error[E0782]: expected a type, found a trait
+  --> types/src/electra/containers.rs:64:24
+   |
+64 |     pub randao_reveal: SignatureBytes,
+   |                        ^^^^^^^^^^^^^^
+   |
+help: you can add the `dyn` keyword if you want a trait object
+   |
+64 |     pub randao_reveal: dyn SignatureBytes,
+   |                        +++
+
+error[E0782]: expected a type, found a trait
+  --> types/src/electra/containers.rs:95:24
+   |
+95 |     pub randao_reveal: SignatureBytes,
+   |                        ^^^^^^^^^^^^^^
+   |
+help: you can add the `dyn` keyword if you want a trait object
+   |
+95 |     pub randao_reveal: dyn SignatureBytes,
+   |                        +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/electra/containers.rs:114:17
+    |
+114 |     pub pubkey: PublicKeyBytes,
+    |                 ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+114 |     pub pubkey: dyn PublicKeyBytes,
+    |                 +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/electra/containers.rs:118:20
+    |
+118 |     pub signature: SignatureBytes,
+    |                    ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+118 |     pub signature: dyn SignatureBytes,
+    |                    +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/electra/containers.rs:127:27
+    |
+127 |     pub validator_pubkey: PublicKeyBytes,
+    |                           ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+127 |     pub validator_pubkey: dyn PublicKeyBytes,
+    |                           +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/electra/containers.rs:201:17
+    |
+201 |     pub pubkey: PublicKeyBytes,
+    |                 ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+201 |     pub pubkey: dyn PublicKeyBytes,
+    |                 +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/electra/containers.rs:205:20
+    |
+205 |     pub signature: SignatureBytes,
+    |                    ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+205 |     pub signature: dyn SignatureBytes,
+    |                    +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/electra/containers.rs:266:24
+    |
+266 |     pub source_pubkey: PublicKeyBytes,
+    |                        ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+266 |     pub source_pubkey: dyn PublicKeyBytes,
+    |                        +++
+
+warning: unused import: `traits::SignatureBytes`
+ --> types/src/altair/container_impls.rs:1:11
+  |
+1 | use bls::{traits::SignatureBytes as _, AggregateSignatureBytes};
+  |           ^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+Some errors have detailed explanations: E0432, E0782.
+For more information about an error, try `rustc --explain E0432`.
+warning: `types` (lib) generated 1 warning
+error: could not compile `types` (lib) due to 94 previous errors; 1 warning emitted

@@ -8,7 +8,6 @@
 //! All bundle sizes are currently set to minimize rehashing at the cost of higher memory usage.
 
 use ssz::{PersistentList, PersistentVector, UnhashedBundleSize};
-use typenum::{Prod, U2};
 
 use crate::{
     altair::primitives::ParticipationFlags,
@@ -65,7 +64,7 @@ pub type PendingConsolidations<P> =
 
 // ePBS collections
 pub type BuilderPendingPayments<P> =
-    PersistentVector<BuilderPendingPayment, Prod<U2, <P as Preset>::SlotsPerEpoch>>;
+    PersistentVector<BuilderPendingPayment, <P as Preset>::BuilderPendingPaymentsLimit>;
 
 pub type BuilderPendingWithdrawals<P> =
     PersistentList<BuilderPendingWithdrawal, <P as Preset>::BuilderPendingWithdrawalsLimit>;

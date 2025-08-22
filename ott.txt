@@ -1,0 +1,2535 @@
+   Compiling types v0.0.0 (/home/greendior/gran_pry/hello/types)
+warning: unexpected `cfg` condition value: `dev`
+  --> bls/bls-zkcrypto/src/public_key_bytes.rs:9:1
+   |
+9  | / construct_fixed_hash! {
+10 | |     #[derive(AsRef)]
+11 | |     pub struct PublicKeyBytes(COMPRESSED_SIZE);
+12 | | }
+   | |_^
+   |
+   = note: no expected values for `feature`
+   = note: using a cfg inside a macro will use the cfgs from the destination crate and not the ones from the defining crate
+   = help: try referring to `construct_fixed_hash` crate for guidance on how handle this unexpected cfg
+   = help: the macro `construct_fixed_hash` may come from an old version of the `fixed_hash` crate, try updating your dependency with `cargo update -p fixed_hash`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+   = note: `#[warn(unexpected_cfgs)]` on by default
+   = note: this warning originates in the macro `construct_fixed_hash` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: unexpected `cfg` condition value: `dev`
+  --> bls/bls-zkcrypto/src/signature_bytes.rs:14:1
+   |
+14 | impl_signature_bytes!(SignatureBytesTrait, SignatureBytes, CompressedSize::USIZE);
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: no expected values for `feature`
+   = note: using a cfg inside a macro will use the cfgs from the destination crate and not the ones from the defining crate
+   = help: try referring to `construct_fixed_hash` crate for guidance on how handle this unexpected cfg
+   = help: the macro `construct_fixed_hash` may come from an old version of the `fixed_hash` crate, try updating your dependency with `cargo update -p fixed_hash`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+   = note: this warning originates in the macro `construct_fixed_hash` which comes from the expansion of the macro `impl_signature_bytes` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: `bls-zkcrypto` (lib) generated 2 warnings
+error: Unexpected delimiter.
+       ␛[1;34m= ␛[0m␛[1;36mhelp␛[0m␛[39m: ␛[0m␛[1;39mNumber of substitutions must match the number of substitutions identifiers.
+       Example:
+           ident1 ident2;
+          1^^^^^^ ^^^^^^2
+           [sub1] [sub2];
+          1^^^^^^ ^^^^^^2
+       ␛[0m
+   --> types/src/traits.rs:710:5
+    |
+710 |     [self.as_mut().method()];
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0277]: cannot multiply `UInt<UInt<UTerm, B1>, B0>` by `<P as Preset>::SlotsPerEpoch`
+   --> types/src/traits.rs:259:6
+    |
+259 |     [CombinedBeaconState<P>]
+    |      ^^^^^^^^^^^^^^^^^^^^^^ no implementation for `UInt<UInt<UTerm, B1>, B0> * <P as Preset>::SlotsPerEpoch`
+    |
+    = help: within `combined::BeaconState<P>`, the trait `Mul<<P as Preset>::SlotsPerEpoch>` is not implemented for `UInt<UInt<UTerm, B1>, B0>`
+note: required because it appears within the type `eip7732::beacon_state::BeaconState<P>`
+   --> types/src/eip7732/beacon_state.rs:29:12
+    |
+29  | pub struct BeaconState<P: Preset> {
+    |            ^^^^^^^^^^^
+note: required because it appears within the type `Hc<eip7732::beacon_state::BeaconState<P>>`
+   --> /home/greendior/gran_pry/hello/ssz/src/hc.rs:24:12
+    |
+24  | pub struct Hc<T> {
+    |            ^^
+note: required because it appears within the type `combined::BeaconState<P>`
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+note: required by a bound in `traits::BeaconState`
+   --> types/src/traits.rs:113:72
+    |
+113 | pub trait BeaconState<P: Preset>: SszHash<PackingFactor = U1> + Send + Sync {
+    |                                                                        ^^^^ required by this bound in `BeaconState`
+help: consider introducing a `where` clause, but there might be an alternative better way to express this requirement
+    |
+259 |     [CombinedBeaconState<P> where UInt<UInt<UTerm, B1>, B0>: Mul<<P as Preset>::SlotsPerEpoch>]
+    |                             ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+error[E0277]: cannot add `UInt<UInt<UInt<UTerm, B1>, B1>, B1>` to `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output`
+   --> types/src/traits.rs:259:6
+    |
+259 |     [CombinedBeaconState<P>]
+    |      ^^^^^^^^^^^^^^^^^^^^^^ no implementation for `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output + UInt<UInt<UInt<UTerm, B1>, B1>, B1>`
+    |
+    = help: the trait `derive_more::Add<UInt<UInt<UInt<UTerm, B1>, B1>, B1>>` is not implemented for `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output`
+    = note: required for `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output` to implement `BitVectorBits`
+note: required because it appears within the type `BitVector<<... as Mul<...>>::Output>`
+   --> /home/greendior/gran_pry/hello/ssz/src/bit_vector.rs:39:12
+    |
+39  | pub struct BitVector<N: BitVectorBits> {
+    |            ^^^^^^^^^
+note: required because it appears within the type `eip7732::beacon_state::BeaconState<P>`
+   --> types/src/eip7732/beacon_state.rs:29:12
+    |
+29  | pub struct BeaconState<P: Preset> {
+    |            ^^^^^^^^^^^
+note: required because it appears within the type `Hc<eip7732::beacon_state::BeaconState<P>>`
+   --> /home/greendior/gran_pry/hello/ssz/src/hc.rs:24:12
+    |
+24  | pub struct Hc<T> {
+    |            ^^
+note: required because it appears within the type `combined::BeaconState<P>`
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+note: required by a bound in `traits::BeaconState`
+   --> types/src/traits.rs:113:72
+    |
+113 | pub trait BeaconState<P: Preset>: SszHash<PackingFactor = U1> + Send + Sync {
+    |                                                                        ^^^^ required by this bound in `BeaconState`
+    = note: the full name for the type has been written to '/home/greendior/gran_pry/hello/target/compact/deps/types-9c01af7db6c4e594.long-type-6273488209663683393.txt'
+    = note: consider using `--verbose` to print the full type name to the console
+help: consider further restricting the associated type
+    |
+259 |     [CombinedBeaconState<P> where <<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output: derive_more::Add<UInt<UInt<UInt<UTerm, B1>, B1>, B1>>]
+    |                             ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+error[E0277]: the trait bound `eip7732::containers::BeaconBlockBody<P>: PostElectraBeaconBlockBody<P>` is not satisfied
+    --> types/src/traits.rs:1392:51
+     |
+1392 | impl<P: Preset> PostEip7732BeaconBlockBody<P> for Eip7732BeaconBlockBody<P> {
+     |                                                   ^^^^^^^^^^^^^^^^^^^^^^^^^ the trait `PostElectraBeaconBlockBody<P>` is not implemented for `eip7732::containers::BeaconBlockBody<P>`
+     |
+     = help: the following other types implement trait `PostElectraBeaconBlockBody<P>`:
+               electra::containers::BeaconBlockBody<P>
+               electra::containers::BlindedBeaconBlockBody<P>
+note: required by a bound in `PostEip7732BeaconBlockBody`
+    --> types/src/traits.rs:1387:50
+     |
+1387 | pub trait PostEip7732BeaconBlockBody<P: Preset>: PostElectraBeaconBlockBody<P> {
+     |                                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `PostEip7732BeaconBlockBody`
+
+error[E0277]: cannot add `UInt<UInt<UInt<UTerm, B1>, B1>, B1>` to `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output`
+   --> types/src/traits.rs:687:50
+    |
+687 |     fn execution_payload_availability(&self) -> &BitVector<SlotsPerHistoricalRoot<P>>;
+    |                                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no implementation for `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output + UInt<UInt<UInt<UTerm, B1>, B1>, B1>`
+    |
+    = help: the trait `derive_more::Add<UInt<UInt<UInt<UTerm, B1>, B1>, B1>>` is not implemented for `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output`
+    = note: required for `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output` to implement `BitVectorBits`
+note: required by a bound in `BitVector`
+   --> /home/greendior/gran_pry/hello/ssz/src/bit_vector.rs:39:25
+    |
+39  | pub struct BitVector<N: BitVectorBits> {
+    |                         ^^^^^^^^^^^^^ required by this bound in `BitVector`
+help: consider further restricting the associated type
+    |
+687 |     fn execution_payload_availability(&self) -> &BitVector<SlotsPerHistoricalRoot<P>> where <<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output: derive_more::Add<UInt<UInt<UInt<UTerm, B1>, B1>, B1>>;
+    |                                                                                       ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+error[E0277]: cannot multiply `UInt<UInt<UTerm, B1>, B0>` by `<P as Preset>::SlotsPerEpoch`
+   --> types/src/traits.rs:688:44
+    |
+688 |     fn builder_pending_payments(&self) -> &BuilderPendingPayments<P>;
+    |                                            ^^^^^^^^^^^^^^^^^^^^^^^^^ no implementation for `UInt<UInt<UTerm, B1>, B0> * <P as Preset>::SlotsPerEpoch`
+    |
+    = help: the trait `Mul<<P as Preset>::SlotsPerEpoch>` is not implemented for `UInt<UInt<UTerm, B1>, B0>`
+help: consider introducing a `where` clause, but there might be an alternative better way to express this requirement
+    |
+686 | pub trait PostEip7732BeaconState<P: Preset>: PostElectraBeaconState<P> where UInt<UInt<UTerm, B1>, B0>: Mul<<P as Preset>::SlotsPerEpoch> {
+    |                                                                        ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+error[E0277]: cannot add `UInt<UInt<UInt<UTerm, B1>, B1>, B1>` to `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output`
+   --> types/src/traits.rs:693:62
+    |
+693 |     fn execution_payload_availability_mut(&mut self) -> &mut BitVector<SlotsPerHistoricalRoot<P>>;
+    |                                                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no implementation for `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output + UInt<UInt<UInt<UTerm, B1>, B1>, B1>`
+    |
+    = help: the trait `derive_more::Add<UInt<UInt<UInt<UTerm, B1>, B1>, B1>>` is not implemented for `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output`
+    = note: required for `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output` to implement `BitVectorBits`
+note: required by a bound in `BitVector`
+   --> /home/greendior/gran_pry/hello/ssz/src/bit_vector.rs:39:25
+    |
+39  | pub struct BitVector<N: BitVectorBits> {
+    |                         ^^^^^^^^^^^^^ required by this bound in `BitVector`
+help: consider further restricting the associated type
+    |
+693 |     fn execution_payload_availability_mut(&mut self) -> &mut BitVector<SlotsPerHistoricalRoot<P>> where <<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output: derive_more::Add<UInt<UInt<UInt<UTerm, B1>, B1>, B1>>;
+    |                                                                                                   ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+error[E0277]: cannot multiply `UInt<UInt<UTerm, B1>, B0>` by `<P as Preset>::SlotsPerEpoch`
+   --> types/src/traits.rs:694:56
+    |
+694 |     fn builder_pending_payments_mut(&mut self) -> &mut BuilderPendingPayments<P>;
+    |                                                        ^^^^^^^^^^^^^^^^^^^^^^^^^ no implementation for `UInt<UInt<UTerm, B1>, B0> * <P as Preset>::SlotsPerEpoch`
+    |
+    = help: the trait `Mul<<P as Preset>::SlotsPerEpoch>` is not implemented for `UInt<UInt<UTerm, B1>, B0>`
+help: consider introducing a `where` clause, but there might be an alternative better way to express this requirement
+    |
+686 | pub trait PostEip7732BeaconState<P: Preset>: PostElectraBeaconState<P> where UInt<UInt<UTerm, B1>, B0>: Mul<<P as Preset>::SlotsPerEpoch> {
+    |                                                                        ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+error[E0277]: cannot multiply `UInt<UInt<UTerm, B1>, B0>` by `<P as Preset>::SlotsPerEpoch`
+   --> types/src/eip7732/beacon_state.rs:111:35
+    |
+111 |     pub builder_pending_payments: BuilderPendingPayments<P>,
+    |                                   ^^^^^^^^^^^^^^^^^^^^^^^^^ no implementation for `UInt<UInt<UTerm, B1>, B0> * <P as Preset>::SlotsPerEpoch`
+    |
+    = help: the trait `Mul<<P as Preset>::SlotsPerEpoch>` is not implemented for `UInt<UInt<UTerm, B1>, B0>`
+help: consider introducing a `where` clause, but there might be an alternative better way to express this requirement
+    |
+29  | pub struct BeaconState<P: Preset> where UInt<UInt<UTerm, B1>, B0>: Mul<<P as Preset>::SlotsPerEpoch> {
+    |                                   ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+error[E0277]: cannot add `UInt<UInt<UInt<UTerm, B1>, B1>, B1>` to `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output`
+   --> types/src/eip7732/beacon_state.rs:110:41
+    |
+110 |     pub execution_payload_availability: BitVector<SlotsPerHistoricalRoot<P>>,
+    |                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no implementation for `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output + UInt<UInt<UInt<UTerm, B1>, B1>, B1>`
+    |
+    = help: the trait `derive_more::Add<UInt<UInt<UInt<UTerm, B1>, B1>, B1>>` is not implemented for `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output`
+    = note: required for `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output` to implement `BitVectorBits`
+note: required because it appears within the type `BitVector<<... as Mul<...>>::Output>`
+   --> /home/greendior/gran_pry/hello/ssz/src/bit_vector.rs:39:12
+    |
+39  | pub struct BitVector<N: BitVectorBits> {
+    |            ^^^^^^^^^
+    = note: only the last field of a struct may have a dynamically sized type
+    = help: change the field's type to have a statically known size
+    = note: the full name for the type has been written to '/home/greendior/gran_pry/hello/target/compact/deps/types-9c01af7db6c4e594.long-type-6273488209663683393.txt'
+    = note: consider using `--verbose` to print the full type name to the console
+help: consider introducing a `where` clause, but there might be an alternative better way to express this requirement
+    |
+29  | pub struct BeaconState<P: Preset> where <<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output: derive_more::Add<UInt<UInt<UInt<UTerm, B1>, B1>, B1>> {
+    |                                   ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+help: borrowed types always have a statically known size
+    |
+110 |     pub execution_payload_availability: &BitVector<SlotsPerHistoricalRoot<P>>,
+    |                                         +
+help: the `Box` type always has a statically known size and allocates its contents in the heap
+    |
+110 |     pub execution_payload_availability: Box<BitVector<SlotsPerHistoricalRoot<P>>>,
+    |                                         ++++                                    +
+
+error[E0277]: cannot multiply `UInt<UInt<UTerm, B1>, B0>` by `<P as Preset>::SlotsPerEpoch`
+   --> types/src/combined.rs:176:32
+    |
+176 |         assert_eq!(slot, state.slot());
+    |                                ^^^^ no implementation for `UInt<UInt<UTerm, B1>, B0> * <P as Preset>::SlotsPerEpoch`
+    |
+    = help: within `combined::BeaconState<P>`, the trait `Mul<<P as Preset>::SlotsPerEpoch>` is not implemented for `UInt<UInt<UTerm, B1>, B0>`
+note: required because it appears within the type `eip7732::beacon_state::BeaconState<P>`
+   --> types/src/eip7732/beacon_state.rs:29:12
+    |
+29  | pub struct BeaconState<P: Preset> {
+    |            ^^^^^^^^^^^
+note: required because it appears within the type `Hc<eip7732::beacon_state::BeaconState<P>>`
+   --> /home/greendior/gran_pry/hello/ssz/src/hc.rs:24:12
+    |
+24  | pub struct Hc<T> {
+    |            ^^
+note: required because it appears within the type `combined::BeaconState<P>`
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+note: required by a bound in `traits::BeaconState::slot`
+   --> types/src/traits.rs:113:65
+    |
+113 | pub trait BeaconState<P: Preset>: SszHash<PackingFactor = U1> + Send + Sync {
+    |                                                                 ^^^^ required by this bound in `BeaconState::slot`
+...
+116 |     fn slot(&self) -> Slot;
+    |        ---- required by a bound in this associated function
+help: consider introducing a `where` clause, but there might be an alternative better way to express this requirement
+    |
+156 | impl<P: Preset> SszRead<Config> for BeaconState<P> where UInt<UInt<UTerm, B1>, B0>: Mul<<P as Preset>::SlotsPerEpoch> {
+    |                                                    ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+error[E0277]: cannot add `UInt<UInt<UInt<UTerm, B1>, B1>, B1>` to `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output`
+   --> types/src/combined.rs:176:32
+    |
+176 |         assert_eq!(slot, state.slot());
+    |                                ^^^^ no implementation for `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output + UInt<UInt<UInt<UTerm, B1>, B1>, B1>`
+    |
+    = help: the trait `derive_more::Add<UInt<UInt<UInt<UTerm, B1>, B1>, B1>>` is not implemented for `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output`
+    = note: required for `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output` to implement `BitVectorBits`
+note: required because it appears within the type `BitVector<<... as Mul<...>>::Output>`
+   --> /home/greendior/gran_pry/hello/ssz/src/bit_vector.rs:39:12
+    |
+39  | pub struct BitVector<N: BitVectorBits> {
+    |            ^^^^^^^^^
+note: required because it appears within the type `eip7732::beacon_state::BeaconState<P>`
+   --> types/src/eip7732/beacon_state.rs:29:12
+    |
+29  | pub struct BeaconState<P: Preset> {
+    |            ^^^^^^^^^^^
+note: required because it appears within the type `Hc<eip7732::beacon_state::BeaconState<P>>`
+   --> /home/greendior/gran_pry/hello/ssz/src/hc.rs:24:12
+    |
+24  | pub struct Hc<T> {
+    |            ^^
+note: required because it appears within the type `combined::BeaconState<P>`
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+note: required by a bound in `traits::BeaconState::slot`
+   --> types/src/traits.rs:113:65
+    |
+113 | pub trait BeaconState<P: Preset>: SszHash<PackingFactor = U1> + Send + Sync {
+    |                                                                 ^^^^ required by this bound in `BeaconState::slot`
+...
+116 |     fn slot(&self) -> Slot;
+    |        ---- required by a bound in this associated function
+    = note: the full name for the type has been written to '/home/greendior/gran_pry/hello/target/compact/deps/types-9c01af7db6c4e594.long-type-6273488209663683393.txt'
+    = note: consider using `--verbose` to print the full type name to the console
+help: consider further restricting the associated type
+    |
+157 |     fn from_ssz_unchecked(config: &Config, bytes: &[u8]) -> Result<Self, ReadError> where <<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output: derive_more::Add<UInt<UInt<UInt<UTerm, B1>, B1>, B1>> {
+    |                                                                                     ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+error[E0308]: mismatched types
+   --> types/src/combined.rs:880:79
+    |
+880 |       const SIZE: Size = Size::for_untagged_union::<{ Phase::CARDINALITY - 2 }>([
+    |  ________________________------------------------------------------------------_^
+    | |                        |
+    | |                        arguments to this function are incorrect
+881 | |         BellatrixSignedBlindedBeaconBlock::<P>::SIZE,
+882 | |         CapellaSignedBlindedBeaconBlock::<P>::SIZE,
+883 | |         DenebSignedBlindedBeaconBlock::<P>::SIZE,
+884 | |         ElectraSignedBlindedBeaconBlock::<P>::SIZE,
+885 | |     ]);
+    | |_____^ expected an array with a size of 5, found one with a size of 4
+    |
+    = note: expected array `[Size; 5]`
+               found array `[Size; 4]`
+note: associated function defined here
+   --> /home/greendior/gran_pry/hello/ssz/src/size.rs:11:18
+    |
+11  |     pub const fn for_untagged_union<const N: usize>(sizes: [Self; N]) -> Self {
+    |                  ^^^^^^^^^^^^^^^^^^
+
+error[E0308]: mismatched types
+    --> types/src/combined.rs:1004:79
+     |
+1004 |       const SIZE: Size = Size::for_untagged_union::<{ Phase::CARDINALITY - 2 }>([
+     |  ________________________------------------------------------------------------_^
+     | |                        |
+     | |                        arguments to this function are incorrect
+1005 | |         BellatrixBlindedBeaconBlock::<P>::SIZE,
+1006 | |         CapellaBlindedBeaconBlock::<P>::SIZE,
+1007 | |         DenebSignedBlindedBeaconBlock::<P>::SIZE,
+1008 | |         ElectraSignedBlindedBeaconBlock::<P>::SIZE,
+1009 | |     ]);
+     | |_____^ expected an array with a size of 5, found one with a size of 4
+     |
+     = note: expected array `[Size; 5]`
+                found array `[Size; 4]`
+note: associated function defined here
+    --> /home/greendior/gran_pry/hello/ssz/src/size.rs:11:18
+     |
+11   |     pub const fn for_untagged_union<const N: usize>(sizes: [Self; N]) -> Self {
+     |                  ^^^^^^^^^^^^^^^^^^
+
+error[E0308]: mismatched types
+    --> types/src/combined.rs:1147:79
+     |
+1147 |       const SIZE: Size = Size::for_untagged_union::<{ Phase::CARDINALITY - 2 }>([
+     |  ________________________------------------------------------------------------_^
+     | |                        |
+     | |                        arguments to this function are incorrect
+1148 | |         BellatrixExecutionPayload::<P>::SIZE,
+1149 | |         CapellaExecutionPayload::<P>::SIZE,
+1150 | |         DenebExecutionPayload::<P>::SIZE,
+1151 | |         DenebExecutionPayload::<P>::SIZE,  // Eip7732 reuses Deneb
+1152 | |     ]);
+     | |_____^ expected an array with a size of 5, found one with a size of 4
+     |
+     = note: expected array `[Size; 5]`
+                found array `[Size; 4]`
+note: associated function defined here
+    --> /home/greendior/gran_pry/hello/ssz/src/size.rs:11:18
+     |
+11   |     pub const fn for_untagged_union<const N: usize>(sizes: [Self; N]) -> Self {
+     |                  ^^^^^^^^^^^^^^^^^^
+
+error[E0308]: mismatched types
+    --> types/src/combined.rs:1259:79
+     |
+1259 |       const SIZE: Size = Size::for_untagged_union::<{ Phase::CARDINALITY - 2 }>([
+     |  ________________________------------------------------------------------------_^
+     | |                        |
+     | |                        arguments to this function are incorrect
+1260 | |         AltairLightClientBootstrap::<P>::SIZE,
+1261 | |         CapellaLightClientBootstrap::<P>::SIZE,
+1262 | |         DenebLightClientBootstrap::<P>::SIZE,
+1263 | |         ElectraLightClientBootstrap::<P>::SIZE,
+1264 | |     ]);
+     | |_____^ expected an array with a size of 5, found one with a size of 4
+     |
+     = note: expected array `[Size; 5]`
+                found array `[Size; 4]`
+note: associated function defined here
+    --> /home/greendior/gran_pry/hello/ssz/src/size.rs:11:18
+     |
+11   |     pub const fn for_untagged_union<const N: usize>(sizes: [Self; N]) -> Self {
+     |                  ^^^^^^^^^^^^^^^^^^
+
+error[E0308]: mismatched types
+    --> types/src/combined.rs:1316:79
+     |
+1316 |       const SIZE: Size = Size::for_untagged_union::<{ Phase::CARDINALITY - 2 }>([
+     |  ________________________------------------------------------------------------_^
+     | |                        |
+     | |                        arguments to this function are incorrect
+1317 | |         AltairLightClientFinalityUpdate::<P>::SIZE,
+1318 | |         CapellaLightClientFinalityUpdate::<P>::SIZE,
+1319 | |         DenebLightClientFinalityUpdate::<P>::SIZE,
+1320 | |         ElectraLightClientFinalityUpdate::<P>::SIZE,
+1321 | |     ]);
+     | |_____^ expected an array with a size of 5, found one with a size of 4
+     |
+     = note: expected array `[Size; 5]`
+                found array `[Size; 4]`
+note: associated function defined here
+    --> /home/greendior/gran_pry/hello/ssz/src/size.rs:11:18
+     |
+11   |     pub const fn for_untagged_union<const N: usize>(sizes: [Self; N]) -> Self {
+     |                  ^^^^^^^^^^^^^^^^^^
+
+error[E0308]: mismatched types
+    --> types/src/combined.rs:1373:79
+     |
+1373 |       const SIZE: Size = Size::for_untagged_union::<{ Phase::CARDINALITY - 2 }>([
+     |  ________________________------------------------------------------------------_^
+     | |                        |
+     | |                        arguments to this function are incorrect
+1374 | |         AltairLightClientOptimisticUpdate::<P>::SIZE,
+1375 | |         CapellaLightClientOptimisticUpdate::<P>::SIZE,
+1376 | |         DenebLightClientOptimisticUpdate::<P>::SIZE,
+1377 | |         ElectraLightClientOptimisticUpdate::<P>::SIZE,
+1378 | |     ]);
+     | |_____^ expected an array with a size of 5, found one with a size of 4
+     |
+     = note: expected array `[Size; 5]`
+                found array `[Size; 4]`
+note: associated function defined here
+    --> /home/greendior/gran_pry/hello/ssz/src/size.rs:11:18
+     |
+11   |     pub const fn for_untagged_union<const N: usize>(sizes: [Self; N]) -> Self {
+     |                  ^^^^^^^^^^^^^^^^^^
+
+error[E0308]: mismatched types
+    --> types/src/combined.rs:1419:79
+     |
+1419 |       const SIZE: Size = Size::for_untagged_union::<{ Phase::CARDINALITY - 2 }>([
+     |  ________________________------------------------------------------------------_^
+     | |                        |
+     | |                        arguments to this function are incorrect
+1420 | |         AltairLightClientUpdate::<P>::SIZE,
+1421 | |         CapellaLightClientUpdate::<P>::SIZE,
+1422 | |         DenebLightClientUpdate::<P>::SIZE,
+1423 | |         ElectraLightClientUpdate::<P>::SIZE,
+1424 | |     ]);
+     | |_____^ expected an array with a size of 5, found one with a size of 4
+     |
+     = note: expected array `[Size; 5]`
+                found array `[Size; 4]`
+note: associated function defined here
+    --> /home/greendior/gran_pry/hello/ssz/src/size.rs:11:18
+     |
+11   |     pub const fn for_untagged_union<const N: usize>(sizes: [Self; N]) -> Self {
+     |                  ^^^^^^^^^^^^^^^^^^
+
+error[E0308]: mismatched types
+    --> types/src/combined.rs:1517:79
+     |
+1517 |       const SIZE: Size = Size::for_untagged_union::<{ Phase::CARDINALITY - 4 }>([
+     |  ________________________------------------------------------------------------_^
+     | |                        |
+     | |                        arguments to this function are incorrect
+1518 | |         Phase0SignedAggregateAndProof::<P>::SIZE,
+1519 | |         ElectraSignedAggregateAndProof::<P>::SIZE,
+1520 | |     ]);
+     | |_____^ expected an array with a size of 3, found one with a size of 2
+     |
+     = note: expected array `[Size; 3]`
+                found array `[Size; 2]`
+note: associated function defined here
+    --> /home/greendior/gran_pry/hello/ssz/src/size.rs:11:18
+     |
+11   |     pub const fn for_untagged_union<const N: usize>(sizes: [Self; N]) -> Self {
+     |                  ^^^^^^^^^^^^^^^^^^
+
+error[E0308]: mismatched types
+    --> types/src/combined.rs:1625:79
+     |
+1625 |       const SIZE: Size = Size::for_untagged_union::<{ Phase::CARDINALITY - 4 }>([
+     |  ________________________------------------------------------------------------_^
+     | |                        |
+     | |                        arguments to this function are incorrect
+1626 | |         Phase0Attestation::<P>::SIZE,
+1627 | |         ElectraAttestation::<P>::SIZE,
+1628 | |     ]);
+     | |_____^ expected an array with a size of 3, found one with a size of 2
+     |
+     = note: expected array `[Size; 3]`
+                found array `[Size; 2]`
+note: associated function defined here
+    --> /home/greendior/gran_pry/hello/ssz/src/size.rs:11:18
+     |
+11   |     pub const fn for_untagged_union<const N: usize>(sizes: [Self; N]) -> Self {
+     |                  ^^^^^^^^^^^^^^^^^^
+
+error[E0308]: mismatched types
+    --> types/src/combined.rs:1733:79
+     |
+1733 |       const SIZE: Size = Size::for_untagged_union::<{ Phase::CARDINALITY - 4 }>([
+     |  ________________________------------------------------------------------------_^
+     | |                        |
+     | |                        arguments to this function are incorrect
+1734 | |         Phase0AttesterSlashing::<P>::SIZE,
+1735 | |         ElectraAttesterSlashing::<P>::SIZE,
+1736 | |     ]);
+     | |_____^ expected an array with a size of 3, found one with a size of 2
+     |
+     = note: expected array `[Size; 3]`
+                found array `[Size; 2]`
+note: associated function defined here
+    --> /home/greendior/gran_pry/hello/ssz/src/size.rs:11:18
+     |
+11   |     pub const fn for_untagged_union<const N: usize>(sizes: [Self; N]) -> Self {
+     |                  ^^^^^^^^^^^^^^^^^^
+
+error[E0277]: the trait bound `eip7732::containers::BeaconBlockBody<P>: PostAltairBeaconBlockBody<P>` is not satisfied
+   --> types/src/traits.rs:962:65
+    |
+962 | ...      [Some(self)]     [None]              [None]          [Some(self)]     [Some(self)];
+    |                ^^^^ the trait `PostAltairBeaconBlockBody<P>` is not implemented for `eip7732::containers::BeaconBlockBody<P>`
+    |
+    = help: the following other types implement trait `PostAltairBeaconBlockBody<P>`:
+              altair::containers::BeaconBlockBody<P>
+              bellatrix::containers::BeaconBlockBody<P>
+              bellatrix::containers::BlindedBeaconBlockBody<P>
+              capella::containers::BeaconBlockBody<P>
+              capella::containers::BlindedBeaconBlockBody<P>
+              deneb::containers::BeaconBlockBody<P>
+              deneb::containers::BlindedBeaconBlockBody<P>
+              electra::containers::BeaconBlockBody<P>
+              electra::containers::BlindedBeaconBlockBody<P>
+    = note: required for the cast from `&eip7732::containers::BeaconBlockBody<P>` to `&dyn PostAltairBeaconBlockBody<P>`
+
+error[E0277]: the trait bound `eip7732::containers::BeaconBlockBody<P>: PostElectraBeaconBlockBody<P>` is not satisfied
+   --> types/src/traits.rs:962:118
+    |
+962 | ...     [Some(self)]     [Some(self)];
+    |               ^^^^ the trait `PostElectraBeaconBlockBody<P>` is not implemented for `eip7732::containers::BeaconBlockBody<P>`
+    |
+    = help: the following other types implement trait `PostElectraBeaconBlockBody<P>`:
+              electra::containers::BeaconBlockBody<P>
+              electra::containers::BlindedBeaconBlockBody<P>
+    = note: required for the cast from `&eip7732::containers::BeaconBlockBody<P>` to `&dyn PostElectraBeaconBlockBody<P>`
+
+error[E0277]: cannot add `UInt<UInt<UInt<UTerm, B1>, B1>, B1>` to `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output`
+   --> types/src/eip7732/beacon_state.rs:110:5
+    |
+26  | #[derive(Clone, Debug, Default, Derivative, Deserialize, Serialize, Ssz)]
+    |          ----- in this derive macro expansion
+...
+110 |     pub execution_payload_availability: BitVector<SlotsPerHistoricalRoot<P>>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no implementation for `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output + UInt<UInt<UInt<UTerm, B1>, B1>, B1>`
+    |
+    = help: the trait `derive_more::Add<UInt<UInt<UInt<UTerm, B1>, B1>, B1>>` is not implemented for `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output`
+    = note: required for `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output` to implement `BitVectorBits`
+note: required by a bound in `BitVector`
+   --> /home/greendior/gran_pry/hello/ssz/src/bit_vector.rs:39:25
+    |
+39  | pub struct BitVector<N: BitVectorBits> {
+    |                         ^^^^^^^^^^^^^ required by this bound in `BitVector`
+    = note: this error originates in the derive macro `Clone` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: cannot multiply `UInt<UInt<UTerm, B1>, B0>` by `<P as Preset>::SlotsPerEpoch`
+   --> types/src/eip7732/beacon_state.rs:111:5
+    |
+26  | #[derive(Clone, Debug, Default, Derivative, Deserialize, Serialize, Ssz)]
+    |          ----- in this derive macro expansion
+...
+111 |     pub builder_pending_payments: BuilderPendingPayments<P>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no implementation for `UInt<UInt<UTerm, B1>, B0> * <P as Preset>::SlotsPerEpoch`
+    |
+    = help: the trait `Mul<<P as Preset>::SlotsPerEpoch>` is not implemented for `UInt<UInt<UTerm, B1>, B0>`
+    = note: this error originates in the derive macro `Clone` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: consider introducing a `where` clause, but there might be an alternative better way to express this requirement
+    |
+29  | pub struct BeaconState<P: Preset> where UInt<UInt<UTerm, B1>, B0>: Mul<<P as Preset>::SlotsPerEpoch> {
+    |                                   ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+error[E0277]: cannot multiply `UInt<UInt<UTerm, B1>, B0>` by `<P as Preset>::SlotsPerEpoch`
+   --> types/src/eip7732/beacon_state.rs:111:5
+    |
+26  | #[derive(Clone, Debug, Default, Derivative, Deserialize, Serialize, Ssz)]
+    |                 ----- in this derive macro expansion
+...
+111 |     pub builder_pending_payments: BuilderPendingPayments<P>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no implementation for `UInt<UInt<UTerm, B1>, B0> * <P as Preset>::SlotsPerEpoch`
+    |
+    = help: the trait `Mul<<P as Preset>::SlotsPerEpoch>` is not implemented for `UInt<UInt<UTerm, B1>, B0>`
+    = note: this error originates in the derive macro `Debug` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: consider introducing a `where` clause, but there might be an alternative better way to express this requirement
+    |
+29  | pub struct BeaconState<P: Preset> where UInt<UInt<UTerm, B1>, B0>: Mul<<P as Preset>::SlotsPerEpoch> {
+    |                                   ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+error[E0277]: cannot add `UInt<UInt<UInt<UTerm, B1>, B1>, B1>` to `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output`
+   --> types/src/eip7732/beacon_state.rs:110:5
+    |
+26  | #[derive(Clone, Debug, Default, Derivative, Deserialize, Serialize, Ssz)]
+    |                 ----- in this derive macro expansion
+...
+110 |     pub execution_payload_availability: BitVector<SlotsPerHistoricalRoot<P>>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no implementation for `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output + UInt<UInt<UInt<UTerm, B1>, B1>, B1>`
+    |
+    = help: the trait `derive_more::Add<UInt<UInt<UInt<UTerm, B1>, B1>, B1>>` is not implemented for `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output`
+    = note: required for `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output` to implement `BitVectorBits`
+note: required because it appears within the type `BitVector<<... as Mul<...>>::Output>`
+   --> /home/greendior/gran_pry/hello/ssz/src/bit_vector.rs:39:12
+    |
+39  | pub struct BitVector<N: BitVectorBits> {
+    |            ^^^^^^^^^
+    = note: required for the cast from `&BitVector<<... as Mul<...>>::Output>` to `&dyn Debug`
+    = note: the full name for the type has been written to '/home/greendior/gran_pry/hello/target/compact/deps/types-9c01af7db6c4e594.long-type-6273488209663683393.txt'
+    = note: consider using `--verbose` to print the full type name to the console
+    = note: this error originates in the derive macro `Debug` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: cannot add `UInt<UInt<UInt<UTerm, B1>, B1>, B1>` to `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output`
+   --> types/src/eip7732/beacon_state.rs:110:5
+    |
+26  | #[derive(Clone, Debug, Default, Derivative, Deserialize, Serialize, Ssz)]
+    |                        ------- in this derive macro expansion
+...
+110 |     pub execution_payload_availability: BitVector<SlotsPerHistoricalRoot<P>>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no implementation for `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output + UInt<UInt<UInt<UTerm, B1>, B1>, B1>`
+    |
+    = help: the trait `derive_more::Add<UInt<UInt<UInt<UTerm, B1>, B1>, B1>>` is not implemented for `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output`
+    = note: required for `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output` to implement `BitVectorBits`
+note: required by a bound in `BitVector`
+   --> /home/greendior/gran_pry/hello/ssz/src/bit_vector.rs:39:25
+    |
+39  | pub struct BitVector<N: BitVectorBits> {
+    |                         ^^^^^^^^^^^^^ required by this bound in `BitVector`
+    = note: this error originates in the derive macro `Default` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: cannot multiply `UInt<UInt<UTerm, B1>, B0>` by `<P as Preset>::SlotsPerEpoch`
+   --> types/src/eip7732/beacon_state.rs:111:5
+    |
+26  | #[derive(Clone, Debug, Default, Derivative, Deserialize, Serialize, Ssz)]
+    |                        ------- in this derive macro expansion
+...
+111 |     pub builder_pending_payments: BuilderPendingPayments<P>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no implementation for `UInt<UInt<UTerm, B1>, B0> * <P as Preset>::SlotsPerEpoch`
+    |
+    = help: the trait `Mul<<P as Preset>::SlotsPerEpoch>` is not implemented for `UInt<UInt<UTerm, B1>, B0>`
+    = note: this error originates in the derive macro `Default` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: consider introducing a `where` clause, but there might be an alternative better way to express this requirement
+    |
+29  | pub struct BeaconState<P: Preset> where UInt<UInt<UTerm, B1>, B0>: Mul<<P as Preset>::SlotsPerEpoch> {
+    |                                   ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+error[E0277]: cannot multiply `UInt<UInt<UTerm, B1>, B0>` by `<P as Preset>::SlotsPerEpoch`
+  --> types/src/eip7732/beacon_state.rs:26:33
+   |
+26 | #[derive(Clone, Debug, Default, Derivative, Deserialize, Serialize, Ssz)]
+   |                                 ^^^^^^^^^^ no implementation for `UInt<UInt<UTerm, B1>, B0> * <P as Preset>::SlotsPerEpoch`
+   |
+   = help: the trait `Mul<<P as Preset>::SlotsPerEpoch>` is not implemented for `UInt<UInt<UTerm, B1>, B0>`
+   = note: this error originates in the derive macro `Derivative` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0369]: binary operation `==` cannot be applied to type `&BitVector<<... as Mul<...>>::Output>`
+  --> types/src/eip7732/beacon_state.rs:26:33
+   |
+26 | #[derive(Clone, Debug, Default, Derivative, Deserialize, Serialize, Ssz)]
+   |                                 ^^^^^^^^^^
+   |
+   = note: the full name for the type has been written to '/home/greendior/gran_pry/hello/target/compact/deps/types-9c01af7db6c4e594.long-type-11654614316609788160.txt'
+   = note: consider using `--verbose` to print the full type name to the console
+   = note: this error originates in the derive macro `Derivative` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: cannot add `UInt<UInt<UInt<UTerm, B1>, B1>, B1>` to `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output`
+    --> types/src/eip7732/beacon_state.rs:110:41
+     |
+110  |     pub execution_payload_availability: BitVector<SlotsPerHistoricalRoot<P>>,
+     |                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no implementation for `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output + UInt<UInt<UInt<UTerm, B1>, B1>, B1>`
+     |
+     = help: the trait `derive_more::Add<UInt<UInt<UInt<UTerm, B1>, B1>, B1>>` is not implemented for `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output`
+     = note: required for `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output` to implement `BitVectorBits`
+note: required because it appears within the type `BitVector<<... as Mul<...>>::Output>`
+    --> /home/greendior/gran_pry/hello/ssz/src/bit_vector.rs:39:12
+     |
+39   | pub struct BitVector<N: BitVectorBits> {
+     |            ^^^^^^^^^
+note: required by an implicit `Sized` bound in `next_element`
+    --> /home/greendior/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.219/src/de/mod.rs:1730:21
+     |
+1730 |     fn next_element<T>(&mut self) -> Result<Option<T>, Self::Error>
+     |                     ^ required by the implicit `Sized` requirement on this type parameter in `SeqAccess::next_element`
+     = note: the full name for the type has been written to '/home/greendior/gran_pry/hello/target/compact/deps/types-9c01af7db6c4e594.long-type-14646273708129990111.txt'
+     = note: consider using `--verbose` to print the full type name to the console
+
+error[E0277]: cannot multiply `UInt<UInt<UTerm, B1>, B0>` by `<P as Preset>::SlotsPerEpoch`
+  --> types/src/eip7732/beacon_state.rs:26:45
+   |
+26 | #[derive(Clone, Debug, Default, Derivative, Deserialize, Serialize, Ssz)]
+   |                                             ^^^^^^^^^^^ no implementation for `UInt<UInt<UTerm, B1>, B0> * <P as Preset>::SlotsPerEpoch`
+   |
+   = help: the trait `Mul<<P as Preset>::SlotsPerEpoch>` is not implemented for `UInt<UInt<UTerm, B1>, B0>`
+   = note: this error originates in the derive macro `Deserialize` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: consider introducing a `where` clause, but there might be an alternative better way to express this requirement
+   |
+29 | pub struct BeaconState<P: Preset> where UInt<UInt<UTerm, B1>, B0>: Mul<<P as Preset>::SlotsPerEpoch> {
+   |                                   ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+error[E0277]: cannot add `UInt<UInt<UInt<UTerm, B1>, B1>, B1>` to `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output`
+  --> types/src/eip7732/beacon_state.rs:26:45
+   |
+26 | #[derive(Clone, Debug, Default, Derivative, Deserialize, Serialize, Ssz)]
+   |                                             ^^^^^^^^^^^ no implementation for `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output + UInt<UInt<UInt<UTerm, B1>, B1>, B1>`
+   |
+   = help: the trait `derive_more::Add<UInt<UInt<UInt<UTerm, B1>, B1>, B1>>` is not implemented for `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output`
+   = note: required for `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output` to implement `BitVectorBits`
+note: required by a bound in `BitVector`
+  --> /home/greendior/gran_pry/hello/ssz/src/bit_vector.rs:39:25
+   |
+39 | pub struct BitVector<N: BitVectorBits> {
+   |                         ^^^^^^^^^^^^^ required by this bound in `BitVector`
+   = note: this error originates in the derive macro `Deserialize` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: cannot add `UInt<UInt<UInt<UTerm, B1>, B1>, B1>` to `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output`
+   --> types/src/eip7732/beacon_state.rs:26:45
+    |
+26  | #[derive(Clone, Debug, Default, Derivative, Deserialize, Serialize, Ssz)]
+    |                                             ^^^^^^^^^^^ no implementation for `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output + UInt<UInt<UInt<UTerm, B1>, B1>, B1>`
+    |
+    = help: the trait `derive_more::Add<UInt<UInt<UInt<UTerm, B1>, B1>, B1>>` is not implemented for `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output`
+    = note: required for `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output` to implement `BitVectorBits`
+note: required because it appears within the type `BitVector<<... as Mul<...>>::Output>`
+   --> /home/greendior/gran_pry/hello/ssz/src/bit_vector.rs:39:12
+    |
+39  | pub struct BitVector<N: BitVectorBits> {
+    |            ^^^^^^^^^
+note: required by an implicit `Sized` bound in `std::option::Option`
+   --> /home/greendior/.rustup/toolchains/stable-2025-04-03-aarch64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/option.rs:572:17
+    |
+572 | pub enum Option<T> {
+    |                 ^ required by the implicit `Sized` requirement on this type parameter in `Option`
+    = note: the full name for the type has been written to '/home/greendior/gran_pry/hello/target/compact/deps/types-9c01af7db6c4e594.long-type-14646273708129990111.txt'
+    = note: consider using `--verbose` to print the full type name to the console
+    = note: this error originates in the derive macro `Deserialize` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: cannot add `UInt<UInt<UInt<UTerm, B1>, B1>, B1>` to `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output`
+    --> types/src/eip7732/beacon_state.rs:26:58
+     |
+26   | #[derive(Clone, Debug, Default, Derivative, Deserialize, Serialize, Ssz)]
+     |                                                          ^^^^^^^^^ no implementation for `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output + UInt<UInt<UInt<UTerm, B1>, B1>, B1>`
+...
+110  |     pub execution_payload_availability: BitVector<SlotsPerHistoricalRoot<P>>,
+     |     --- required by a bound introduced by this call
+     |
+     = help: the trait `derive_more::Add<UInt<UInt<UInt<UTerm, B1>, B1>, B1>>` is not implemented for `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output`
+     = note: required for `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output` to implement `BitVectorBits`
+     = note: required for `BitVector<<... as Mul<...>>::Output>` to implement `Serialize`
+note: required by a bound in `combined::_::_serde::ser::SerializeStruct::serialize_field`
+    --> /home/greendior/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.219/src/ser/mod.rs:1866:21
+     |
+1864 |     fn serialize_field<T>(&mut self, key: &'static str, value: &T) -> Result<(), Self::Error>
+     |        --------------- required by a bound in this associated function
+1865 |     where
+1866 |         T: ?Sized + Serialize;
+     |                     ^^^^^^^^^ required by this bound in `SerializeStruct::serialize_field`
+     = note: the full name for the type has been written to '/home/greendior/gran_pry/hello/target/compact/deps/types-9c01af7db6c4e594.long-type-6273488209663683393.txt'
+     = note: consider using `--verbose` to print the full type name to the console
+     = note: this error originates in the derive macro `Serialize` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: cannot multiply `UInt<UInt<UTerm, B1>, B0>` by `<P as Preset>::SlotsPerEpoch`
+  --> types/src/eip7732/beacon_state.rs:26:58
+   |
+26 | #[derive(Clone, Debug, Default, Derivative, Deserialize, Serialize, Ssz)]
+   |                                                          ^^^^^^^^^ no implementation for `UInt<UInt<UTerm, B1>, B0> * <P as Preset>::SlotsPerEpoch`
+   |
+   = help: the trait `Mul<<P as Preset>::SlotsPerEpoch>` is not implemented for `UInt<UInt<UTerm, B1>, B0>`
+   = note: this error originates in the derive macro `Serialize` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: consider introducing a `where` clause, but there might be an alternative better way to express this requirement
+   |
+29 | pub struct BeaconState<P: Preset> where UInt<UInt<UTerm, B1>, B0>: Mul<<P as Preset>::SlotsPerEpoch> {
+   |                                   ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+error[E0277]: cannot add `UInt<UInt<UInt<UTerm, B1>, B1>, B1>` to `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output`
+   --> types/src/eip7732/beacon_state.rs:110:41
+    |
+110 |     pub execution_payload_availability: BitVector<SlotsPerHistoricalRoot<P>>,
+    |                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no implementation for `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output + UInt<UInt<UInt<UTerm, B1>, B1>, B1>`
+    |
+    = help: the trait `derive_more::Add<UInt<UInt<UInt<UTerm, B1>, B1>, B1>>` is not implemented for `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output`
+    = note: required for `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output` to implement `BitVectorBits`
+note: required by a bound in `BitVector`
+   --> /home/greendior/gran_pry/hello/ssz/src/bit_vector.rs:39:25
+    |
+39  | pub struct BitVector<N: BitVectorBits> {
+    |                         ^^^^^^^^^^^^^ required by this bound in `BitVector`
+help: consider further restricting the associated type
+    |
+29  | pub struct BeaconState<P: Preset> where <<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output: derive_more::Add<UInt<UInt<UInt<UTerm, B1>, B1>, B1>> {
+    |                                   ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+error[E0277]: cannot add `UInt<UInt<UInt<UTerm, B1>, B1>, B1>` to `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output`
+   --> types/src/eip7732/beacon_state.rs:110:41
+    |
+110 |     pub execution_payload_availability: BitVector<SlotsPerHistoricalRoot<P>>,
+    |                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no implementation for `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output + UInt<UInt<UInt<UTerm, B1>, B1>, B1>`
+    |
+    = help: the trait `derive_more::Add<UInt<UInt<UInt<UTerm, B1>, B1>, B1>>` is not implemented for `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output`
+    = note: required for `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output` to implement `BitVectorBits`
+note: required by a bound in `BitVector`
+   --> /home/greendior/gran_pry/hello/ssz/src/bit_vector.rs:39:25
+    |
+39  | pub struct BitVector<N: BitVectorBits> {
+    |                         ^^^^^^^^^^^^^ required by this bound in `BitVector`
+
+error[E0277]: cannot add `UInt<UInt<UInt<UTerm, B1>, B1>, B1>` to `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output`
+   --> types/src/eip7732/beacon_state.rs:110:9
+    |
+110 |     pub execution_payload_availability: BitVector<SlotsPerHistoricalRoot<P>>,
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no implementation for `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output + UInt<UInt<UInt<UTerm, B1>, B1>, B1>`
+    |
+    = help: the trait `derive_more::Add<UInt<UInt<UInt<UTerm, B1>, B1>, B1>>` is not implemented for `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output`
+    = note: required for `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output` to implement `BitVectorBits`
+note: required by a bound in `BitVector`
+   --> /home/greendior/gran_pry/hello/ssz/src/bit_vector.rs:39:25
+    |
+39  | pub struct BitVector<N: BitVectorBits> {
+    |                         ^^^^^^^^^^^^^ required by this bound in `BitVector`
+
+error[E0277]: cannot multiply `UInt<UInt<UTerm, B1>, B0>` by `<P as Preset>::SlotsPerEpoch`
+   --> types/src/eip7732/beacon_state.rs:111:9
+    |
+111 |     pub builder_pending_payments: BuilderPendingPayments<P>,
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^ no implementation for `UInt<UInt<UTerm, B1>, B0> * <P as Preset>::SlotsPerEpoch`
+    |
+    = help: the trait `Mul<<P as Preset>::SlotsPerEpoch>` is not implemented for `UInt<UInt<UTerm, B1>, B0>`
+help: consider introducing a `where` clause, but there might be an alternative better way to express this requirement
+    |
+29  | pub struct BeaconState<P: Preset> where UInt<UInt<UTerm, B1>, B0>: Mul<<P as Preset>::SlotsPerEpoch> {
+    |                                   ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+error[E0277]: cannot add `UInt<UInt<UInt<UTerm, B1>, B1>, B1>` to `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output`
+  --> types/src/eip7732/beacon_state.rs:26:69
+   |
+26 | #[derive(Clone, Debug, Default, Derivative, Deserialize, Serialize, Ssz)]
+   |                                                                     ^^^ no implementation for `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output + UInt<UInt<UInt<UTerm, B1>, B1>, B1>`
+   |
+   = help: the trait `derive_more::Add<UInt<UInt<UInt<UTerm, B1>, B1>, B1>>` is not implemented for `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output`
+   = note: required for `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output` to implement `BitVectorBits`
+   = note: required for `BitVector<<... as Mul<...>>::Output>` to implement `SszSize`
+note: required by a bound in `write_fixed`
+  --> /home/greendior/gran_pry/hello/ssz/src/porcelain.rs:58:21
+   |
+58 | pub trait SszWrite: SszSize {
+   |                     ^^^^^^^ required by this bound in `SszWrite::write_fixed`
+59 |     // The panics could be avoided with some type-level programming, but it's not worth the trouble.
+60 |     fn write_fixed(&self, _bytes: &mut [u8]) {
+   |        ----------- required by a bound in this associated function
+   = note: the full name for the type has been written to '/home/greendior/gran_pry/hello/target/compact/deps/types-9c01af7db6c4e594.long-type-6273488209663683393.txt'
+   = note: consider using `--verbose` to print the full type name to the console
+   = note: this error originates in the derive macro `Ssz` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: cannot multiply `UInt<UInt<UTerm, B1>, B0>` by `<P as Preset>::SlotsPerEpoch`
+  --> types/src/eip7732/beacon_state.rs:26:69
+   |
+26 | #[derive(Clone, Debug, Default, Derivative, Deserialize, Serialize, Ssz)]
+   |                                                                     ^^^ no implementation for `UInt<UInt<UTerm, B1>, B0> * <P as Preset>::SlotsPerEpoch`
+   |
+   = help: the trait `Mul<<P as Preset>::SlotsPerEpoch>` is not implemented for `UInt<UInt<UTerm, B1>, B0>`
+   = note: this error originates in the derive macro `Ssz` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: consider introducing a `where` clause, but there might be an alternative better way to express this requirement
+   |
+29 | pub struct BeaconState<P: Preset> where UInt<UInt<UTerm, B1>, B0>: Mul<<P as Preset>::SlotsPerEpoch> {
+   |                                   ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+error[E0277]: cannot add `UInt<UInt<UInt<UTerm, B1>, B1>, B1>` to `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output`
+  --> types/src/eip7732/beacon_state.rs:26:69
+   |
+26 | #[derive(Clone, Debug, Default, Derivative, Deserialize, Serialize, Ssz)]
+   |                                                                     ^^^ no implementation for `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output + UInt<UInt<UInt<UTerm, B1>, B1>, B1>`
+   |
+   = help: the trait `derive_more::Add<UInt<UInt<UInt<UTerm, B1>, B1>, B1>>` is not implemented for `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output`
+   = note: required for `<<P as Preset>::EpochsPerHistoricalRoot as Mul<<P as Preset>::SlotsPerEpoch>>::Output` to implement `BitVectorBits`
+   = note: required for `BitVector<<... as Mul<...>>::Output>` to implement `SszHash`
+   = note: the full name for the type has been written to '/home/greendior/gran_pry/hello/target/compact/deps/types-9c01af7db6c4e594.long-type-6273488209663683393.txt'
+   = note: consider using `--verbose` to print the full type name to the console
+   = note: this error originates in the derive macro `Ssz` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `<P as Preset>::PtcSize: typenum::NonZero` is not satisfied
+   --> types/src/eip7732/containers.rs:112:27
+    |
+112 |     pub aggregation_bits: BitVector<P::PtcSize>,  // PTC_SIZE = 512
+    |                           ^^^^^^^^^^^^^^^^^^^^^ the trait `typenum::NonZero` is not implemented for `<P as Preset>::PtcSize`
+    |
+    = note: required for `BitVector<<P as Preset>::PtcSize>` to implement `SszSize`
+help: consider further restricting the associated type
+    |
+111 | pub struct PayloadAttestation<P: Preset> where <P as Preset>::PtcSize: typenum::NonZero {
+    |                                          ++++++++++++++++++++++++++++++++++++++++++++++
+
+error[E0277]: the trait bound `<P as Preset>::PtcSize: typenum::NonZero` is not satisfied
+   --> types/src/eip7732/containers.rs:112:27
+    |
+112 |     pub aggregation_bits: BitVector<P::PtcSize>,  // PTC_SIZE = 512
+    |                           ^^^^^^^^^^^^^^^^^^^^^ the trait `typenum::NonZero` is not implemented for `<P as Preset>::PtcSize`
+    |
+    = note: required for `BitVector<<P as Preset>::PtcSize>` to implement `SszSize`
+
+error[E0277]: the trait bound `<P as Preset>::PtcSize: typenum::NonZero` is not satisfied
+   --> types/src/eip7732/containers.rs:109:63
+    |
+109 | #[derive(Clone, PartialEq, Eq, Debug, Deserialize, Serialize, Ssz)]
+    |                                                               ^^^ the trait `typenum::NonZero` is not implemented for `<P as Preset>::PtcSize`
+    |
+    = note: required for `BitVector<<P as Preset>::PtcSize>` to implement `SszSize`
+note: required by a bound in `from_ssz_unchecked`
+   --> /home/greendior/gran_pry/hello/ssz/src/porcelain.rs:24:23
+    |
+24  | pub trait SszRead<C>: SszSize + Sized {
+    |                       ^^^^^^^ required by this bound in `SszRead::from_ssz_unchecked`
+...
+30  |     fn from_ssz_unchecked(context: &C, bytes: &[u8]) -> Result<Self, ReadError>;
+    |        ------------------ required by a bound in this associated function
+    = note: this error originates in the derive macro `Ssz` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `<P as Preset>::PtcSize: typenum::NonZero` is not satisfied
+   --> types/src/eip7732/containers.rs:109:63
+    |
+109 | #[derive(Clone, PartialEq, Eq, Debug, Deserialize, Serialize, Ssz)]
+    |                                                               ^^^ the trait `typenum::NonZero` is not implemented for `<P as Preset>::PtcSize`
+    |
+    = note: required for `BitVector<<P as Preset>::PtcSize>` to implement `SszSize`
+note: required by a bound in `write_fixed`
+   --> /home/greendior/gran_pry/hello/ssz/src/porcelain.rs:58:21
+    |
+58  | pub trait SszWrite: SszSize {
+    |                     ^^^^^^^ required by this bound in `SszWrite::write_fixed`
+59  |     // The panics could be avoided with some type-level programming, but it's not worth the trouble.
+60  |     fn write_fixed(&self, _bytes: &mut [u8]) {
+    |        ----------- required by a bound in this associated function
+    = note: this error originates in the derive macro `Ssz` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `SignedExecutionPayloadHeader: Default` is not satisfied
+   --> types/src/eip7732/containers.rs:181:5
+    |
+162 | #[derive(Clone, PartialEq, Eq, Debug, Default, Deserialize, Serialize, Ssz)]
+    |                                       ------- in this derive macro expansion
+...
+181 |     pub signed_execution_payload_header: SignedExecutionPayloadHeader,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the trait `Default` is not implemented for `SignedExecutionPayloadHeader`
+    |
+    = note: this error originates in the derive macro `Default` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0004]: non-exhaustive patterns: `&combined::BeaconState::Eip7732(_)` not covered
+   --> types/src/combined.rs:184:15
+    |
+184 |         match self {
+    |               ^^^^ pattern `&combined::BeaconState::Eip7732(_)` not covered
+    |
+note: `combined::BeaconState<P>` defined here
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+121 |     Eip7732(Hc<Eip7732BeaconState<P>>),
+    |     ------- not covered
+    = note: the matched value is of type `&combined::BeaconState<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+190 ~             Self::Electra(state) => state.write_variable(bytes),
+191 ~             &combined::BeaconState::Eip7732(_) => todo!(),
+    |
+
+error[E0004]: non-exhaustive patterns: `&combined::BeaconState::Eip7732(_)` not covered
+   --> types/src/combined.rs:199:15
+    |
+199 |         match self {
+    |               ^^^^ pattern `&combined::BeaconState::Eip7732(_)` not covered
+    |
+note: `combined::BeaconState<P>` defined here
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+121 |     Eip7732(Hc<Eip7732BeaconState<P>>),
+    |     ------- not covered
+    = note: the matched value is of type `&combined::BeaconState<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+205 ~             Self::Electra(state) => state.hash_tree_root(),
+206 ~             &combined::BeaconState::Eip7732(_) => todo!(),
+    |
+
+error[E0004]: non-exhaustive patterns: `&combined::BeaconState::Eip7732(_)` not covered
+   --> types/src/combined.rs:248:15
+    |
+248 |         match self {
+    |               ^^^^ pattern `&combined::BeaconState::Eip7732(_)` not covered
+    |
+note: `combined::BeaconState<P>` defined here
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+121 |     Eip7732(Hc<Eip7732BeaconState<P>>),
+    |     ------- not covered
+    = note: the matched value is of type `&combined::BeaconState<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+254 ~             Self::Electra(_) => Phase::Electra,
+255 ~             &combined::BeaconState::Eip7732(_) => todo!(),
+    |
+
+error[E0004]: non-exhaustive patterns: `&combined::BeaconState::Eip7732(_)` not covered
+   --> types/src/combined.rs:265:15
+    |
+265 |         match self {
+    |               ^^^^ pattern `&combined::BeaconState::Eip7732(_)` not covered
+    |
+note: `combined::BeaconState<P>` defined here
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+121 |     Eip7732(Hc<Eip7732BeaconState<P>>),
+    |     ------- not covered
+    = note: the matched value is of type `&combined::BeaconState<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+271 ~             Self::Electra(state) => Some(state),
+272 ~             &combined::BeaconState::Eip7732(_) => todo!(),
+    |
+
+error[E0004]: non-exhaustive patterns: `&mut combined::BeaconState::Eip7732(_)` not covered
+   --> types/src/combined.rs:276:15
+    |
+276 |         match self {
+    |               ^^^^ pattern `&mut combined::BeaconState::Eip7732(_)` not covered
+    |
+note: `combined::BeaconState<P>` defined here
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+121 |     Eip7732(Hc<Eip7732BeaconState<P>>),
+    |     ------- not covered
+    = note: the matched value is of type `&mut combined::BeaconState<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+282 ~             Self::Electra(state) => Some(state),
+283 ~             &mut combined::BeaconState::Eip7732(_) => todo!(),
+    |
+
+error[E0004]: non-exhaustive patterns: `&combined::BeaconState::Eip7732(_)` not covered
+   --> types/src/combined.rs:287:15
+    |
+287 |         match self {
+    |               ^^^^ pattern `&combined::BeaconState::Eip7732(_)` not covered
+    |
+note: `combined::BeaconState<P>` defined here
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+121 |     Eip7732(Hc<Eip7732BeaconState<P>>),
+    |     ------- not covered
+    = note: the matched value is of type `&combined::BeaconState<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+292 ~             Self::Electra(state) => Some(state),
+293 ~             &combined::BeaconState::Eip7732(_) => todo!(),
+    |
+
+error[E0004]: non-exhaustive patterns: `&mut combined::BeaconState::Eip7732(_)` not covered
+   --> types/src/combined.rs:297:15
+    |
+297 |         match self {
+    |               ^^^^ pattern `&mut combined::BeaconState::Eip7732(_)` not covered
+    |
+note: `combined::BeaconState<P>` defined here
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+121 |     Eip7732(Hc<Eip7732BeaconState<P>>),
+    |     ------- not covered
+    = note: the matched value is of type `&mut combined::BeaconState<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+302 ~             Self::Electra(state) => Some(state),
+303 ~             &mut combined::BeaconState::Eip7732(_) => todo!(),
+    |
+
+error[E0004]: non-exhaustive patterns: `&combined::BeaconState::Eip7732(_)` not covered
+   --> types/src/combined.rs:307:15
+    |
+307 |         match self {
+    |               ^^^^ pattern `&combined::BeaconState::Eip7732(_)` not covered
+    |
+note: `combined::BeaconState<P>` defined here
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+121 |     Eip7732(Hc<Eip7732BeaconState<P>>),
+    |     ------- not covered
+    = note: the matched value is of type `&combined::BeaconState<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+311 ~             Self::Electra(state) => Some(state),
+312 ~             &combined::BeaconState::Eip7732(_) => todo!(),
+    |
+
+error[E0004]: non-exhaustive patterns: `&combined::BeaconState::Eip7732(_)` not covered
+   --> types/src/combined.rs:316:15
+    |
+316 |         match self {
+    |               ^^^^ pattern `&combined::BeaconState::Eip7732(_)` not covered
+    |
+note: `combined::BeaconState<P>` defined here
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+121 |     Eip7732(Hc<Eip7732BeaconState<P>>),
+    |     ------- not covered
+    = note: the matched value is of type `&combined::BeaconState<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+322 ~             Self::Electra(state) => Some(state),
+323 ~             &combined::BeaconState::Eip7732(_) => todo!(),
+    |
+
+error[E0004]: non-exhaustive patterns: `&mut combined::BeaconState::Eip7732(_)` not covered
+   --> types/src/combined.rs:327:15
+    |
+327 |         match self {
+    |               ^^^^ pattern `&mut combined::BeaconState::Eip7732(_)` not covered
+    |
+note: `combined::BeaconState<P>` defined here
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+121 |     Eip7732(Hc<Eip7732BeaconState<P>>),
+    |     ------- not covered
+    = note: the matched value is of type `&mut combined::BeaconState<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+333 ~             Self::Electra(state) => Some(state),
+334 ~             &mut combined::BeaconState::Eip7732(_) => todo!(),
+    |
+
+error[E0004]: non-exhaustive patterns: `&combined::BeaconState::Eip7732(_)` not covered
+   --> types/src/combined.rs:338:15
+    |
+338 |         match self {
+    |               ^^^^ pattern `&combined::BeaconState::Eip7732(_)` not covered
+    |
+note: `combined::BeaconState<P>` defined here
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+121 |     Eip7732(Hc<Eip7732BeaconState<P>>),
+    |     ------- not covered
+    = note: the matched value is of type `&combined::BeaconState<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+344 ~             Self::Electra(state) => state.set_cached_root(root),
+345 ~             &combined::BeaconState::Eip7732(_) => todo!(),
+    |
+
+error[E0004]: non-exhaustive patterns: `&combined::BeaconState::Eip7732(_)` not covered
+   --> types/src/combined.rs:350:15
+    |
+350 |         match self {
+    |               ^^^^ pattern `&combined::BeaconState::Eip7732(_)` not covered
+    |
+note: `combined::BeaconState<P>` defined here
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+121 |     Eip7732(Hc<Eip7732BeaconState<P>>),
+    |     ------- not covered
+    = note: the matched value is of type `&combined::BeaconState<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+356 ~             Self::Electra(state) => Some(state.deposit_requests_start_index),
+357 ~             &combined::BeaconState::Eip7732(_) => todo!(),
+    |
+
+error[E0004]: non-exhaustive patterns: `Phase::Eip7732` not covered
+   --> types/src/combined.rs:404:27
+    |
+404 |         let block = match phase {
+    |                           ^^^^^ pattern `Phase::Eip7732` not covered
+    |
+note: `Phase` defined here
+   --> types/src/nonstandard.rs:58:10
+    |
+58  | pub enum Phase {
+    |          ^^^^^
+...
+65  |     Eip7732,
+    |     ------- not covered
+    = note: the matched value is of type `Phase`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+410 ~             Phase::Electra => Self::Electra(SszReadDefault::from_ssz_default(bytes)?),
+411 ~             Phase::Eip7732 => todo!(),
+    |
+
+error[E0004]: non-exhaustive patterns: `&combined::SignedBeaconBlock::Eip7732(_)` not covered
+   --> types/src/combined.rs:421:15
+    |
+421 |         match self {
+    |               ^^^^ pattern `&combined::SignedBeaconBlock::Eip7732(_)` not covered
+    |
+note: `combined::SignedBeaconBlock<P>` defined here
+   --> types/src/combined.rs:363:10
+    |
+363 | pub enum SignedBeaconBlock<P: Preset> {
+    |          ^^^^^^^^^^^^^^^^^
+...
+370 |     Eip7732(Eip7732SignedBeaconBlock<P>),
+    |     ------- not covered
+    = note: the matched value is of type `&combined::SignedBeaconBlock<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+427 ~             Self::Electra(block) => block.write_variable(bytes),
+428 ~             &combined::SignedBeaconBlock::Eip7732(_) => todo!(),
+    |
+
+error[E0004]: non-exhaustive patterns: `&combined::SignedBeaconBlock::Eip7732(_)` not covered
+   --> types/src/combined.rs:436:15
+    |
+436 |         match self {
+    |               ^^^^ pattern `&combined::SignedBeaconBlock::Eip7732(_)` not covered
+    |
+note: `combined::SignedBeaconBlock<P>` defined here
+   --> types/src/combined.rs:363:10
+    |
+363 | pub enum SignedBeaconBlock<P: Preset> {
+    |          ^^^^^^^^^^^^^^^^^
+...
+370 |     Eip7732(Eip7732SignedBeaconBlock<P>),
+    |     ------- not covered
+    = note: the matched value is of type `&combined::SignedBeaconBlock<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+442 ~             Self::Electra(block) => block.hash_tree_root(),
+443 ~             &combined::SignedBeaconBlock::Eip7732(_) => todo!(),
+    |
+
+error[E0004]: non-exhaustive patterns: `combined::SignedBeaconBlock::Eip7732(_)` not covered
+   --> types/src/combined.rs:449:15
+    |
+449 |         match self {
+    |               ^^^^ pattern `combined::SignedBeaconBlock::Eip7732(_)` not covered
+    |
+note: `combined::SignedBeaconBlock<P>` defined here
+   --> types/src/combined.rs:363:10
+    |
+363 | pub enum SignedBeaconBlock<P: Preset> {
+    |          ^^^^^^^^^^^^^^^^^
+...
+370 |     Eip7732(Eip7732SignedBeaconBlock<P>),
+    |     ------- not covered
+    = note: the matched value is of type `combined::SignedBeaconBlock<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+473 ~             },
+474 +             combined::SignedBeaconBlock::Eip7732(_) => todo!()
+    |
+
+error[E0004]: non-exhaustive patterns: `combined::SignedBeaconBlock::Eip7732(_)` not covered
+   --> types/src/combined.rs:478:15
+    |
+478 |         match self {
+    |               ^^^^ pattern `combined::SignedBeaconBlock::Eip7732(_)` not covered
+    |
+note: `combined::SignedBeaconBlock<P>` defined here
+   --> types/src/combined.rs:363:10
+    |
+363 | pub enum SignedBeaconBlock<P: Preset> {
+    |          ^^^^^^^^^^^^^^^^^
+...
+370 |     Eip7732(Eip7732SignedBeaconBlock<P>),
+    |     ------- not covered
+    = note: the matched value is of type `combined::SignedBeaconBlock<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+491 ~             )),
+492 ~             combined::SignedBeaconBlock::Eip7732(_) => todo!(),
+    |
+
+error[E0004]: non-exhaustive patterns: `&combined::SignedBeaconBlock::Eip7732(_)` not covered
+   --> types/src/combined.rs:496:15
+    |
+496 |         match self {
+    |               ^^^^ pattern `&combined::SignedBeaconBlock::Eip7732(_)` not covered
+    |
+note: `combined::SignedBeaconBlock<P>` defined here
+   --> types/src/combined.rs:363:10
+    |
+363 | pub enum SignedBeaconBlock<P: Preset> {
+    |          ^^^^^^^^^^^^^^^^^
+...
+370 |     Eip7732(Eip7732SignedBeaconBlock<P>),
+    |     ------- not covered
+    = note: the matched value is of type `&combined::SignedBeaconBlock<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+502 ~             Self::Electra(_) => Phase::Electra,
+503 ~             &combined::SignedBeaconBlock::Eip7732(_) => todo!(),
+    |
+
+error[E0004]: non-exhaustive patterns: `Phase::Eip7732` not covered
+   --> types/src/combined.rs:556:27
+    |
+556 |         let block = match phase {
+    |                           ^^^^^ pattern `Phase::Eip7732` not covered
+    |
+note: `Phase` defined here
+   --> types/src/nonstandard.rs:58:10
+    |
+58  | pub enum Phase {
+    |          ^^^^^
+...
+65  |     Eip7732,
+    |     ------- not covered
+    = note: the matched value is of type `Phase`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+562 ~             Phase::Electra => Self::Electra(SszReadDefault::from_ssz_default(bytes)?),
+563 ~             Phase::Eip7732 => todo!(),
+    |
+
+error[E0004]: non-exhaustive patterns: `&combined::BeaconBlock::Eip7732(_)` not covered
+   --> types/src/combined.rs:573:15
+    |
+573 |         match self {
+    |               ^^^^ pattern `&combined::BeaconBlock::Eip7732(_)` not covered
+    |
+note: `combined::BeaconBlock<P>` defined here
+   --> types/src/combined.rs:520:10
+    |
+520 | pub enum BeaconBlock<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+527 |     Eip7732(Eip7732BeaconBlock<P>),
+    |     ------- not covered
+    = note: the matched value is of type `&combined::BeaconBlock<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+579 ~             Self::Electra(block) => block.write_variable(bytes),
+580 ~             &combined::BeaconBlock::Eip7732(_) => todo!(),
+    |
+
+error[E0004]: non-exhaustive patterns: `&combined::BeaconBlock::Eip7732(_)` not covered
+   --> types/src/combined.rs:588:15
+    |
+588 |         match self {
+    |               ^^^^ pattern `&combined::BeaconBlock::Eip7732(_)` not covered
+    |
+note: `combined::BeaconBlock<P>` defined here
+   --> types/src/combined.rs:520:10
+    |
+520 | pub enum BeaconBlock<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+527 |     Eip7732(Eip7732BeaconBlock<P>),
+    |     ------- not covered
+    = note: the matched value is of type `&combined::BeaconBlock<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+594 ~             Self::Electra(block) => block.hash_tree_root(),
+595 ~             &combined::BeaconBlock::Eip7732(_) => todo!(),
+    |
+
+error[E0004]: non-exhaustive patterns: `&mut combined::BeaconBlock::Eip7732(_)` not covered
+   --> types/src/combined.rs:601:15
+    |
+601 |         match self {
+    |               ^^^^ pattern `&mut combined::BeaconBlock::Eip7732(_)` not covered
+    |
+note: `combined::BeaconBlock<P>` defined here
+   --> types/src/combined.rs:520:10
+    |
+520 | pub enum BeaconBlock<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+527 |     Eip7732(Eip7732BeaconBlock<P>),
+    |     ------- not covered
+    = note: the matched value is of type `&mut combined::BeaconBlock<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+619 ~             },
+620 +             &mut combined::BeaconBlock::Eip7732(_) => todo!()
+    |
+
+error[E0004]: non-exhaustive patterns: `combined::BeaconBlock::Eip7732(_)` not covered
+   --> types/src/combined.rs:628:15
+    |
+628 |         match self {
+    |               ^^^^ pattern `combined::BeaconBlock::Eip7732(_)` not covered
+    |
+note: `combined::BeaconBlock<P>` defined here
+   --> types/src/combined.rs:520:10
+    |
+520 | pub enum BeaconBlock<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+527 |     Eip7732(Eip7732BeaconBlock<P>),
+    |     ------- not covered
+    = note: the matched value is of type `combined::BeaconBlock<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+634 ~             Self::Electra(message) => ElectraSignedBeaconBlock { message, signature }.into(),
+635 ~             combined::BeaconBlock::Eip7732(_) => todo!(),
+    |
+
+error[E0004]: non-exhaustive patterns: `&mut combined::BeaconBlock::Eip7732(_)` not covered
+   --> types/src/combined.rs:640:15
+    |
+640 |         match &mut self {
+    |               ^^^^^^^^^ pattern `&mut combined::BeaconBlock::Eip7732(_)` not covered
+    |
+note: `combined::BeaconBlock<P>` defined here
+   --> types/src/combined.rs:520:10
+    |
+520 | pub enum BeaconBlock<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+527 |     Eip7732(Eip7732BeaconBlock<P>),
+    |     ------- not covered
+    = note: the matched value is of type `&mut combined::BeaconBlock<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+646 ~             Self::Electra(block) => block.state_root = state_root,
+647 ~             &mut combined::BeaconBlock::Eip7732(_) => todo!(),
+    |
+
+error[E0004]: non-exhaustive patterns: `combined::BeaconBlock::Eip7732(_)` not covered
+   --> types/src/combined.rs:768:15
+    |
+768 |         match self {
+    |               ^^^^ pattern `combined::BeaconBlock::Eip7732(_)` not covered
+    |
+note: `combined::BeaconBlock<P>` defined here
+   --> types/src/combined.rs:520:10
+    |
+520 | pub enum BeaconBlock<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+527 |     Eip7732(Eip7732BeaconBlock<P>),
+    |     ------- not covered
+    = note: the matched value is of type `combined::BeaconBlock<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+775 ~             Self::Electra(block) => Some(ExecutionPayload::Deneb(block.body.execution_payload)),
+776 ~             combined::BeaconBlock::Eip7732(_) => todo!(),
+    |
+
+error[E0004]: non-exhaustive patterns: `&combined::BeaconBlock::Eip7732(_)` not covered
+   --> types/src/combined.rs:780:15
+    |
+780 |         match self {
+    |               ^^^^ pattern `&combined::BeaconBlock::Eip7732(_)` not covered
+    |
+note: `combined::BeaconBlock<P>` defined here
+   --> types/src/combined.rs:520:10
+    |
+520 | pub enum BeaconBlock<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+527 |     Eip7732(Eip7732BeaconBlock<P>),
+    |     ------- not covered
+    = note: the matched value is of type `&combined::BeaconBlock<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+786 ~             Self::Electra(_) => Phase::Electra,
+787 ~             &combined::BeaconBlock::Eip7732(_) => todo!(),
+    |
+
+error[E0004]: non-exhaustive patterns: `combined::BeaconBlock::Eip7732(_)` not covered
+   --> types/src/combined.rs:825:15
+    |
+825 |         match beacon_block {
+    |               ^^^^^^^^^^^^ pattern `combined::BeaconBlock::Eip7732(_)` not covered
+    |
+note: `combined::BeaconBlock<P>` defined here
+   --> types/src/combined.rs:520:10
+    |
+520 | pub enum BeaconBlock<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+527 |     Eip7732(Eip7732BeaconBlock<P>),
+    |     ------- not covered
+    = note: the matched value is of type `combined::BeaconBlock<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+855 ~             .into(),
+856 ~             combined::BeaconBlock::Eip7732(_) => todo!(),
+    |
+
+error[E0004]: non-exhaustive patterns: `&Phase::Eip7732` not covered
+   --> types/src/combined.rs:890:27
+    |
+890 |         let block = match phase {
+    |                           ^^^^^ pattern `&Phase::Eip7732` not covered
+    |
+note: `Phase` defined here
+   --> types/src/nonstandard.rs:58:10
+    |
+58  | pub enum Phase {
+    |          ^^^^^
+...
+65  |     Eip7732,
+    |     ------- not covered
+    = note: the matched value is of type `&Phase`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+904 ~             Phase::Electra => Self::Electra(SszReadDefault::from_ssz_default(bytes)?),
+905 ~             &Phase::Eip7732 => todo!(),
+    |
+
+error[E0004]: non-exhaustive patterns: `&Phase::Eip7732` not covered
+    --> types/src/combined.rs:1525:48
+     |
+1525 |         let signed_aggregate_and_proof = match phase {
+     |                                                ^^^^^ pattern `&Phase::Eip7732` not covered
+     |
+note: `Phase` defined here
+    --> types/src/nonstandard.rs:58:10
+     |
+58   | pub enum Phase {
+     |          ^^^^^
+...
+65   |     Eip7732,
+     |     ------- not covered
+     = note: the matched value is of type `&Phase`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+     |
+1529 ~             Phase::Electra => Self::Electra(SszReadDefault::from_ssz_default(bytes)?),
+1530 ~             &Phase::Eip7732 => todo!(),
+     |
+
+error[E0004]: non-exhaustive patterns: `Phase::Eip7732` not covered
+    --> types/src/combined.rs:1641:33
+     |
+1641 |         let attestation = match phase {
+     |                                 ^^^^^ pattern `Phase::Eip7732` not covered
+     |
+note: `Phase` defined here
+    --> types/src/nonstandard.rs:58:10
+     |
+58   | pub enum Phase {
+     |          ^^^^^
+...
+65   |     Eip7732,
+     |     ------- not covered
+     = note: the matched value is of type `Phase`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+     |
+1645 ~             Phase::Electra => Self::Electra(SszReadDefault::from_ssz_default(bytes)?),
+1646 ~             Phase::Eip7732 => todo!(),
+     |
+
+error[E0004]: non-exhaustive patterns: `Phase::Eip7732` not covered
+   --> types/src/config.rs:737:15
+    |
+737 |         match phase {
+    |               ^^^^^ pattern `Phase::Eip7732` not covered
+    |
+note: `Phase` defined here
+   --> types/src/nonstandard.rs:58:10
+    |
+58  | pub enum Phase {
+    |          ^^^^^
+...
+65  |     Eip7732,
+    |     ------- not covered
+    = note: the matched value is of type `Phase`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+743 ~             Phase::Electra => self.electra_fork_version,
+744 ~             Phase::Eip7732 => todo!(),
+    |
+
+error[E0004]: non-exhaustive patterns: `Phase::Eip7732` not covered
+   --> types/src/config.rs:809:15
+    |
+809 |         match phase {
+    |               ^^^^^ pattern `Phase::Eip7732` not covered
+    |
+note: `Phase` defined here
+   --> types/src/nonstandard.rs:58:10
+    |
+58  | pub enum Phase {
+    |          ^^^^^
+...
+65  |     Eip7732,
+    |     ------- not covered
+    = note: the matched value is of type `Phase`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+813 ~             Phase::Deneb | Phase::Electra => self.max_request_blocks_deneb,
+814 ~             Phase::Eip7732 => todo!(),
+    |
+
+error[E0004]: non-exhaustive patterns: `Phase::Eip7732` not covered
+   --> types/src/config.rs:819:15
+    |
+819 |         match phase {
+    |               ^^^^^ pattern `Phase::Eip7732` not covered
+    |
+note: `Phase` defined here
+   --> types/src/nonstandard.rs:58:10
+    |
+58  | pub enum Phase {
+    |          ^^^^^
+...
+65  |     Eip7732,
+    |     ------- not covered
+    = note: the matched value is of type `Phase`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+823 ~             Phase::Electra => self.blob_sidecar_subnet_count_electra,
+824 ~             Phase::Eip7732 => todo!(),
+    |
+
+error[E0004]: non-exhaustive patterns: `Phase::Eip7732` not covered
+   --> types/src/config.rs:829:15
+    |
+829 |         match phase {
+    |               ^^^^^ pattern `Phase::Eip7732` not covered
+    |
+note: `Phase` defined here
+   --> types/src/nonstandard.rs:58:10
+    |
+58  | pub enum Phase {
+    |          ^^^^^
+...
+65  |     Eip7732,
+    |     ------- not covered
+    = note: the matched value is of type `Phase`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+833 ~             Phase::Electra => self.max_request_blob_sidecars_electra,
+834 ~             Phase::Eip7732 => todo!(),
+    |
+
+error[E0004]: non-exhaustive patterns: `&combined::BeaconState::Eip7732(_)` not covered
+   --> types/src/traits.rs:261:15
+    |
+261 |         match self {
+    |               ^^^^ pattern `&combined::BeaconState::Eip7732(_)` not covered
+    |
+note: `combined::BeaconState<P>` defined here
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+121 |     Eip7732(Hc<Eip7732BeaconState<P>>),
+    |     ------- not covered
+    = note: the matched value is of type `&combined::BeaconState<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+320 ~         [genesis_time,
+321 ~             &combined::BeaconState::Eip7732(_) => todo!()]                  [UnixSeconds];
+    |
+
+error[E0004]: non-exhaustive patterns: `&combined::BeaconState::Eip7732(_)` not covered
+   --> types/src/traits.rs:261:15
+    |
+261 |         match self {
+    |               ^^^^ pattern `&combined::BeaconState::Eip7732(_)` not covered
+    |
+note: `combined::BeaconState<P>` defined here
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+121 |     Eip7732(Hc<Eip7732BeaconState<P>>),
+    |     ------- not covered
+    = note: the matched value is of type `&combined::BeaconState<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+321 ~         [genesis_validators_root,
+322 ~             &combined::BeaconState::Eip7732(_) => todo!()]       [H256];
+    |
+
+error[E0004]: non-exhaustive patterns: `&combined::BeaconState::Eip7732(_)` not covered
+   --> types/src/traits.rs:261:15
+    |
+261 |         match self {
+    |               ^^^^ pattern `&combined::BeaconState::Eip7732(_)` not covered
+    |
+note: `combined::BeaconState<P>` defined here
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+121 |     Eip7732(Hc<Eip7732BeaconState<P>>),
+    |     ------- not covered
+    = note: the matched value is of type `&combined::BeaconState<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+322 ~         [slot,
+323 ~             &combined::BeaconState::Eip7732(_) => todo!()]                          [Slot];
+    |
+
+error[E0004]: non-exhaustive patterns: `&combined::BeaconState::Eip7732(_)` not covered
+   --> types/src/traits.rs:261:15
+    |
+261 |         match self {
+    |               ^^^^ pattern `&combined::BeaconState::Eip7732(_)` not covered
+    |
+note: `combined::BeaconState<P>` defined here
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+121 |     Eip7732(Hc<Eip7732BeaconState<P>>),
+    |     ------- not covered
+    = note: the matched value is of type `&combined::BeaconState<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+323 ~         [fork,
+324 ~             &combined::BeaconState::Eip7732(_) => todo!()]                          [Fork];
+    |
+
+error[E0004]: non-exhaustive patterns: `&combined::BeaconState::Eip7732(_)` not covered
+   --> types/src/traits.rs:261:15
+    |
+261 |         match self {
+    |               ^^^^ pattern `&combined::BeaconState::Eip7732(_)` not covered
+    |
+note: `combined::BeaconState<P>` defined here
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+121 |     Eip7732(Hc<Eip7732BeaconState<P>>),
+    |     ------- not covered
+    = note: the matched value is of type `&combined::BeaconState<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+324 ~         [latest_block_header,
+325 ~             &combined::BeaconState::Eip7732(_) => todo!()]           [BeaconBlockHeader];
+    |
+
+error[E0004]: non-exhaustive patterns: `&combined::BeaconState::Eip7732(_)` not covered
+   --> types/src/traits.rs:261:15
+    |
+261 |         match self {
+    |               ^^^^ pattern `&combined::BeaconState::Eip7732(_)` not covered
+    |
+note: `combined::BeaconState<P>` defined here
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+121 |     Eip7732(Hc<Eip7732BeaconState<P>>),
+    |     ------- not covered
+    = note: the matched value is of type `&combined::BeaconState<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+325 ~         [eth1_data,
+326 ~             &combined::BeaconState::Eip7732(_) => todo!()]                     [Eth1Data];
+    |
+
+error[E0004]: non-exhaustive patterns: `&combined::BeaconState::Eip7732(_)` not covered
+   --> types/src/traits.rs:261:15
+    |
+261 |         match self {
+    |               ^^^^ pattern `&combined::BeaconState::Eip7732(_)` not covered
+    |
+note: `combined::BeaconState<P>` defined here
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+121 |     Eip7732(Hc<Eip7732BeaconState<P>>),
+    |     ------- not covered
+    = note: the matched value is of type `&combined::BeaconState<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+326 ~         [eth1_deposit_index,
+327 ~             &combined::BeaconState::Eip7732(_) => todo!()]            [DepositIndex];
+    |
+
+error[E0004]: non-exhaustive patterns: `&combined::BeaconState::Eip7732(_)` not covered
+   --> types/src/traits.rs:261:15
+    |
+261 |         match self {
+    |               ^^^^ pattern `&combined::BeaconState::Eip7732(_)` not covered
+    |
+note: `combined::BeaconState<P>` defined here
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+121 |     Eip7732(Hc<Eip7732BeaconState<P>>),
+    |     ------- not covered
+    = note: the matched value is of type `&combined::BeaconState<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+327 ~         [justification_bits,
+328 ~             &combined::BeaconState::Eip7732(_) => todo!()]            [BitVector<JustificationBitsLength>];
+    |
+
+error[E0004]: non-exhaustive patterns: `&combined::BeaconState::Eip7732(_)` not covered
+   --> types/src/traits.rs:261:15
+    |
+261 |         match self {
+    |               ^^^^ pattern `&combined::BeaconState::Eip7732(_)` not covered
+    |
+note: `combined::BeaconState<P>` defined here
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+121 |     Eip7732(Hc<Eip7732BeaconState<P>>),
+    |     ------- not covered
+    = note: the matched value is of type `&combined::BeaconState<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+328 ~         [previous_justified_checkpoint,
+329 ~             &combined::BeaconState::Eip7732(_) => todo!()] [Checkpoint];
+    |
+
+error[E0004]: non-exhaustive patterns: `&combined::BeaconState::Eip7732(_)` not covered
+   --> types/src/traits.rs:261:15
+    |
+261 |         match self {
+    |               ^^^^ pattern `&combined::BeaconState::Eip7732(_)` not covered
+    |
+note: `combined::BeaconState<P>` defined here
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+121 |     Eip7732(Hc<Eip7732BeaconState<P>>),
+    |     ------- not covered
+    = note: the matched value is of type `&combined::BeaconState<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+329 ~         [current_justified_checkpoint,
+330 ~             &combined::BeaconState::Eip7732(_) => todo!()]  [Checkpoint];
+    |
+
+error[E0004]: non-exhaustive patterns: `&combined::BeaconState::Eip7732(_)` not covered
+   --> types/src/traits.rs:261:15
+    |
+261 |         match self {
+    |               ^^^^ pattern `&combined::BeaconState::Eip7732(_)` not covered
+    |
+note: `combined::BeaconState<P>` defined here
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+121 |     Eip7732(Hc<Eip7732BeaconState<P>>),
+    |     ------- not covered
+    = note: the matched value is of type `&combined::BeaconState<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+330 ~         [finalized_checkpoint,
+331 ~             &combined::BeaconState::Eip7732(_) => todo!()]          [Checkpoint];
+    |
+
+error[E0004]: non-exhaustive patterns: `&combined::BeaconState::Eip7732(_)` not covered
+   --> types/src/traits.rs:271:15
+    |
+271 |         match self {
+    |               ^^^^ pattern `&combined::BeaconState::Eip7732(_)` not covered
+    |
+note: `combined::BeaconState<P>` defined here
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+121 |     Eip7732(Hc<Eip7732BeaconState<P>>),
+    |     ------- not covered
+    = note: the matched value is of type `&combined::BeaconState<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+338 ~         [block_roots,
+339 ~             &combined::BeaconState::Eip7732(_) => todo!()]      [RecentRoots<P>];
+    |
+
+error[E0004]: non-exhaustive patterns: `&combined::BeaconState::Eip7732(_)` not covered
+   --> types/src/traits.rs:271:15
+    |
+271 |         match self {
+    |               ^^^^ pattern `&combined::BeaconState::Eip7732(_)` not covered
+    |
+note: `combined::BeaconState<P>` defined here
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+121 |     Eip7732(Hc<Eip7732BeaconState<P>>),
+    |     ------- not covered
+    = note: the matched value is of type `&combined::BeaconState<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+339 ~         [state_roots,
+340 ~             &combined::BeaconState::Eip7732(_) => todo!()]      [RecentRoots<P>];
+    |
+
+error[E0004]: non-exhaustive patterns: `&combined::BeaconState::Eip7732(_)` not covered
+   --> types/src/traits.rs:271:15
+    |
+271 |         match self {
+    |               ^^^^ pattern `&combined::BeaconState::Eip7732(_)` not covered
+    |
+note: `combined::BeaconState<P>` defined here
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+121 |     Eip7732(Hc<Eip7732BeaconState<P>>),
+    |     ------- not covered
+    = note: the matched value is of type `&combined::BeaconState<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+340 ~         [historical_roots,
+341 ~             &combined::BeaconState::Eip7732(_) => todo!()] [HistoricalRoots<P>];
+    |
+
+error[E0004]: non-exhaustive patterns: `&combined::BeaconState::Eip7732(_)` not covered
+   --> types/src/traits.rs:271:15
+    |
+271 |         match self {
+    |               ^^^^ pattern `&combined::BeaconState::Eip7732(_)` not covered
+    |
+note: `combined::BeaconState<P>` defined here
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+121 |     Eip7732(Hc<Eip7732BeaconState<P>>),
+    |     ------- not covered
+    = note: the matched value is of type `&combined::BeaconState<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+341 ~         [eth1_data_votes,
+342 ~             &combined::BeaconState::Eip7732(_) => todo!()]  [Eth1DataVotes<P>];
+    |
+
+error[E0004]: non-exhaustive patterns: `&combined::BeaconState::Eip7732(_)` not covered
+   --> types/src/traits.rs:271:15
+    |
+271 |         match self {
+    |               ^^^^ pattern `&combined::BeaconState::Eip7732(_)` not covered
+    |
+note: `combined::BeaconState<P>` defined here
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+121 |     Eip7732(Hc<Eip7732BeaconState<P>>),
+    |     ------- not covered
+    = note: the matched value is of type `&combined::BeaconState<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+342 ~         [validators,
+343 ~             &combined::BeaconState::Eip7732(_) => todo!()]       [Validators<P>];
+    |
+
+error[E0004]: non-exhaustive patterns: `&combined::BeaconState::Eip7732(_)` not covered
+   --> types/src/traits.rs:271:15
+    |
+271 |         match self {
+    |               ^^^^ pattern `&combined::BeaconState::Eip7732(_)` not covered
+    |
+note: `combined::BeaconState<P>` defined here
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+121 |     Eip7732(Hc<Eip7732BeaconState<P>>),
+    |     ------- not covered
+    = note: the matched value is of type `&combined::BeaconState<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+343 ~         [balances,
+344 ~             &combined::BeaconState::Eip7732(_) => todo!()]         [Balances<P>];
+    |
+
+error[E0004]: non-exhaustive patterns: `&combined::BeaconState::Eip7732(_)` not covered
+   --> types/src/traits.rs:271:15
+    |
+271 |         match self {
+    |               ^^^^ pattern `&combined::BeaconState::Eip7732(_)` not covered
+    |
+note: `combined::BeaconState<P>` defined here
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+121 |     Eip7732(Hc<Eip7732BeaconState<P>>),
+    |     ------- not covered
+    = note: the matched value is of type `&combined::BeaconState<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+344 ~         [randao_mixes,
+345 ~             &combined::BeaconState::Eip7732(_) => todo!()]     [RandaoMixes<P>];
+    |
+
+error[E0004]: non-exhaustive patterns: `&combined::BeaconState::Eip7732(_)` not covered
+   --> types/src/traits.rs:271:15
+    |
+271 |         match self {
+    |               ^^^^ pattern `&combined::BeaconState::Eip7732(_)` not covered
+    |
+note: `combined::BeaconState<P>` defined here
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+121 |     Eip7732(Hc<Eip7732BeaconState<P>>),
+    |     ------- not covered
+    = note: the matched value is of type `&combined::BeaconState<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+345 ~         [slashings,
+346 ~             &combined::BeaconState::Eip7732(_) => todo!()]        [Slashings<P>];
+    |
+
+error[E0004]: non-exhaustive patterns: `&combined::BeaconState::Eip7732(_)` not covered
+   --> types/src/traits.rs:271:15
+    |
+271 |         match self {
+    |               ^^^^ pattern `&combined::BeaconState::Eip7732(_)` not covered
+    |
+note: `combined::BeaconState<P>` defined here
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+121 |     Eip7732(Hc<Eip7732BeaconState<P>>),
+    |     ------- not covered
+    = note: the matched value is of type `&combined::BeaconState<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+346 ~         [cache,
+347 ~             &combined::BeaconState::Eip7732(_) => todo!()]            [Cache];
+    |
+
+error[E0004]: non-exhaustive patterns: `&mut combined::BeaconState::Eip7732(_)` not covered
+   --> types/src/traits.rs:281:15
+    |
+281 |         match self {
+    |               ^^^^ pattern `&mut combined::BeaconState::Eip7732(_)` not covered
+    |
+note: `combined::BeaconState<P>` defined here
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+121 |     Eip7732(Hc<Eip7732BeaconState<P>>),
+    |     ------- not covered
+    = note: the matched value is of type `&mut combined::BeaconState<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+354 ~         [genesis_time,
+355 ~             &mut combined::BeaconState::Eip7732(_) => todo!()]                  [genesis_time_mut]                  [UnixSeconds];
+    |
+
+error[E0004]: non-exhaustive patterns: `&mut combined::BeaconState::Eip7732(_)` not covered
+   --> types/src/traits.rs:281:15
+    |
+281 |         match self {
+    |               ^^^^ pattern `&mut combined::BeaconState::Eip7732(_)` not covered
+    |
+note: `combined::BeaconState<P>` defined here
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+121 |     Eip7732(Hc<Eip7732BeaconState<P>>),
+    |     ------- not covered
+    = note: the matched value is of type `&mut combined::BeaconState<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+355 ~         [genesis_validators_root,
+356 ~             &mut combined::BeaconState::Eip7732(_) => todo!()]       [genesis_validators_root_mut]       [H256];
+    |
+
+error[E0004]: non-exhaustive patterns: `&mut combined::BeaconState::Eip7732(_)` not covered
+   --> types/src/traits.rs:281:15
+    |
+281 |         match self {
+    |               ^^^^ pattern `&mut combined::BeaconState::Eip7732(_)` not covered
+    |
+note: `combined::BeaconState<P>` defined here
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+121 |     Eip7732(Hc<Eip7732BeaconState<P>>),
+    |     ------- not covered
+    = note: the matched value is of type `&mut combined::BeaconState<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+356 ~         [slot,
+357 ~             &mut combined::BeaconState::Eip7732(_) => todo!()]                          [slot_mut]                          [Slot];
+    |
+
+error[E0004]: non-exhaustive patterns: `&mut combined::BeaconState::Eip7732(_)` not covered
+   --> types/src/traits.rs:281:15
+    |
+281 |         match self {
+    |               ^^^^ pattern `&mut combined::BeaconState::Eip7732(_)` not covered
+    |
+note: `combined::BeaconState<P>` defined here
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+121 |     Eip7732(Hc<Eip7732BeaconState<P>>),
+    |     ------- not covered
+    = note: the matched value is of type `&mut combined::BeaconState<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+357 ~         [latest_block_header,
+358 ~             &mut combined::BeaconState::Eip7732(_) => todo!()]           [latest_block_header_mut]           [BeaconBlockHeader];
+    |
+
+error[E0004]: non-exhaustive patterns: `&mut combined::BeaconState::Eip7732(_)` not covered
+   --> types/src/traits.rs:281:15
+    |
+281 |         match self {
+    |               ^^^^ pattern `&mut combined::BeaconState::Eip7732(_)` not covered
+    |
+note: `combined::BeaconState<P>` defined here
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+121 |     Eip7732(Hc<Eip7732BeaconState<P>>),
+    |     ------- not covered
+    = note: the matched value is of type `&mut combined::BeaconState<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+358 ~         [block_roots,
+359 ~             &mut combined::BeaconState::Eip7732(_) => todo!()]                   [block_roots_mut]                   [RecentRoots<P>];
+    |
+
+error[E0004]: non-exhaustive patterns: `&mut combined::BeaconState::Eip7732(_)` not covered
+   --> types/src/traits.rs:281:15
+    |
+281 |         match self {
+    |               ^^^^ pattern `&mut combined::BeaconState::Eip7732(_)` not covered
+    |
+note: `combined::BeaconState<P>` defined here
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+121 |     Eip7732(Hc<Eip7732BeaconState<P>>),
+    |     ------- not covered
+    = note: the matched value is of type `&mut combined::BeaconState<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+359 ~         [state_roots,
+360 ~             &mut combined::BeaconState::Eip7732(_) => todo!()]                   [state_roots_mut]                   [RecentRoots<P>];
+    |
+
+error[E0004]: non-exhaustive patterns: `&mut combined::BeaconState::Eip7732(_)` not covered
+   --> types/src/traits.rs:281:15
+    |
+281 |         match self {
+    |               ^^^^ pattern `&mut combined::BeaconState::Eip7732(_)` not covered
+    |
+note: `combined::BeaconState<P>` defined here
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+121 |     Eip7732(Hc<Eip7732BeaconState<P>>),
+    |     ------- not covered
+    = note: the matched value is of type `&mut combined::BeaconState<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+360 ~         [historical_roots,
+361 ~             &mut combined::BeaconState::Eip7732(_) => todo!()]              [historical_roots_mut]              [HistoricalRoots<P>];
+    |
+
+error[E0004]: non-exhaustive patterns: `&mut combined::BeaconState::Eip7732(_)` not covered
+   --> types/src/traits.rs:281:15
+    |
+281 |         match self {
+    |               ^^^^ pattern `&mut combined::BeaconState::Eip7732(_)` not covered
+    |
+note: `combined::BeaconState<P>` defined here
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+121 |     Eip7732(Hc<Eip7732BeaconState<P>>),
+    |     ------- not covered
+    = note: the matched value is of type `&mut combined::BeaconState<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+361 ~         [eth1_data,
+362 ~             &mut combined::BeaconState::Eip7732(_) => todo!()]                     [eth1_data_mut]                     [Eth1Data];
+    |
+
+error[E0004]: non-exhaustive patterns: `&mut combined::BeaconState::Eip7732(_)` not covered
+   --> types/src/traits.rs:281:15
+    |
+281 |         match self {
+    |               ^^^^ pattern `&mut combined::BeaconState::Eip7732(_)` not covered
+    |
+note: `combined::BeaconState<P>` defined here
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+121 |     Eip7732(Hc<Eip7732BeaconState<P>>),
+    |     ------- not covered
+    = note: the matched value is of type `&mut combined::BeaconState<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+362 ~         [eth1_data_votes,
+363 ~             &mut combined::BeaconState::Eip7732(_) => todo!()]               [eth1_data_votes_mut]               [Eth1DataVotes<P>];
+    |
+
+error[E0004]: non-exhaustive patterns: `&mut combined::BeaconState::Eip7732(_)` not covered
+   --> types/src/traits.rs:281:15
+    |
+281 |         match self {
+    |               ^^^^ pattern `&mut combined::BeaconState::Eip7732(_)` not covered
+    |
+note: `combined::BeaconState<P>` defined here
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+121 |     Eip7732(Hc<Eip7732BeaconState<P>>),
+    |     ------- not covered
+    = note: the matched value is of type `&mut combined::BeaconState<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+363 ~         [eth1_deposit_index,
+364 ~             &mut combined::BeaconState::Eip7732(_) => todo!()]            [eth1_deposit_index_mut]            [DepositIndex];
+    |
+
+error[E0004]: non-exhaustive patterns: `&mut combined::BeaconState::Eip7732(_)` not covered
+   --> types/src/traits.rs:281:15
+    |
+281 |         match self {
+    |               ^^^^ pattern `&mut combined::BeaconState::Eip7732(_)` not covered
+    |
+note: `combined::BeaconState<P>` defined here
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+121 |     Eip7732(Hc<Eip7732BeaconState<P>>),
+    |     ------- not covered
+    = note: the matched value is of type `&mut combined::BeaconState<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+364 ~         [validators,
+365 ~             &mut combined::BeaconState::Eip7732(_) => todo!()]                    [validators_mut]                    [Validators<P>];
+    |
+
+error[E0004]: non-exhaustive patterns: `&mut combined::BeaconState::Eip7732(_)` not covered
+   --> types/src/traits.rs:281:15
+    |
+281 |         match self {
+    |               ^^^^ pattern `&mut combined::BeaconState::Eip7732(_)` not covered
+    |
+note: `combined::BeaconState<P>` defined here
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+121 |     Eip7732(Hc<Eip7732BeaconState<P>>),
+    |     ------- not covered
+    = note: the matched value is of type `&mut combined::BeaconState<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+365 ~         [balances,
+366 ~             &mut combined::BeaconState::Eip7732(_) => todo!()]                      [balances_mut]                      [Balances<P>];
+    |
+
+error[E0004]: non-exhaustive patterns: `&mut combined::BeaconState::Eip7732(_)` not covered
+   --> types/src/traits.rs:281:15
+    |
+281 |         match self {
+    |               ^^^^ pattern `&mut combined::BeaconState::Eip7732(_)` not covered
+    |
+note: `combined::BeaconState<P>` defined here
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+121 |     Eip7732(Hc<Eip7732BeaconState<P>>),
+    |     ------- not covered
+    = note: the matched value is of type `&mut combined::BeaconState<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+366 ~         [randao_mixes,
+367 ~             &mut combined::BeaconState::Eip7732(_) => todo!()]                  [randao_mixes_mut]                  [RandaoMixes<P>];
+    |
+
+error[E0004]: non-exhaustive patterns: `&mut combined::BeaconState::Eip7732(_)` not covered
+   --> types/src/traits.rs:281:15
+    |
+281 |         match self {
+    |               ^^^^ pattern `&mut combined::BeaconState::Eip7732(_)` not covered
+    |
+note: `combined::BeaconState<P>` defined here
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+121 |     Eip7732(Hc<Eip7732BeaconState<P>>),
+    |     ------- not covered
+    = note: the matched value is of type `&mut combined::BeaconState<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+367 ~         [slashings,
+368 ~             &mut combined::BeaconState::Eip7732(_) => todo!()]                     [slashings_mut]                     [Slashings<P>];
+    |
+
+error[E0004]: non-exhaustive patterns: `&mut combined::BeaconState::Eip7732(_)` not covered
+   --> types/src/traits.rs:281:15
+    |
+281 |         match self {
+    |               ^^^^ pattern `&mut combined::BeaconState::Eip7732(_)` not covered
+    |
+note: `combined::BeaconState<P>` defined here
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+121 |     Eip7732(Hc<Eip7732BeaconState<P>>),
+    |     ------- not covered
+    = note: the matched value is of type `&mut combined::BeaconState<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+368 ~         [justification_bits,
+369 ~             &mut combined::BeaconState::Eip7732(_) => todo!()]            [justification_bits_mut]            [BitVector<JustificationBitsLength>];
+    |
+
+error[E0004]: non-exhaustive patterns: `&mut combined::BeaconState::Eip7732(_)` not covered
+   --> types/src/traits.rs:281:15
+    |
+281 |         match self {
+    |               ^^^^ pattern `&mut combined::BeaconState::Eip7732(_)` not covered
+    |
+note: `combined::BeaconState<P>` defined here
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+121 |     Eip7732(Hc<Eip7732BeaconState<P>>),
+    |     ------- not covered
+    = note: the matched value is of type `&mut combined::BeaconState<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+369 ~         [previous_justified_checkpoint,
+370 ~             &mut combined::BeaconState::Eip7732(_) => todo!()] [previous_justified_checkpoint_mut] [Checkpoint];
+    |
+
+error[E0004]: non-exhaustive patterns: `&mut combined::BeaconState::Eip7732(_)` not covered
+   --> types/src/traits.rs:281:15
+    |
+281 |         match self {
+    |               ^^^^ pattern `&mut combined::BeaconState::Eip7732(_)` not covered
+    |
+note: `combined::BeaconState<P>` defined here
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+121 |     Eip7732(Hc<Eip7732BeaconState<P>>),
+    |     ------- not covered
+    = note: the matched value is of type `&mut combined::BeaconState<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+370 ~         [current_justified_checkpoint,
+371 ~             &mut combined::BeaconState::Eip7732(_) => todo!()]  [current_justified_checkpoint_mut]  [Checkpoint];
+    |
+
+error[E0004]: non-exhaustive patterns: `&mut combined::BeaconState::Eip7732(_)` not covered
+   --> types/src/traits.rs:281:15
+    |
+281 |         match self {
+    |               ^^^^ pattern `&mut combined::BeaconState::Eip7732(_)` not covered
+    |
+note: `combined::BeaconState<P>` defined here
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+121 |     Eip7732(Hc<Eip7732BeaconState<P>>),
+    |     ------- not covered
+    = note: the matched value is of type `&mut combined::BeaconState<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+371 ~         [finalized_checkpoint,
+372 ~             &mut combined::BeaconState::Eip7732(_) => todo!()]          [finalized_checkpoint_mut]          [Checkpoint];
+    |
+
+error[E0004]: non-exhaustive patterns: `&mut combined::BeaconState::Eip7732(_)` not covered
+   --> types/src/traits.rs:281:15
+    |
+281 |         match self {
+    |               ^^^^ pattern `&mut combined::BeaconState::Eip7732(_)` not covered
+    |
+note: `combined::BeaconState<P>` defined here
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+121 |     Eip7732(Hc<Eip7732BeaconState<P>>),
+    |     ------- not covered
+    = note: the matched value is of type `&mut combined::BeaconState<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+372 ~         [cache,
+373 ~             &mut combined::BeaconState::Eip7732(_) => todo!()]                         [cache_mut]                         [Cache];
+    |
+
+error[E0004]: non-exhaustive patterns: `&mut combined::BeaconState::Eip7732(_)` not covered
+   --> types/src/traits.rs:291:15
+    |
+291 |         match self {
+    |               ^^^^ pattern `&mut combined::BeaconState::Eip7732(_)` not covered
+    |
+note: `combined::BeaconState<P>` defined here
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+121 |     Eip7732(Hc<Eip7732BeaconState<P>>),
+    |     ------- not covered
+    = note: the matched value is of type `&mut combined::BeaconState<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+316 ~ )],
+317 + &mut combined::BeaconState::Eip7732(_) => todo!()
+    |
+
+error[E0004]: non-exhaustive patterns: `&mut combined::BeaconState::Eip7732(_)` not covered
+   --> types/src/traits.rs:301:15
+    |
+301 |         match self {
+    |               ^^^^ pattern `&mut combined::BeaconState::Eip7732(_)` not covered
+    |
+note: `combined::BeaconState<P>` defined here
+   --> types/src/combined.rs:114:10
+    |
+114 | pub enum BeaconState<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+121 |     Eip7732(Hc<Eip7732BeaconState<P>>),
+    |     ------- not covered
+    = note: the matched value is of type `&mut combined::BeaconState<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+316 ~ )],
+317 + &mut combined::BeaconState::Eip7732(_) => todo!()
+    |
+
+Some errors have detailed explanations: E0004, E0277, E0308, E0369.
+For more information about an error, try `rustc --explain E0004`.
+error: could not compile `types` (lib) due to 125 previous errors

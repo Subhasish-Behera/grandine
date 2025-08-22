@@ -85,13 +85,13 @@ use crate::{
         },
     },
     eip7732::{
+        beacon_state::BeaconState as Eip7732BeaconState,
         containers::{
             BeaconBlock as Eip7732BeaconBlock, BeaconBlockBody as Eip7732BeaconBlockBody,
             PayloadAttestation, SignedExecutionPayloadHeader,
         },
     },
     nonstandard::Phase,
-    preset::SlotsPerHistoricalRoot,
     phase0::{
         beacon_state::BeaconState as Phase0BeaconState,
         consts::JustificationBitsLength,
@@ -265,6 +265,7 @@ pub trait BeaconState<P: Preset>: SszHash<PackingFactor = U1> + Send + Sync {
             Self::Capella(state) => state.field,
             Self::Deneb(state) => state.field,
             Self::Electra(state) => state.field,
+            Self::Eip7732(state) => state.field,
         }
     ]
     [
@@ -275,6 +276,7 @@ pub trait BeaconState<P: Preset>: SszHash<PackingFactor = U1> + Send + Sync {
             Self::Capella(state) => &state.field,
             Self::Deneb(state) => &state.field,
             Self::Electra(state) => &state.field,
+            Self::Eip7732(state) => &state.field,
         }
     ]
     [
@@ -285,6 +287,7 @@ pub trait BeaconState<P: Preset>: SszHash<PackingFactor = U1> + Send + Sync {
             Self::Capella(state) => &mut state.field,
             Self::Deneb(state) => &mut state.field,
             Self::Electra(state) => &mut state.field,
+            Self::Eip7732(state) => &mut state.field,
         }
     ]
     [
@@ -295,6 +298,7 @@ pub trait BeaconState<P: Preset>: SszHash<PackingFactor = U1> + Send + Sync {
             Self::Capella(state) => state.validators_mut_with_balances(),
             Self::Deneb(state) => state.validators_mut_with_balances(),
             Self::Electra(state) => state.validators_mut_with_balances(),
+            Self::Eip7732(state) => state.validators_mut_with_balances(),
         }
     ]
     [
@@ -305,6 +309,7 @@ pub trait BeaconState<P: Preset>: SszHash<PackingFactor = U1> + Send + Sync {
             Self::Capella(state) => state.balances_mut_with_slashings(),
             Self::Deneb(state) => state.balances_mut_with_slashings(),
             Self::Electra(state) => state.balances_mut_with_slashings(),
+            Self::Eip7732(state) => state.balances_mut_with_slashings(),
         }
     ]
     [
@@ -440,6 +445,11 @@ pub trait PostAltairBeaconState<P: Preset>: BeaconState<P> {
     [ElectraBeaconState<P>]
     [&self.field]
     [&mut self.field];
+
+    [P: Preset]
+    [Eip7732BeaconState<P>]
+    [&self.field]
+    [&mut self.field];
 )]
 impl<parameters> PostAltairBeaconState<P> for implementor {
     #[duplicate_item(
@@ -512,6 +522,16 @@ impl<P: Preset> PostBellatrixBeaconState<P> for DenebBeaconState<P> {
 }
 
 impl<P: Preset> PostBellatrixBeaconState<P> for ElectraBeaconState<P> {
+    fn latest_execution_payload_header(&self) -> &dyn ExecutionPayload<P> {
+        &self.latest_execution_payload_header
+    }
+
+    fn latest_execution_payload_header_mut(&mut self) -> &mut dyn ExecutionPayload<P> {
+        &mut self.latest_execution_payload_header
+    }
+}
+
+impl<P: Preset> PostBellatrixBeaconState<P> for Eip7732BeaconState<P> {
     fn latest_execution_payload_header(&self) -> &dyn ExecutionPayload<P> {
         &self.latest_execution_payload_header
     }
@@ -601,6 +621,24 @@ impl<P: Preset> PostCapellaBeaconState<P> for ElectraBeaconState<P> {
     }
 }
 
+impl<P: Preset> PostCapellaBeaconState<P> for Eip7732BeaconState<P> {
+    fn next_withdrawal_index(&self) -> WithdrawalIndex {
+        self.next_withdrawal_index
+    }
+
+    fn next_withdrawal_index_mut(&mut self) -> &mut WithdrawalIndex {
+        &mut self.next_withdrawal_index
+    }
+
+    fn next_withdrawal_validator_index(&self) -> ValidatorIndex {
+        self.next_withdrawal_validator_index
+    }
+
+    fn next_withdrawal_validator_index_mut(&mut self) -> &mut ValidatorIndex {
+        &mut self.next_withdrawal_validator_index
+    }
+}
+
 pub trait PostElectraBeaconState<P: Preset>: PostCapellaBeaconState<P> {
     fn deposit_requests_start_index(&self) -> u64;
     fn deposit_balance_to_consume(&self) -> Gwei;
@@ -638,6 +676,12 @@ pub trait PostElectraBeaconState<P: Preset>: PostCapellaBeaconState<P> {
 
     [P: Preset]
     [ElectraBeaconState<P>]
+    [self.field]
+    [&self.field]
+    [&mut self.field];
+
+    [P: Preset]
+    [Eip7732BeaconState<P>]
     [self.field]
     [&self.field]
     [&mut self.field];
@@ -684,13 +728,13 @@ impl<parameters> PostElectraBeaconState<P> for implementor {
 }
 
 pub trait PostEip7732BeaconState<P: Preset>: PostElectraBeaconState<P> {
-    fn execution_payload_availability(&self) -> &BitVector<SlotsPerHistoricalRoot<P>>;
+    fn execution_payload_availability(&self) -> &BitVector<<P as Preset>::SlotsPerHistoricalRoot>;
     fn builder_pending_payments(&self) -> &BuilderPendingPayments<P>;
     fn builder_pending_withdrawals(&self) -> &BuilderPendingWithdrawals<P>;
     fn latest_block_hash(&self) -> H256;
     fn latest_withdrawals_root(&self) -> H256;
 
-    fn execution_payload_availability_mut(&mut self) -> &mut BitVector<SlotsPerHistoricalRoot<P>>;
+    fn execution_payload_availability_mut(&mut self) -> &mut BitVector<<P as Preset>::SlotsPerHistoricalRoot>;
     fn builder_pending_payments_mut(&mut self) -> &mut BuilderPendingPayments<P>;
     fn builder_pending_withdrawals_mut(&mut self) -> &mut BuilderPendingWithdrawals<P>;
     fn latest_block_hash_mut(&mut self) -> &mut H256;
@@ -698,6 +742,7 @@ pub trait PostEip7732BeaconState<P: Preset>: PostElectraBeaconState<P> {
 }
 
 #[duplicate_item(
+    parameters
     implementor
     get_copy(field)
     get_ref(field)
@@ -727,7 +772,7 @@ impl<parameters> PostEip7732BeaconState<P> for implementor {
 
     #[duplicate_item(
         field                              return_type;
-        [execution_payload_availability]  [BitVector<SlotsPerHistoricalRoot<P>>];
+        [execution_payload_availability]  [BitVector<<P as Preset>::SlotsPerHistoricalRoot>];
         [builder_pending_payments]         [BuilderPendingPayments<P>];
         [builder_pending_withdrawals]      [BuilderPendingWithdrawals<P>];
     )]
@@ -746,7 +791,7 @@ impl<parameters> PostEip7732BeaconState<P> for implementor {
 
     #[duplicate_item(
         field                              method                                       return_type;
-        [execution_payload_availability]   [execution_payload_availability_mut]        [BitVector<SlotsPerHistoricalRoot<P>>];
+        [execution_payload_availability]   [execution_payload_availability_mut]        [BitVector<<P as Preset>::SlotsPerHistoricalRoot>];
         [builder_pending_payments]         [builder_pending_payments_mut]              [BuilderPendingPayments<P>];
         [builder_pending_withdrawals]      [builder_pending_withdrawals_mut]           [BuilderPendingWithdrawals<P>];
     )]
