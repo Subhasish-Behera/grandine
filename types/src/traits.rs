@@ -1261,6 +1261,12 @@ impl<P: Preset> PostAltairBeaconBlockBody<P> for ElectraBlindedBeaconBlockBody<P
     }
 }
 
+impl<P: Preset> PostAltairBeaconBlockBody<P> for Eip7732BeaconBlockBody<P> {
+    fn sync_aggregate(&self) -> SyncAggregate<P> {
+        self.sync_aggregate
+    }
+}
+
 pub trait PostBellatrixBeaconBlockBody<P: Preset>: PostAltairBeaconBlockBody<P> {
     fn execution_payload(&self) -> &dyn ExecutionPayload<P>;
 }
@@ -1304,6 +1310,14 @@ impl<P: Preset> PostBellatrixBeaconBlockBody<P> for ElectraBeaconBlockBody<P> {
 impl<P: Preset> PostBellatrixBeaconBlockBody<P> for ElectraBlindedBeaconBlockBody<P> {
     fn execution_payload(&self) -> &dyn ExecutionPayload<P> {
         &self.execution_payload_header
+    }
+}
+
+impl<P: Preset> PostBellatrixBeaconBlockBody<P> for Eip7732BeaconBlockBody<P> {
+    fn execution_payload(&self) -> &dyn ExecutionPayload<P> {
+        // In EIP-7732, execution_payload is moved to ExecutionPayloadEnvelope
+        // Return the header instead (similar to blinded blocks)
+        unreachable!("execution_payload is not available in Eip7732BeaconBlockBody")
     }
 }
 
@@ -1361,6 +1375,14 @@ impl<P: Preset> PostCapellaBeaconBlockBody<P> for ElectraBlindedBeaconBlockBody<
     }
 }
 
+impl<P: Preset> PostCapellaBeaconBlockBody<P> for Eip7732BeaconBlockBody<P> {
+    fn bls_to_execution_changes(
+        &self,
+    ) -> &ContiguousList<SignedBlsToExecutionChange, P::MaxBlsToExecutionChanges> {
+        &self.bls_to_execution_changes
+    }
+}
+
 pub trait PostDenebBeaconBlockBody<P: Preset>: PostCapellaBeaconBlockBody<P> {
     // TODO(feature/deneb): method for state is_post_deneb
     fn blob_kzg_commitments(&self)
@@ -1396,6 +1418,15 @@ impl<P: Preset> PostDenebBeaconBlockBody<P> for ElectraBlindedBeaconBlockBody<P>
         &self,
     ) -> &ContiguousList<KzgCommitment, P::MaxBlobCommitmentsPerBlock> {
         &self.blob_kzg_commitments
+    }
+}
+
+impl<P: Preset> PostDenebBeaconBlockBody<P> for Eip7732BeaconBlockBody<P> {
+    fn blob_kzg_commitments(
+        &self,
+    ) -> &ContiguousList<KzgCommitment, P::MaxBlobCommitmentsPerBlock> {
+        // In EIP-7732, blob_kzg_commitments is moved to ExecutionPayloadEnvelope
+        unreachable!("blob_kzg_commitments is not available in Eip7732BeaconBlockBody")
     }
 }
 
@@ -1436,6 +1467,24 @@ impl<P: Preset> PostElectraBeaconBlockBody<P> for ElectraBlindedBeaconBlockBody<
 
     fn execution_requests(&self) -> &ExecutionRequests<P> {
         &self.execution_requests
+    }
+}
+
+impl<P: Preset> PostElectraBeaconBlockBody<P> for Eip7732BeaconBlockBody<P> {
+    fn attestations(&self) -> &ContiguousList<ElectraAttestation<P>, P::MaxAttestationsElectra> {
+        &self.attestations
+    }
+
+    fn attester_slashings(
+        &self,
+    ) -> &ContiguousList<ElectraAttesterSlashing<P>, P::MaxAttesterSlashingsElectra> {
+        &self.attester_slashings
+    }
+
+    fn execution_requests(&self) -> &ExecutionRequests<P> {
+        // In EIP-7732, execution_requests are moved to ExecutionPayloadEnvelope
+        // This should not be called for Eip7732BeaconBlockBody
+        unreachable!("execution_requests is not available in Eip7732BeaconBlockBody")
     }
 }
 

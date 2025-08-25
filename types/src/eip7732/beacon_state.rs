@@ -106,7 +106,7 @@ pub struct BeaconState<P: Preset> {
     pub pending_consolidations: PendingConsolidations<P>,
 
     // > ePBS fields (new in Gloas:EIP7732)
-    pub execution_payload_availability: BitVector<<P as Preset>::SlotsPerHistoricalRoot>,
+    pub execution_payload_availability: BitVector<P::SlotsPerHistoricalRoot>,
     pub builder_pending_payments: BuilderPendingPayments<P>,
     pub builder_pending_withdrawals: BuilderPendingWithdrawals<P>,
     pub latest_block_hash: H256,

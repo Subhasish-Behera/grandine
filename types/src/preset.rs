@@ -4,7 +4,7 @@ use core::{
     fmt::Debug,
     hash::Hash,
     num::NonZeroU64,
-    ops::{Div, Mul, Sub},
+    ops::{Add, Div, Mul, Sub},
 };
 
 use arithmetic::NonZeroExt as _;
@@ -21,7 +21,7 @@ use strum::{Display, EnumString};
 use typenum::{
     IsGreaterOrEqual, NonZero, Prod, Quot, Sub1, True, Unsigned, B1, U1, U10, U1048576,
     U1073741824, U1099511627776, U128, U134217728, U16, U16777216, U17, U2, U2048, U256, U262144,
-    U32, U4, U4096, U512, U64, U65536, U8, U8192,
+    U32, U4, U4096, U512, U64, U65536, U7, U8, U8192,
 };
 
 use crate::{
@@ -173,10 +173,13 @@ pub trait Preset: Copy + Eq + Ord + Hash + Default + Debug + Send + Sync + 'stat
         + Sync;
 
     // ePBS / EIP-7732
-    type PtcSize: BitVectorBits + MerkleBits + Eq + Debug + Send + Sync;
+    type PtcSize: BitVectorBits + MerkleBits + NonZero + Eq + Debug + Send + Sync;
     type MaxPayloadAttestations: MerkleElements<PayloadAttestation<Self>> + Eq + Debug + Send + Sync;
-    type SlotsPerHistoricalRoot: BitVectorBits + Debug + Send + Sync;
+    type SlotsPerHistoricalRoot: BitVectorBits + MerkleBits + NonZero + Add<U7> + Debug + Send + Sync;
     type BuilderPendingPaymentsLimit: PersistentVectorElements<BuilderPendingPayment, UnhashedBundleSize<BuilderPendingPayment>>
+        + typenum::PowerOfTwo
+        + typenum::Cmp<U1>
+        + IsGreaterOrEqual<U1, Output = True>
         + Debug
         + Send
         + Sync;

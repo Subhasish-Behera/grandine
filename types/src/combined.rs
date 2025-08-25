@@ -894,6 +894,7 @@ impl<P: Preset> SszSize for SignedBlindedBeaconBlock<P> {
         CapellaSignedBlindedBeaconBlock::<P>::SIZE,
         DenebSignedBlindedBeaconBlock::<P>::SIZE,
         ElectraSignedBlindedBeaconBlock::<P>::SIZE,
+        ElectraSignedBlindedBeaconBlock::<P>::SIZE, // Eip7732 doesn't have blinded blocks
     ]);
 }
 
@@ -1016,8 +1017,9 @@ impl<P: Preset> SszSize for BlindedBeaconBlock<P> {
     const SIZE: Size = Size::for_untagged_union::<{ Phase::CARDINALITY - 2 }>([
         BellatrixBlindedBeaconBlock::<P>::SIZE,
         CapellaBlindedBeaconBlock::<P>::SIZE,
-        DenebSignedBlindedBeaconBlock::<P>::SIZE,
-        ElectraSignedBlindedBeaconBlock::<P>::SIZE,
+        DenebBlindedBeaconBlock::<P>::SIZE,
+        ElectraBlindedBeaconBlock::<P>::SIZE,
+        ElectraBlindedBeaconBlock::<P>::SIZE, // Eip7732 doesn't have blinded blocks
     ]);
 }
 
@@ -1160,6 +1162,7 @@ impl<P: Preset> SszSize for ExecutionPayload<P> {
         BellatrixExecutionPayload::<P>::SIZE,
         CapellaExecutionPayload::<P>::SIZE,
         DenebExecutionPayload::<P>::SIZE,
+        DenebExecutionPayload::<P>::SIZE,  // Electra reuses Deneb
         DenebExecutionPayload::<P>::SIZE,  // Eip7732 reuses Deneb
     ]);
 }
@@ -1273,6 +1276,7 @@ impl<P: Preset> SszSize for LightClientBootstrap<P> {
         CapellaLightClientBootstrap::<P>::SIZE,
         DenebLightClientBootstrap::<P>::SIZE,
         ElectraLightClientBootstrap::<P>::SIZE,
+        ElectraLightClientBootstrap::<P>::SIZE, // Eip7732 reuses Electra
     ]);
 }
 
@@ -1330,6 +1334,7 @@ impl<P: Preset> SszSize for LightClientFinalityUpdate<P> {
         CapellaLightClientFinalityUpdate::<P>::SIZE,
         DenebLightClientFinalityUpdate::<P>::SIZE,
         ElectraLightClientFinalityUpdate::<P>::SIZE,
+        ElectraLightClientFinalityUpdate::<P>::SIZE, // Eip7732 reuses Electra
     ]);
 }
 
@@ -1387,6 +1392,7 @@ impl<P: Preset> SszSize for LightClientOptimisticUpdate<P> {
         CapellaLightClientOptimisticUpdate::<P>::SIZE,
         DenebLightClientOptimisticUpdate::<P>::SIZE,
         ElectraLightClientOptimisticUpdate::<P>::SIZE,
+        ElectraLightClientOptimisticUpdate::<P>::SIZE, // Eip7732 reuses Electra
     ]);
 }
 
@@ -1433,6 +1439,7 @@ impl<P: Preset> SszSize for LightClientUpdate<P> {
         CapellaLightClientUpdate::<P>::SIZE,
         DenebLightClientUpdate::<P>::SIZE,
         ElectraLightClientUpdate::<P>::SIZE,
+        ElectraLightClientUpdate::<P>::SIZE, // Eip7732 reuses Electra
     ]);
 }
 
@@ -1529,6 +1536,7 @@ impl<P: Preset> SszSize for SignedAggregateAndProof<P> {
     const SIZE: Size = Size::for_untagged_union::<{ Phase::CARDINALITY - 4 }>([
         Phase0SignedAggregateAndProof::<P>::SIZE,
         ElectraSignedAggregateAndProof::<P>::SIZE,
+        ElectraSignedAggregateAndProof::<P>::SIZE, // Eip7732 reuses Electra
     ]);
 }
 
@@ -1637,6 +1645,7 @@ impl<P: Preset> SszSize for Attestation<P> {
     const SIZE: Size = Size::for_untagged_union::<{ Phase::CARDINALITY - 4 }>([
         Phase0Attestation::<P>::SIZE,
         ElectraAttestation::<P>::SIZE,
+        ElectraAttestation::<P>::SIZE, // Eip7732 reuses Electra
     ]);
 }
 
@@ -1745,6 +1754,7 @@ impl<P: Preset> SszSize for AttesterSlashing<P> {
     const SIZE: Size = Size::for_untagged_union::<{ Phase::CARDINALITY - 4 }>([
         Phase0AttesterSlashing::<P>::SIZE,
         ElectraAttesterSlashing::<P>::SIZE,
+        ElectraAttesterSlashing::<P>::SIZE, // Eip7732 reuses Electra
     ]);
 }
 
