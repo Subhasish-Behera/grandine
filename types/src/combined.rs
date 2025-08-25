@@ -171,6 +171,7 @@ impl<P: Preset> SszRead<Config> for BeaconState<P> {
             Phase::Capella => Self::Capella(SszReadDefault::from_ssz_default(bytes)?),
             Phase::Deneb => Self::Deneb(SszReadDefault::from_ssz_default(bytes)?),
             Phase::Electra => Self::Electra(SszReadDefault::from_ssz_default(bytes)?),
+            Phase::Eip7732 => Self::Eip7732(SszReadDefault::from_ssz_default(bytes)?),
         };
 
         assert_eq!(slot, state.slot());
@@ -420,6 +421,7 @@ impl<P: Preset> SszRead<Config> for SignedBeaconBlock<P> {
             Phase::Capella => Self::Capella(SszReadDefault::from_ssz_default(bytes)?),
             Phase::Deneb => Self::Deneb(SszReadDefault::from_ssz_default(bytes)?),
             Phase::Electra => Self::Electra(SszReadDefault::from_ssz_default(bytes)?),
+            Phase::Eip7732 => Self::Eip7732(SszReadDefault::from_ssz_default(bytes)?),
         };
 
         assert_eq!(slot, block.message().slot());
@@ -437,6 +439,7 @@ impl<P: Preset> SszWrite for SignedBeaconBlock<P> {
             Self::Capella(block) => block.write_variable(bytes),
             Self::Deneb(block) => block.write_variable(bytes),
             Self::Electra(block) => block.write_variable(bytes),
+            Self::Eip7732(block) => block.write_variable(bytes),
         }
     }
 }
@@ -452,6 +455,7 @@ impl<P: Preset> SszHash for SignedBeaconBlock<P> {
             Self::Capella(block) => block.hash_tree_root(),
             Self::Deneb(block) => block.hash_tree_root(),
             Self::Electra(block) => block.hash_tree_root(),
+            Self::Eip7732(block) => block.hash_tree_root(),
         }
     }
 }
@@ -483,6 +487,10 @@ impl<P: Preset> SignedBeaconBlock<P> {
                 let ElectraSignedBeaconBlock { message, signature } = block;
                 (message.into(), signature)
             }
+            Self::Eip7732(block) => {
+                let Eip7732SignedBeaconBlock { message, signature } = block;
+                (message.into(), signature)
+            }
         }
     }
 
@@ -501,6 +509,7 @@ impl<P: Preset> SignedBeaconBlock<P> {
             Self::Electra(block) => Some(ExecutionPayload::Deneb(
                 block.message.body.execution_payload,
             )),
+            Self::Eip7732(_) => None, // EIP-7732 blocks have execution payload in envelope
         }
     }
 
@@ -512,6 +521,7 @@ impl<P: Preset> SignedBeaconBlock<P> {
             Self::Capella(_) => Phase::Capella,
             Self::Deneb(_) => Phase::Deneb,
             Self::Electra(_) => Phase::Electra,
+            Self::Eip7732(_) => Phase::Eip7732,
         }
     }
 
@@ -572,6 +582,7 @@ impl<P: Preset> SszRead<Config> for BeaconBlock<P> {
             Phase::Capella => Self::Capella(SszReadDefault::from_ssz_default(bytes)?),
             Phase::Deneb => Self::Deneb(SszReadDefault::from_ssz_default(bytes)?),
             Phase::Electra => Self::Electra(SszReadDefault::from_ssz_default(bytes)?),
+            Phase::Eip7732 => Self::Eip7732(SszReadDefault::from_ssz_default(bytes)?),
         };
 
         assert_eq!(slot, block.slot());
@@ -589,6 +600,7 @@ impl<P: Preset> SszWrite for BeaconBlock<P> {
             Self::Capella(block) => block.write_variable(bytes),
             Self::Deneb(block) => block.write_variable(bytes),
             Self::Electra(block) => block.write_variable(bytes),
+            Self::Eip7732(block) => block.write_variable(bytes),
         }
     }
 }
@@ -604,6 +616,7 @@ impl<P: Preset> SszHash for BeaconBlock<P> {
             Self::Capella(block) => block.hash_tree_root(),
             Self::Deneb(block) => block.hash_tree_root(),
             Self::Electra(block) => block.hash_tree_root(),
+            Self::Eip7732(block) => block.hash_tree_root(),
         }
     }
 }
@@ -629,6 +642,9 @@ impl<P: Preset> BeaconBlock<P> {
             Self::Electra(block) => {
                 block.body.graffiti = graffiti;
             }
+            Self::Eip7732(block) => {
+                block.body.graffiti = graffiti;
+            }
         }
     }
 
@@ -644,6 +660,7 @@ impl<P: Preset> BeaconBlock<P> {
             Self::Capella(message) => CapellaSignedBeaconBlock { message, signature }.into(),
             Self::Deneb(message) => DenebSignedBeaconBlock { message, signature }.into(),
             Self::Electra(message) => ElectraSignedBeaconBlock { message, signature }.into(),
+            Self::Eip7732(message) => Eip7732SignedBeaconBlock { message, signature }.into(),
         }
     }
 
@@ -656,6 +673,7 @@ impl<P: Preset> BeaconBlock<P> {
             Self::Capella(block) => block.state_root = state_root,
             Self::Deneb(block) => block.state_root = state_root,
             Self::Electra(block) => block.state_root = state_root,
+            Self::Eip7732(block) => block.state_root = state_root,
         }
 
         self
@@ -785,6 +803,7 @@ impl<P: Preset> BeaconBlock<P> {
             Self::Capella(block) => Some(ExecutionPayload::Capella(block.body.execution_payload)),
             Self::Deneb(block) => Some(ExecutionPayload::Deneb(block.body.execution_payload)),
             Self::Electra(block) => Some(ExecutionPayload::Deneb(block.body.execution_payload)),
+            Self::Eip7732(_) => None, // EIP-7732 blocks have execution payload in envelope
         }
     }
 
@@ -796,6 +815,7 @@ impl<P: Preset> BeaconBlock<P> {
             Self::Capella(_) => Phase::Capella,
             Self::Deneb(_) => Phase::Deneb,
             Self::Electra(_) => Phase::Electra,
+            Self::Eip7732(_) => Phase::Eip7732,
         }
     }
 }
@@ -865,6 +885,11 @@ impl<P: Preset> From<BeaconBlock<P>> for SignedBeaconBlock<P> {
                 signature: SignatureBytes::default(),
             }
             .into(),
+            BeaconBlock::Eip7732(message) => Eip7732SignedBeaconBlock {
+                message,
+                signature: SignatureBytes::default(),
+            }
+            .into(),
         }
     }
 }
@@ -915,6 +940,7 @@ impl<P: Preset> SszRead<Phase> for SignedBlindedBeaconBlock<P> {
             Phase::Capella => Self::Capella(SszReadDefault::from_ssz_default(bytes)?),
             Phase::Deneb => Self::Deneb(SszReadDefault::from_ssz_default(bytes)?),
             Phase::Electra => Self::Electra(SszReadDefault::from_ssz_default(bytes)?),
+            Phase::Eip7732 => Self::Electra(SszReadDefault::from_ssz_default(bytes)?), // EIP-7732 uses Electra format for blinded blocks
         };
 
         Ok(block)
@@ -1547,6 +1573,7 @@ impl<P: Preset> SszRead<Phase> for SignedAggregateAndProof<P> {
                 Self::Phase0(SszReadDefault::from_ssz_default(bytes)?)
             }
             Phase::Electra => Self::Electra(SszReadDefault::from_ssz_default(bytes)?),
+            Phase::Eip7732 => Self::Electra(SszReadDefault::from_ssz_default(bytes)?), // EIP-7732 uses Electra format
         };
 
         Ok(signed_aggregate_and_proof)
@@ -1664,6 +1691,7 @@ impl<P: Preset> SszRead<Config> for Attestation<P> {
                 Self::Phase0(SszReadDefault::from_ssz_default(bytes)?)
             }
             Phase::Electra => Self::Electra(SszReadDefault::from_ssz_default(bytes)?),
+            Phase::Eip7732 => Self::Electra(SszReadDefault::from_ssz_default(bytes)?), // EIP-7732 uses Electra format
         };
 
         assert_eq!(slot, attestation.data().slot);

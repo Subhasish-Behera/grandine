@@ -1,0 +1,1724 @@
+cargo check -p types
+warning: unused macro definition: `implement_backend`
+ --> bls/src/lib.rs:3:14
+  |
+3 | macro_rules! implement_backend {
+  |              ^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_macros)]` on by default
+
+warning: `bls` (lib) generated 1 warning
+    Checking types v0.0.0 (/Users/greendoor/Gnotes/types)
+error[E0432]: unresolved import `bls::AggregateSignatureBytes`
+  --> types/src/traits.rs:15:11
+   |
+15 | use bls::{AggregateSignatureBytes, SignatureBytes};
+   |           ^^^^^^^^^^^^^^^^^^^^^^^ no `AggregateSignatureBytes` in the root
+
+error[E0432]: unresolved import `bls::AggregateSignatureBytes`
+ --> types/src/phase0/containers.rs:1:11
+  |
+1 | use bls::{AggregateSignatureBytes, PublicKeyBytes, SignatureBytes};
+  |           ^^^^^^^^^^^^^^^^^^^^^^^ no `AggregateSignatureBytes` in the root
+
+error[E0432]: unresolved imports `bls::AggregatePublicKeyBytes`, `bls::AggregateSignatureBytes`
+ --> types/src/altair/containers.rs:1:11
+  |
+1 | use bls::{AggregatePublicKeyBytes, AggregateSignatureBytes, PublicKeyBytes, SignatureBytes};
+  |           ^^^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^^^ no `AggregateSignatureBytes` in the root
+  |           |
+  |           no `AggregatePublicKeyBytes` in the root
+
+error[E0432]: unresolved import `bls::AggregateSignatureBytes`
+ --> types/src/altair/container_impls.rs:1:40
+  |
+1 | use bls::{traits::SignatureBytes as _, AggregateSignatureBytes};
+  |                                        ^^^^^^^^^^^^^^^^^^^^^^^ no `AggregateSignatureBytes` in the root
+
+error[E0432]: unresolved import `bls::AggregateSignatureBytes`
+ --> types/src/electra/containers.rs:1:11
+  |
+1 | use bls::{AggregateSignatureBytes, PublicKeyBytes, SignatureBytes};
+  |           ^^^^^^^^^^^^^^^^^^^^^^^ no `AggregateSignatureBytes` in the root
+
+error[E0782]: expected a type, found a trait
+  --> types/src/cache.rs:33:45
+   |
+33 |     pub validator_indices: OnceCell<HashMap<PublicKeyBytes, ValidatorIndex>>,
+   |                                             ^^^^^^^^^^^^^^
+   |
+help: you can add the `dyn` keyword if you want a trait object
+   |
+33 |     pub validator_indices: OnceCell<HashMap<dyn PublicKeyBytes, ValidatorIndex>>,
+   |                                             +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/nonstandard.rs:467:20
+    |
+467 |     pub signature: Signature,
+    |                    ^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+467 |     pub signature: dyn Signature,
+    |                    +++
+
+error[E0782]: expected a type, found a trait
+  --> types/src/phase0/containers.rs:27:26
+   |
+27 |     pub selection_proof: SignatureBytes,
+   |                          ^^^^^^^^^^^^^^
+   |
+help: you can add the `dyn` keyword if you want a trait object
+   |
+27 |     pub selection_proof: dyn SignatureBytes,
+   |                          +++
+
+error[E0782]: expected a type, found a trait
+  --> types/src/phase0/containers.rs:74:24
+   |
+74 |     pub randao_reveal: SignatureBytes,
+   |                        ^^^^^^^^^^^^^^
+   |
+help: you can add the `dyn` keyword if you want a trait object
+   |
+74 |     pub randao_reveal: dyn SignatureBytes,
+   |                        +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/phase0/containers.rs:116:17
+    |
+116 |     pub pubkey: PublicKeyBytes,
+    |                 ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+116 |     pub pubkey: dyn PublicKeyBytes,
+    |                 +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/phase0/containers.rs:120:20
+    |
+120 |     pub signature: SignatureBytes,
+    |                    ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+120 |     pub signature: dyn SignatureBytes,
+    |                    +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/phase0/containers.rs:126:17
+    |
+126 |     pub pubkey: PublicKeyBytes,
+    |                 ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+126 |     pub pubkey: dyn PublicKeyBytes,
+    |                 +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/phase0/containers.rs:195:20
+    |
+195 |     pub signature: SignatureBytes,
+    |                    ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+195 |     pub signature: dyn SignatureBytes,
+    |                    +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/phase0/containers.rs:202:20
+    |
+202 |     pub signature: SignatureBytes,
+    |                    ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+202 |     pub signature: dyn SignatureBytes,
+    |                    +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/phase0/containers.rs:209:20
+    |
+209 |     pub signature: SignatureBytes,
+    |                    ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+209 |     pub signature: dyn SignatureBytes,
+    |                    +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/phase0/containers.rs:216:20
+    |
+216 |     pub signature: SignatureBytes,
+    |                    ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+216 |     pub signature: dyn SignatureBytes,
+    |                    +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/phase0/containers.rs:229:17
+    |
+229 |     pub pubkey: PublicKeyBytes,
+    |                 ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+229 |     pub pubkey: dyn PublicKeyBytes,
+    |                 +++
+
+error[E0782]: expected a type, found a trait
+  --> types/src/altair/containers.rs:36:24
+   |
+36 |     pub randao_reveal: SignatureBytes,
+   |                        ^^^^^^^^^^^^^^
+   |
+help: you can add the `dyn` keyword if you want a trait object
+   |
+36 |     pub randao_reveal: dyn SignatureBytes,
+   |                        +++
+
+error[E0782]: expected a type, found a trait
+  --> types/src/altair/containers.rs:53:26
+   |
+53 |     pub selection_proof: SignatureBytes,
+   |                          ^^^^^^^^^^^^^^
+   |
+help: you can add the `dyn` keyword if you want a trait object
+   |
+53 |     pub selection_proof: dyn SignatureBytes,
+   |                          +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/altair/containers.rs:107:20
+    |
+107 |     pub signature: SignatureBytes,
+    |                    ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+107 |     pub signature: dyn SignatureBytes,
+    |                    +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/altair/containers.rs:114:20
+    |
+114 |     pub signature: SignatureBytes,
+    |                    ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+114 |     pub signature: dyn SignatureBytes,
+    |                    +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/altair/containers.rs:138:39
+    |
+138 |     pub pubkeys: Box<ContiguousVector<PublicKeyBytes, P::SyncCommitteeSize>>,
+    |                                       ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+138 |     pub pubkeys: Box<ContiguousVector<dyn PublicKeyBytes, P::SyncCommitteeSize>>,
+    |                                       +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/altair/containers.rs:162:20
+    |
+162 |     pub signature: SignatureBytes,
+    |                    ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+162 |     pub signature: dyn SignatureBytes,
+    |                    +++
+
+error[E0782]: expected a type, found a trait
+  --> types/src/bellatrix/containers.rs:42:24
+   |
+42 |     pub randao_reveal: SignatureBytes,
+   |                        ^^^^^^^^^^^^^^
+   |
+help: you can add the `dyn` keyword if you want a trait object
+   |
+42 |     pub randao_reveal: dyn SignatureBytes,
+   |                        +++
+
+error[E0782]: expected a type, found a trait
+  --> types/src/bellatrix/containers.rs:69:24
+   |
+69 |     pub randao_reveal: SignatureBytes,
+   |                        ^^^^^^^^^^^^^^
+   |
+help: you can add the `dyn` keyword if you want a trait object
+   |
+69 |     pub randao_reveal: dyn SignatureBytes,
+   |                        +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/bellatrix/containers.rs:145:20
+    |
+145 |     pub signature: SignatureBytes,
+    |                    ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+145 |     pub signature: dyn SignatureBytes,
+    |                    +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/bellatrix/containers.rs:152:20
+    |
+152 |     pub signature: SignatureBytes,
+    |                    ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+152 |     pub signature: dyn SignatureBytes,
+    |                    +++
+
+error[E0782]: expected a type, found a trait
+  --> types/src/capella/containers.rs:48:24
+   |
+48 |     pub randao_reveal: SignatureBytes,
+   |                        ^^^^^^^^^^^^^^
+   |
+help: you can add the `dyn` keyword if you want a trait object
+   |
+48 |     pub randao_reveal: dyn SignatureBytes,
+   |                        +++
+
+error[E0782]: expected a type, found a trait
+  --> types/src/capella/containers.rs:77:24
+   |
+77 |     pub randao_reveal: SignatureBytes,
+   |                        ^^^^^^^^^^^^^^
+   |
+help: you can add the `dyn` keyword if you want a trait object
+   |
+77 |     pub randao_reveal: dyn SignatureBytes,
+   |                        +++
+
+error[E0782]: expected a type, found a trait
+  --> types/src/capella/containers.rs:96:26
+   |
+96 |     pub from_bls_pubkey: PublicKeyBytes,
+   |                          ^^^^^^^^^^^^^^
+   |
+help: you can add the `dyn` keyword if you want a trait object
+   |
+96 |     pub from_bls_pubkey: dyn PublicKeyBytes,
+   |                          +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/capella/containers.rs:218:20
+    |
+218 |     pub signature: SignatureBytes,
+    |                    ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+218 |     pub signature: dyn SignatureBytes,
+    |                    +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/capella/containers.rs:225:20
+    |
+225 |     pub signature: SignatureBytes,
+    |                    ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+225 |     pub signature: dyn SignatureBytes,
+    |                    +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/capella/containers.rs:232:20
+    |
+232 |     pub signature: SignatureBytes,
+    |                    ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+232 |     pub signature: dyn SignatureBytes,
+    |                    +++
+
+error[E0782]: expected a type, found a trait
+  --> types/src/deneb/containers.rs:50:24
+   |
+50 |     pub randao_reveal: SignatureBytes,
+   |                        ^^^^^^^^^^^^^^
+   |
+help: you can add the `dyn` keyword if you want a trait object
+   |
+50 |     pub randao_reveal: dyn SignatureBytes,
+   |                        +++
+
+error[E0782]: expected a type, found a trait
+  --> types/src/deneb/containers.rs:80:24
+   |
+80 |     pub randao_reveal: SignatureBytes,
+   |                        ^^^^^^^^^^^^^^
+   |
+help: you can add the `dyn` keyword if you want a trait object
+   |
+80 |     pub randao_reveal: dyn SignatureBytes,
+   |                        +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/deneb/containers.rs:230:20
+    |
+230 |     pub signature: SignatureBytes,
+    |                    ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+230 |     pub signature: dyn SignatureBytes,
+    |                    +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/deneb/containers.rs:237:20
+    |
+237 |     pub signature: SignatureBytes,
+    |                    ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+237 |     pub signature: dyn SignatureBytes,
+    |                    +++
+
+error[E0782]: expected a type, found a trait
+  --> types/src/eip7732/containers.rs:45:20
+   |
+45 |     pub signature: SignatureBytes,
+   |                    ^^^^^^^^^^^^^^
+   |
+help: you can add the `dyn` keyword if you want a trait object
+   |
+45 |     pub signature: dyn SignatureBytes,
+   |                    +++
+
+error[E0782]: expected a type, found a trait
+  --> types/src/eip7732/containers.rs:66:20
+   |
+66 |     pub signature: SignatureBytes,
+   |                    ^^^^^^^^^^^^^^
+   |
+help: you can add the `dyn` keyword if you want a trait object
+   |
+66 |     pub signature: dyn SignatureBytes,
+   |                    +++
+
+error[E0782]: expected a type, found a trait
+  --> types/src/eip7732/containers.rs:85:20
+   |
+85 |     pub signature: SignatureBytes,
+   |                    ^^^^^^^^^^^^^^
+   |
+help: you can add the `dyn` keyword if you want a trait object
+   |
+85 |     pub signature: dyn SignatureBytes,
+   |                    +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/eip7732/containers.rs:106:20
+    |
+106 |     pub signature: SignatureBytes,
+    |                    ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+106 |     pub signature: dyn SignatureBytes,
+    |                    +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/eip7732/containers.rs:114:20
+    |
+114 |     pub signature: SignatureBytes,  // Aggregate signature from PTC members
+    |                    ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+114 |     pub signature: dyn SignatureBytes,  // Aggregate signature from PTC members
+    |                    +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/eip7732/containers.rs:123:20
+    |
+123 |     pub signature: SignatureBytes,  // Aggregate signature from indexed validators
+    |                    ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+123 |     pub signature: dyn SignatureBytes,  // Aggregate signature from indexed validators
+    |                    +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/eip7732/containers.rs:165:24
+    |
+165 |     pub randao_reveal: SignatureBytes,
+    |                        ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+165 |     pub randao_reveal: dyn SignatureBytes,
+    |                        +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/eip7732/containers.rs:189:20
+    |
+189 |     pub signature: SignatureBytes,
+    |                    ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+189 |     pub signature: dyn SignatureBytes,
+    |                    +++
+
+error[E0782]: expected a type, found a trait
+  --> types/src/electra/containers.rs:30:26
+   |
+30 |     pub selection_proof: SignatureBytes,
+   |                          ^^^^^^^^^^^^^^
+   |
+help: you can add the `dyn` keyword if you want a trait object
+   |
+30 |     pub selection_proof: dyn SignatureBytes,
+   |                          +++
+
+error[E0782]: expected a type, found a trait
+  --> types/src/electra/containers.rs:64:24
+   |
+64 |     pub randao_reveal: SignatureBytes,
+   |                        ^^^^^^^^^^^^^^
+   |
+help: you can add the `dyn` keyword if you want a trait object
+   |
+64 |     pub randao_reveal: dyn SignatureBytes,
+   |                        +++
+
+error[E0782]: expected a type, found a trait
+  --> types/src/electra/containers.rs:95:24
+   |
+95 |     pub randao_reveal: SignatureBytes,
+   |                        ^^^^^^^^^^^^^^
+   |
+help: you can add the `dyn` keyword if you want a trait object
+   |
+95 |     pub randao_reveal: dyn SignatureBytes,
+   |                        +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/electra/containers.rs:114:17
+    |
+114 |     pub pubkey: PublicKeyBytes,
+    |                 ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+114 |     pub pubkey: dyn PublicKeyBytes,
+    |                 +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/electra/containers.rs:118:20
+    |
+118 |     pub signature: SignatureBytes,
+    |                    ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+118 |     pub signature: dyn SignatureBytes,
+    |                    +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/electra/containers.rs:127:27
+    |
+127 |     pub validator_pubkey: PublicKeyBytes,
+    |                           ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+127 |     pub validator_pubkey: dyn PublicKeyBytes,
+    |                           +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/electra/containers.rs:201:17
+    |
+201 |     pub pubkey: PublicKeyBytes,
+    |                 ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+201 |     pub pubkey: dyn PublicKeyBytes,
+    |                 +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/electra/containers.rs:205:20
+    |
+205 |     pub signature: SignatureBytes,
+    |                    ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+205 |     pub signature: dyn SignatureBytes,
+    |                    +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/electra/containers.rs:234:20
+    |
+234 |     pub signature: SignatureBytes,
+    |                    ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+234 |     pub signature: dyn SignatureBytes,
+    |                    +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/electra/containers.rs:241:20
+    |
+241 |     pub signature: SignatureBytes,
+    |                    ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+241 |     pub signature: dyn SignatureBytes,
+    |                    +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/electra/containers.rs:248:20
+    |
+248 |     pub signature: SignatureBytes,
+    |                    ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+248 |     pub signature: dyn SignatureBytes,
+    |                    +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/electra/containers.rs:259:20
+    |
+259 |     pub signature: SignatureBytes,
+    |                    ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+259 |     pub signature: dyn SignatureBytes,
+    |                    +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/electra/containers.rs:266:24
+    |
+266 |     pub source_pubkey: PublicKeyBytes,
+    |                        ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+266 |     pub source_pubkey: dyn PublicKeyBytes,
+    |                        +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/electra/containers.rs:267:24
+    |
+267 |     pub target_pubkey: PublicKeyBytes,
+    |                        ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+267 |     pub target_pubkey: dyn PublicKeyBytes,
+    |                        +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/traits.rs:817:28
+    |
+817 |     fn signature(&self) -> SignatureBytes;
+    |                            ^^^^^^^^^^^^^^
+    |
+help: `SignatureBytes` is dyn-incompatible, use `impl SignatureBytes` to return an opaque type, as long as you return a single underlying type
+    |
+817 |     fn signature(&self) -> impl SignatureBytes;
+    |                            ++++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/traits.rs:981:32
+    |
+981 |     fn randao_reveal(&self) -> SignatureBytes;
+    |                                ^^^^^^^^^^^^^^
+    |
+help: `SignatureBytes` is dyn-incompatible, use `impl SignatureBytes` to return an opaque type, as long as you return a single underlying type
+    |
+981 |     fn randao_reveal(&self) -> impl SignatureBytes;
+    |                                ++++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/combined.rs:460:44
+    |
+460 |     pub fn split(self) -> (BeaconBlock<P>, SignatureBytes) {
+    |                                            ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+460 |     pub fn split(self) -> (BeaconBlock<P>, dyn SignatureBytes) {
+    |                                            +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/combined.rs:639:44
+    |
+639 |     pub fn with_signature(self, signature: SignatureBytes) -> SignedBeaconBlock<P> {
+    |                                            ^^^^^^^^^^^^^^
+    |
+    = note: `SignatureBytes` it is dyn-incompatible, so it can't be `dyn`
+help: use a new generic type parameter, constrained by `SignatureBytes`
+    |
+639 -     pub fn with_signature(self, signature: SignatureBytes) -> SignedBeaconBlock<P> {
+639 +     pub fn with_signature<T: SignatureBytes>(self, signature: T) -> SignedBeaconBlock<P> {
+    |
+help: you can also use an opaque type, but users won't be able to specify the type parameter when calling the `fn`, having to rely exclusively on type inference
+    |
+639 |     pub fn with_signature(self, signature: impl SignatureBytes) -> SignedBeaconBlock<P> {
+    |                                            ++++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/combined.rs:960:51
+    |
+960 |     pub fn split(self) -> (BlindedBeaconBlock<P>, SignatureBytes) {
+    |                                                   ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+960 |     pub fn split(self) -> (BlindedBeaconBlock<P>, dyn SignatureBytes) {
+    |                                                   +++
+
+error[E0782]: expected a type, found a trait
+    --> types/src/combined.rs:1049:44
+     |
+1049 |     pub fn with_signature(self, signature: SignatureBytes) -> SignedBlindedBeaconBlock<P> {
+     |                                            ^^^^^^^^^^^^^^
+     |
+     = note: `SignatureBytes` it is dyn-incompatible, so it can't be `dyn`
+help: use a new generic type parameter, constrained by `SignatureBytes`
+     |
+1049 -     pub fn with_signature(self, signature: SignatureBytes) -> SignedBlindedBeaconBlock<P> {
+1049 +     pub fn with_signature<T: SignatureBytes>(self, signature: T) -> SignedBlindedBeaconBlock<P> {
+     |
+help: you can also use an opaque type, but users won't be able to specify the type parameter when calling the `fn`, having to rely exclusively on type inference
+     |
+1049 |     pub fn with_signature(self, signature: impl SignatureBytes) -> SignedBlindedBeaconBlock<P> {
+     |                                            ++++
+
+error[E0782]: expected a type, found a trait
+    --> types/src/combined.rs:1485:44
+     |
+1485 |     pub const fn selection_proof(&self) -> SignatureBytes {
+     |                                            ^^^^^^^^^^^^^^
+     |
+help: `SignatureBytes` is dyn-incompatible, use `impl SignatureBytes` to return an opaque type, as long as you return a single underlying type
+     |
+1485 |     pub const fn selection_proof(&self) -> impl SignatureBytes {
+     |                                            ++++
+
+error[E0782]: expected a type, found a trait
+    --> types/src/combined.rs:1569:38
+     |
+1569 |     pub const fn signature(&self) -> SignatureBytes {
+     |                                      ^^^^^^^^^^^^^^
+     |
+help: `SignatureBytes` is dyn-incompatible, use `impl SignatureBytes` to return an opaque type, as long as you return a single underlying type
+     |
+1569 |     pub const fn signature(&self) -> impl SignatureBytes {
+     |                                      ++++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/traits.rs:827:28
+    |
+827 |     fn signature(&self) -> SignatureBytes {
+    |                            ^^^^^^^^^^^^^^
+    |
+help: `SignatureBytes` is dyn-incompatible, use `impl SignatureBytes` to return an opaque type, as long as you return a single underlying type
+    |
+827 |     fn signature(&self) -> impl SignatureBytes {
+    |                            ++++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/traits.rs:847:28
+    |
+847 |     fn signature(&self) -> SignatureBytes {
+    |                            ^^^^^^^^^^^^^^
+    |
+help: `SignatureBytes` is dyn-incompatible, use `impl SignatureBytes` to return an opaque type, as long as you return a single underlying type
+    |
+847 |     fn signature(&self) -> impl SignatureBytes {
+    |                            ++++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/traits.rs:872:28
+    |
+872 |     fn signature(&self) -> SignatureBytes {
+    |                            ^^^^^^^^^^^^^^
+    |
+help: `SignatureBytes` is dyn-incompatible, use `impl SignatureBytes` to return an opaque type, as long as you return a single underlying type
+    |
+872 |     fn signature(&self) -> impl SignatureBytes {
+    |                            ++++
+
+error[E0782]: expected a type, found a trait
+    --> types/src/traits.rs:1027:32
+     |
+1027 |     fn randao_reveal(&self) -> SignatureBytes {
+     |                                ^^^^^^^^^^^^^^
+     |
+help: `SignatureBytes` is dyn-incompatible, use `impl SignatureBytes` to return an opaque type, as long as you return a single underlying type
+     |
+1027 |     fn randao_reveal(&self) -> impl SignatureBytes {
+     |                                ++++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/preset.rs:104:36
+    |
+104 |         + ContiguousVectorElements<PublicKeyBytes>
+    |                                    ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+104 |         + ContiguousVectorElements<dyn PublicKeyBytes>
+    |                                    +++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/preset.rs:105:26
+    |
+105 |         + MerkleElements<PublicKeyBytes>
+    |                          ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+105 |         + MerkleElements<dyn PublicKeyBytes>
+    |                          +++
+
+error[E0277]: the trait bound `eip7732::containers::BeaconBlockBody<P>: PostElectraBeaconBlockBody<P>` is not satisfied
+    --> types/src/traits.rs:1447:51
+     |
+1447 | impl<P: Preset> PostEip7732BeaconBlockBody<P> for Eip7732BeaconBlockBody<P> {
+     |                                                   ^^^^^^^^^^^^^^^^^^^^^^^^^ the trait `PostElectraBeaconBlockBody<P>` is not implemented for `eip7732::containers::BeaconBlockBody<P>`
+     |
+     = help: the following other types implement trait `PostElectraBeaconBlockBody<P>`:
+               electra::containers::BeaconBlockBody<P>
+               electra::containers::BlindedBeaconBlockBody<P>
+note: required by a bound in `PostEip7732BeaconBlockBody`
+    --> types/src/traits.rs:1442:50
+     |
+1442 | pub trait PostEip7732BeaconBlockBody<P: Preset>: PostElectraBeaconBlockBody<P> {
+     |                                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `PostEip7732BeaconBlockBody`
+
+error[E0782]: expected a type, found a trait
+  --> types/src/phase0/container_impls.rs:10:50
+   |
+10 |     pub const fn with_signature(self, signature: SignatureBytes) -> SignedBeaconBlockHeader {
+   |                                                  ^^^^^^^^^^^^^^
+   |
+   = note: `SignatureBytes` it is dyn-incompatible, so it can't be `dyn`
+help: use a new generic type parameter, constrained by `SignatureBytes`
+   |
+10 -     pub const fn with_signature(self, signature: SignatureBytes) -> SignedBeaconBlockHeader {
+10 +     pub const fn with_signature<T: SignatureBytes>(self, signature: T) -> SignedBeaconBlockHeader {
+   |
+help: you can also use an opaque type, but users won't be able to specify the type parameter when calling the `fn`, having to rely exclusively on type inference
+   |
+10 |     pub const fn with_signature(self, signature: impl SignatureBytes) -> SignedBeaconBlockHeader {
+   |                                                  ++++
+
+error[E0782]: expected a type, found a trait
+   --> types/src/combined.rs:410:47
+    |
+410 |         let slot_start = Offset::SIZE.get() + SignatureBytes::SIZE.get();
+    |                                               ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+410 |         let slot_start = Offset::SIZE.get() + <dyn SignatureBytes>::SIZE.get();
+    |                                               ++++               +
+
+error[E0782]: expected a type, found a trait
+   --> types/src/combined.rs:636:29
+    |
+636 |         self.with_signature(SignatureBytes::zero())
+    |                             ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+636 |         self.with_signature(<dyn SignatureBytes>::zero())
+    |                             ++++               +
+
+error[E0782]: expected a type, found a trait
+   --> types/src/combined.rs:840:28
+    |
+840 |                 signature: SignatureBytes::default(),
+    |                            ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+840 |                 signature: <dyn SignatureBytes>::default(),
+    |                            ++++               +
+
+error[E0782]: expected a type, found a trait
+   --> types/src/combined.rs:845:28
+    |
+845 |                 signature: SignatureBytes::default(),
+    |                            ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+845 |                 signature: <dyn SignatureBytes>::default(),
+    |                            ++++               +
+
+error[E0782]: expected a type, found a trait
+   --> types/src/combined.rs:850:28
+    |
+850 |                 signature: SignatureBytes::default(),
+    |                            ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+850 |                 signature: <dyn SignatureBytes>::default(),
+    |                            ++++               +
+
+error[E0782]: expected a type, found a trait
+   --> types/src/combined.rs:855:28
+    |
+855 |                 signature: SignatureBytes::default(),
+    |                            ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+855 |                 signature: <dyn SignatureBytes>::default(),
+    |                            ++++               +
+
+error[E0782]: expected a type, found a trait
+   --> types/src/combined.rs:860:28
+    |
+860 |                 signature: SignatureBytes::default(),
+    |                            ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+860 |                 signature: <dyn SignatureBytes>::default(),
+    |                            ++++               +
+
+error[E0782]: expected a type, found a trait
+   --> types/src/combined.rs:865:28
+    |
+865 |                 signature: SignatureBytes::default(),
+    |                            ^^^^^^^^^^^^^^
+    |
+help: you can add the `dyn` keyword if you want a trait object
+    |
+865 |                 signature: <dyn SignatureBytes>::default(),
+    |                            ++++               +
+
+error[E0308]: mismatched types
+   --> types/src/combined.rs:892:79
+    |
+892 |       const SIZE: Size = Size::for_untagged_union::<{ Phase::CARDINALITY - 2 }>([
+    |  ________________________------------------------------------------------------_^
+    | |                        |
+    | |                        arguments to this function are incorrect
+893 | |         BellatrixSignedBlindedBeaconBlock::<P>::SIZE,
+894 | |         CapellaSignedBlindedBeaconBlock::<P>::SIZE,
+895 | |         DenebSignedBlindedBeaconBlock::<P>::SIZE,
+896 | |         ElectraSignedBlindedBeaconBlock::<P>::SIZE,
+897 | |     ]);
+    | |_____^ expected an array with a size of 5, found one with a size of 4
+    |
+    = note: expected array `[Size; 5]`
+               found array `[Size; 4]`
+note: associated function defined here
+   --> /Users/greendoor/Gnotes/ssz/src/size.rs:11:18
+    |
+11  |     pub const fn for_untagged_union<const N: usize>(sizes: [Self; N]) -> Self {
+    |                  ^^^^^^^^^^^^^^^^^^
+
+error[E0308]: mismatched types
+    --> types/src/combined.rs:1016:79
+     |
+1016 |       const SIZE: Size = Size::for_untagged_union::<{ Phase::CARDINALITY - 2 }>([
+     |  ________________________------------------------------------------------------_^
+     | |                        |
+     | |                        arguments to this function are incorrect
+1017 | |         BellatrixBlindedBeaconBlock::<P>::SIZE,
+1018 | |         CapellaBlindedBeaconBlock::<P>::SIZE,
+1019 | |         DenebSignedBlindedBeaconBlock::<P>::SIZE,
+1020 | |         ElectraSignedBlindedBeaconBlock::<P>::SIZE,
+1021 | |     ]);
+     | |_____^ expected an array with a size of 5, found one with a size of 4
+     |
+     = note: expected array `[Size; 5]`
+                found array `[Size; 4]`
+note: associated function defined here
+    --> /Users/greendoor/Gnotes/ssz/src/size.rs:11:18
+     |
+11   |     pub const fn for_untagged_union<const N: usize>(sizes: [Self; N]) -> Self {
+     |                  ^^^^^^^^^^^^^^^^^^
+
+error[E0308]: mismatched types
+    --> types/src/combined.rs:1159:79
+     |
+1159 |       const SIZE: Size = Size::for_untagged_union::<{ Phase::CARDINALITY - 2 }>([
+     |  ________________________------------------------------------------------------_^
+     | |                        |
+     | |                        arguments to this function are incorrect
+1160 | |         BellatrixExecutionPayload::<P>::SIZE,
+1161 | |         CapellaExecutionPayload::<P>::SIZE,
+1162 | |         DenebExecutionPayload::<P>::SIZE,
+1163 | |         DenebExecutionPayload::<P>::SIZE,  // Eip7732 reuses Deneb
+1164 | |     ]);
+     | |_____^ expected an array with a size of 5, found one with a size of 4
+     |
+     = note: expected array `[Size; 5]`
+                found array `[Size; 4]`
+note: associated function defined here
+    --> /Users/greendoor/Gnotes/ssz/src/size.rs:11:18
+     |
+11   |     pub const fn for_untagged_union<const N: usize>(sizes: [Self; N]) -> Self {
+     |                  ^^^^^^^^^^^^^^^^^^
+
+error[E0308]: mismatched types
+    --> types/src/combined.rs:1271:79
+     |
+1271 |       const SIZE: Size = Size::for_untagged_union::<{ Phase::CARDINALITY - 2 }>([
+     |  ________________________------------------------------------------------------_^
+     | |                        |
+     | |                        arguments to this function are incorrect
+1272 | |         AltairLightClientBootstrap::<P>::SIZE,
+1273 | |         CapellaLightClientBootstrap::<P>::SIZE,
+1274 | |         DenebLightClientBootstrap::<P>::SIZE,
+1275 | |         ElectraLightClientBootstrap::<P>::SIZE,
+1276 | |     ]);
+     | |_____^ expected an array with a size of 5, found one with a size of 4
+     |
+     = note: expected array `[Size; 5]`
+                found array `[Size; 4]`
+note: associated function defined here
+    --> /Users/greendoor/Gnotes/ssz/src/size.rs:11:18
+     |
+11   |     pub const fn for_untagged_union<const N: usize>(sizes: [Self; N]) -> Self {
+     |                  ^^^^^^^^^^^^^^^^^^
+
+error[E0308]: mismatched types
+    --> types/src/combined.rs:1328:79
+     |
+1328 |       const SIZE: Size = Size::for_untagged_union::<{ Phase::CARDINALITY - 2 }>([
+     |  ________________________------------------------------------------------------_^
+     | |                        |
+     | |                        arguments to this function are incorrect
+1329 | |         AltairLightClientFinalityUpdate::<P>::SIZE,
+1330 | |         CapellaLightClientFinalityUpdate::<P>::SIZE,
+1331 | |         DenebLightClientFinalityUpdate::<P>::SIZE,
+1332 | |         ElectraLightClientFinalityUpdate::<P>::SIZE,
+1333 | |     ]);
+     | |_____^ expected an array with a size of 5, found one with a size of 4
+     |
+     = note: expected array `[Size; 5]`
+                found array `[Size; 4]`
+note: associated function defined here
+    --> /Users/greendoor/Gnotes/ssz/src/size.rs:11:18
+     |
+11   |     pub const fn for_untagged_union<const N: usize>(sizes: [Self; N]) -> Self {
+     |                  ^^^^^^^^^^^^^^^^^^
+
+error[E0308]: mismatched types
+    --> types/src/combined.rs:1385:79
+     |
+1385 |       const SIZE: Size = Size::for_untagged_union::<{ Phase::CARDINALITY - 2 }>([
+     |  ________________________------------------------------------------------------_^
+     | |                        |
+     | |                        arguments to this function are incorrect
+1386 | |         AltairLightClientOptimisticUpdate::<P>::SIZE,
+1387 | |         CapellaLightClientOptimisticUpdate::<P>::SIZE,
+1388 | |         DenebLightClientOptimisticUpdate::<P>::SIZE,
+1389 | |         ElectraLightClientOptimisticUpdate::<P>::SIZE,
+1390 | |     ]);
+     | |_____^ expected an array with a size of 5, found one with a size of 4
+     |
+     = note: expected array `[Size; 5]`
+                found array `[Size; 4]`
+note: associated function defined here
+    --> /Users/greendoor/Gnotes/ssz/src/size.rs:11:18
+     |
+11   |     pub const fn for_untagged_union<const N: usize>(sizes: [Self; N]) -> Self {
+     |                  ^^^^^^^^^^^^^^^^^^
+
+error[E0308]: mismatched types
+    --> types/src/combined.rs:1431:79
+     |
+1431 |       const SIZE: Size = Size::for_untagged_union::<{ Phase::CARDINALITY - 2 }>([
+     |  ________________________------------------------------------------------------_^
+     | |                        |
+     | |                        arguments to this function are incorrect
+1432 | |         AltairLightClientUpdate::<P>::SIZE,
+1433 | |         CapellaLightClientUpdate::<P>::SIZE,
+1434 | |         DenebLightClientUpdate::<P>::SIZE,
+1435 | |         ElectraLightClientUpdate::<P>::SIZE,
+1436 | |     ]);
+     | |_____^ expected an array with a size of 5, found one with a size of 4
+     |
+     = note: expected array `[Size; 5]`
+                found array `[Size; 4]`
+note: associated function defined here
+    --> /Users/greendoor/Gnotes/ssz/src/size.rs:11:18
+     |
+11   |     pub const fn for_untagged_union<const N: usize>(sizes: [Self; N]) -> Self {
+     |                  ^^^^^^^^^^^^^^^^^^
+
+error[E0308]: mismatched types
+    --> types/src/combined.rs:1529:79
+     |
+1529 |       const SIZE: Size = Size::for_untagged_union::<{ Phase::CARDINALITY - 4 }>([
+     |  ________________________------------------------------------------------------_^
+     | |                        |
+     | |                        arguments to this function are incorrect
+1530 | |         Phase0SignedAggregateAndProof::<P>::SIZE,
+1531 | |         ElectraSignedAggregateAndProof::<P>::SIZE,
+1532 | |     ]);
+     | |_____^ expected an array with a size of 3, found one with a size of 2
+     |
+     = note: expected array `[Size; 3]`
+                found array `[Size; 2]`
+note: associated function defined here
+    --> /Users/greendoor/Gnotes/ssz/src/size.rs:11:18
+     |
+11   |     pub const fn for_untagged_union<const N: usize>(sizes: [Self; N]) -> Self {
+     |                  ^^^^^^^^^^^^^^^^^^
+
+error[E0308]: mismatched types
+    --> types/src/combined.rs:1637:79
+     |
+1637 |       const SIZE: Size = Size::for_untagged_union::<{ Phase::CARDINALITY - 4 }>([
+     |  ________________________------------------------------------------------------_^
+     | |                        |
+     | |                        arguments to this function are incorrect
+1638 | |         Phase0Attestation::<P>::SIZE,
+1639 | |         ElectraAttestation::<P>::SIZE,
+1640 | |     ]);
+     | |_____^ expected an array with a size of 3, found one with a size of 2
+     |
+     = note: expected array `[Size; 3]`
+                found array `[Size; 2]`
+note: associated function defined here
+    --> /Users/greendoor/Gnotes/ssz/src/size.rs:11:18
+     |
+11   |     pub const fn for_untagged_union<const N: usize>(sizes: [Self; N]) -> Self {
+     |                  ^^^^^^^^^^^^^^^^^^
+
+error[E0308]: mismatched types
+    --> types/src/combined.rs:1745:79
+     |
+1745 |       const SIZE: Size = Size::for_untagged_union::<{ Phase::CARDINALITY - 4 }>([
+     |  ________________________------------------------------------------------------_^
+     | |                        |
+     | |                        arguments to this function are incorrect
+1746 | |         Phase0AttesterSlashing::<P>::SIZE,
+1747 | |         ElectraAttesterSlashing::<P>::SIZE,
+1748 | |     ]);
+     | |_____^ expected an array with a size of 3, found one with a size of 2
+     |
+     = note: expected array `[Size; 3]`
+                found array `[Size; 2]`
+note: associated function defined here
+    --> /Users/greendoor/Gnotes/ssz/src/size.rs:11:18
+     |
+11   |     pub const fn for_untagged_union<const N: usize>(sizes: [Self; N]) -> Self {
+     |                  ^^^^^^^^^^^^^^^^^^
+
+error[E0277]: the trait bound `eip7732::containers::BeaconBlockBody<P>: PostAltairBeaconBlockBody<P>` is not satisfied
+    --> types/src/traits.rs:1017:65
+     |
+1017 |     [Eip7732BeaconBlockBody<P>]          [None]           [Some(self)]     [None]              [None]          [Some(self)]     [Some(self)];
+     |                                                                 ^^^^ the trait `PostAltairBeaconBlockBody<P>` is not implemented for `eip7732::containers::BeaconBlockBody<P>`
+     |
+     = help: the following other types implement trait `PostAltairBeaconBlockBody<P>`:
+               altair::containers::BeaconBlockBody<P>
+               bellatrix::containers::BeaconBlockBody<P>
+               bellatrix::containers::BlindedBeaconBlockBody<P>
+               capella::containers::BeaconBlockBody<P>
+               capella::containers::BlindedBeaconBlockBody<P>
+               deneb::containers::BeaconBlockBody<P>
+               deneb::containers::BlindedBeaconBlockBody<P>
+               electra::containers::BeaconBlockBody<P>
+               electra::containers::BlindedBeaconBlockBody<P>
+     = note: required for the cast from `&eip7732::containers::BeaconBlockBody<P>` to `&dyn PostAltairBeaconBlockBody<P>`
+
+error[E0277]: the trait bound `eip7732::containers::BeaconBlockBody<P>: PostElectraBeaconBlockBody<P>` is not satisfied
+    --> types/src/traits.rs:1017:118
+     |
+1017 |     [Eip7732BeaconBlockBody<P>]          [None]           [Some(self)]     [None]              [None]          [Some(self)]     [Some(self)];
+     |                                                                                                                      ^^^^ the trait `PostElectraBeaconBlockBody<P>` is not implemented for `eip7732::containers::BeaconBlockBody<P>`
+     |
+     = help: the following other types implement trait `PostElectraBeaconBlockBody<P>`:
+               electra::containers::BeaconBlockBody<P>
+               electra::containers::BlindedBeaconBlockBody<P>
+     = note: required for the cast from `&eip7732::containers::BeaconBlockBody<P>` to `&dyn PostElectraBeaconBlockBody<P>`
+
+error[E0277]: the trait bound `<P as Preset>::BuilderPendingPaymentsLimit: PowerOfTwo` is not satisfied
+   --> types/src/eip7732/beacon_state.rs:110:5
+    |
+25  | #[derive(Clone, Debug, Default, Derivative, Deserialize, Serialize, Ssz)]
+    |                        ------- in this derive macro expansion
+...
+110 |     pub builder_pending_payments: BuilderPendingPayments<P>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the trait `PowerOfTwo` is not implemented for `<P as Preset>::BuilderPendingPaymentsLimit`
+    |
+    = note: required for `<P as Preset>::BuilderPendingPaymentsLimit` to implement `PersistentVectorElements<BuilderPendingPayment, UInt<UTerm, B1>>`
+    = note: required for `PersistentVector<BuilderPendingPayment, <P as Preset>::BuilderPendingPaymentsLimit, UInt<UTerm, B1>>` to implement `Default`
+    = note: this error originates in the derive macro `Default` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `<P as Preset>::BuilderPendingPaymentsLimit: Cmp<UInt<UTerm, B1>>` is not satisfied
+   --> types/src/eip7732/beacon_state.rs:110:5
+    |
+25  | #[derive(Clone, Debug, Default, Derivative, Deserialize, Serialize, Ssz)]
+    |                        ------- in this derive macro expansion
+...
+110 |     pub builder_pending_payments: BuilderPendingPayments<P>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the trait `Cmp<UInt<UTerm, B1>>` is not implemented for `<P as Preset>::BuilderPendingPaymentsLimit`
+    |
+    = note: required for `<P as Preset>::BuilderPendingPaymentsLimit` to implement `IsGreaterOrEqual<UInt<UTerm, B1>>`
+    = note: required for `<P as Preset>::BuilderPendingPaymentsLimit` to implement `PersistentVectorElements<BuilderPendingPayment, UInt<UTerm, B1>>`
+    = note: required for `PersistentVector<BuilderPendingPayment, <P as Preset>::BuilderPendingPaymentsLimit, UInt<UTerm, B1>>` to implement `Default`
+    = note: this error originates in the derive macro `Default` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `<P as Preset>::BuilderPendingPaymentsLimit: PowerOfTwo` is not satisfied
+    --> types/src/eip7732/beacon_state.rs:110:35
+     |
+110  |     pub builder_pending_payments: BuilderPendingPayments<P>,
+     |                                   ^^^^^^^^^^^^^^^^^^^^^^^^^ the trait `PowerOfTwo` is not implemented for `<P as Preset>::BuilderPendingPaymentsLimit`
+     |
+     = note: required for `<P as Preset>::BuilderPendingPaymentsLimit` to implement `PersistentVectorElements<BuilderPendingPayment, UInt<UTerm, B1>>`
+     = note: required for `PersistentVector<BuilderPendingPayment, <P as Preset>::BuilderPendingPaymentsLimit, UInt<UTerm, B1>>` to implement `Deserialize<'_>`
+note: required by a bound in `next_element`
+    --> /Users/greendoor/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.219/src/de/mod.rs:1732:12
+     |
+1730 |     fn next_element<T>(&mut self) -> Result<Option<T>, Self::Error>
+     |        ------------ required by a bound in this associated function
+1731 |     where
+1732 |         T: Deserialize<'de>,
+     |            ^^^^^^^^^^^^^^^^ required by this bound in `SeqAccess::next_element`
+
+error[E0277]: the trait bound `<P as Preset>::BuilderPendingPaymentsLimit: Cmp<UInt<UTerm, B1>>` is not satisfied
+    --> types/src/eip7732/beacon_state.rs:110:35
+     |
+110  |     pub builder_pending_payments: BuilderPendingPayments<P>,
+     |                                   ^^^^^^^^^^^^^^^^^^^^^^^^^ the trait `Cmp<UInt<UTerm, B1>>` is not implemented for `<P as Preset>::BuilderPendingPaymentsLimit`
+     |
+     = note: required for `<P as Preset>::BuilderPendingPaymentsLimit` to implement `IsGreaterOrEqual<UInt<UTerm, B1>>`
+     = note: required for `<P as Preset>::BuilderPendingPaymentsLimit` to implement `PersistentVectorElements<BuilderPendingPayment, UInt<UTerm, B1>>`
+     = note: required for `PersistentVector<BuilderPendingPayment, <P as Preset>::BuilderPendingPaymentsLimit, UInt<UTerm, B1>>` to implement `Deserialize<'_>`
+note: required by a bound in `next_element`
+    --> /Users/greendoor/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.219/src/de/mod.rs:1732:12
+     |
+1730 |     fn next_element<T>(&mut self) -> Result<Option<T>, Self::Error>
+     |        ------------ required by a bound in this associated function
+1731 |     where
+1732 |         T: Deserialize<'de>,
+     |            ^^^^^^^^^^^^^^^^ required by this bound in `SeqAccess::next_element`
+
+error[E0277]: the trait bound `<P as Preset>::BuilderPendingPaymentsLimit: PowerOfTwo` is not satisfied
+    --> types/src/eip7732/beacon_state.rs:110:35
+     |
+110  |     pub builder_pending_payments: BuilderPendingPayments<P>,
+     |                                   ^^^^^^^^^^^^^^^^^^^^^^^^^ the trait `PowerOfTwo` is not implemented for `<P as Preset>::BuilderPendingPaymentsLimit`
+     |
+     = note: required for `<P as Preset>::BuilderPendingPaymentsLimit` to implement `PersistentVectorElements<BuilderPendingPayment, UInt<UTerm, B1>>`
+     = note: required for `PersistentVector<BuilderPendingPayment, <P as Preset>::BuilderPendingPaymentsLimit, UInt<UTerm, B1>>` to implement `Deserialize<'_>`
+note: required by a bound in `next_value`
+    --> /Users/greendoor/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.219/src/de/mod.rs:1871:12
+     |
+1869 |     fn next_value<V>(&mut self) -> Result<V, Self::Error>
+     |        ---------- required by a bound in this associated function
+1870 |     where
+1871 |         V: Deserialize<'de>,
+     |            ^^^^^^^^^^^^^^^^ required by this bound in `MapAccess::next_value`
+
+error[E0277]: the trait bound `<P as Preset>::BuilderPendingPaymentsLimit: Cmp<UInt<UTerm, B1>>` is not satisfied
+    --> types/src/eip7732/beacon_state.rs:110:35
+     |
+110  |     pub builder_pending_payments: BuilderPendingPayments<P>,
+     |                                   ^^^^^^^^^^^^^^^^^^^^^^^^^ the trait `Cmp<UInt<UTerm, B1>>` is not implemented for `<P as Preset>::BuilderPendingPaymentsLimit`
+     |
+     = note: required for `<P as Preset>::BuilderPendingPaymentsLimit` to implement `IsGreaterOrEqual<UInt<UTerm, B1>>`
+     = note: required for `<P as Preset>::BuilderPendingPaymentsLimit` to implement `PersistentVectorElements<BuilderPendingPayment, UInt<UTerm, B1>>`
+     = note: required for `PersistentVector<BuilderPendingPayment, <P as Preset>::BuilderPendingPaymentsLimit, UInt<UTerm, B1>>` to implement `Deserialize<'_>`
+note: required by a bound in `next_value`
+    --> /Users/greendoor/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.219/src/de/mod.rs:1871:12
+     |
+1869 |     fn next_value<V>(&mut self) -> Result<V, Self::Error>
+     |        ---------- required by a bound in this associated function
+1870 |     where
+1871 |         V: Deserialize<'de>,
+     |            ^^^^^^^^^^^^^^^^ required by this bound in `MapAccess::next_value`
+
+error[E0277]: the trait bound `<P as Preset>::BuilderPendingPaymentsLimit: PowerOfTwo` is not satisfied
+  --> types/src/eip7732/beacon_state.rs:25:45
+   |
+25 | #[derive(Clone, Debug, Default, Derivative, Deserialize, Serialize, Ssz)]
+   |                                             ^^^^^^^^^^^ the trait `PowerOfTwo` is not implemented for `<P as Preset>::BuilderPendingPaymentsLimit`
+   |
+   = note: required for `<P as Preset>::BuilderPendingPaymentsLimit` to implement `PersistentVectorElements<BuilderPendingPayment, UInt<UTerm, B1>>`
+   = note: required for `PersistentVector<BuilderPendingPayment, <P as Preset>::BuilderPendingPaymentsLimit, UInt<UTerm, B1>>` to implement `Deserialize<'_>`
+note: required by a bound in `combined::_::_serde::__private::de::missing_field`
+  --> /Users/greendoor/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.219/src/private/de.rs:25:8
+   |
+23 | pub fn missing_field<'de, V, E>(field: &'static str) -> Result<V, E>
+   |        ------------- required by a bound in this function
+24 | where
+25 |     V: Deserialize<'de>,
+   |        ^^^^^^^^^^^^^^^^ required by this bound in `missing_field`
+   = note: this error originates in the derive macro `Deserialize` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `<P as Preset>::SlotsPerHistoricalRoot: typenum::NonZero` is not satisfied
+   --> types/src/eip7732/beacon_state.rs:109:41
+    |
+109 |     pub execution_payload_availability: BitVector<<P as Preset>::SlotsPerHistoricalRoot>,
+    |                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the trait `typenum::NonZero` is not implemented for `<P as Preset>::SlotsPerHistoricalRoot`
+    |
+    = note: required for `BitVector<<P as Preset>::SlotsPerHistoricalRoot>` to implement `SszSize`
+help: consider further restricting the associated type
+    |
+28  | pub struct BeaconState<P: Preset> where <P as Preset>::SlotsPerHistoricalRoot: typenum::NonZero {
+    |                                   +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+error[E0277]: the trait bound `<P as Preset>::SlotsPerHistoricalRoot: typenum::NonZero` is not satisfied
+   --> types/src/eip7732/beacon_state.rs:109:41
+    |
+109 |     pub execution_payload_availability: BitVector<<P as Preset>::SlotsPerHistoricalRoot>,
+    |                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the trait `typenum::NonZero` is not implemented for `<P as Preset>::SlotsPerHistoricalRoot`
+    |
+    = note: required for `BitVector<<P as Preset>::SlotsPerHistoricalRoot>` to implement `SszSize`
+
+error[E0277]: the trait bound `<P as Preset>::SlotsPerHistoricalRoot: typenum::NonZero` is not satisfied
+  --> types/src/eip7732/beacon_state.rs:25:69
+   |
+25 | #[derive(Clone, Debug, Default, Derivative, Deserialize, Serialize, Ssz)]
+   |                                                                     ^^^ the trait `typenum::NonZero` is not implemented for `<P as Preset>::SlotsPerHistoricalRoot`
+   |
+   = note: required for `BitVector<<P as Preset>::SlotsPerHistoricalRoot>` to implement `SszSize`
+note: required by a bound in `from_ssz_unchecked`
+  --> /Users/greendoor/Gnotes/ssz/src/porcelain.rs:24:23
+   |
+24 | pub trait SszRead<C>: SszSize + Sized {
+   |                       ^^^^^^^ required by this bound in `SszRead::from_ssz_unchecked`
+...
+30 |     fn from_ssz_unchecked(context: &C, bytes: &[u8]) -> Result<Self, ReadError>;
+   |        ------------------ required by a bound in this associated function
+   = note: this error originates in the derive macro `Ssz` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `<P as Preset>::BuilderPendingPaymentsLimit: PowerOfTwo` is not satisfied
+  --> types/src/eip7732/beacon_state.rs:25:69
+   |
+25 | #[derive(Clone, Debug, Default, Derivative, Deserialize, Serialize, Ssz)]
+   |                                                                     ^^^ the trait `PowerOfTwo` is not implemented for `<P as Preset>::BuilderPendingPaymentsLimit`
+   |
+   = note: required for `<P as Preset>::BuilderPendingPaymentsLimit` to implement `PersistentVectorElements<BuilderPendingPayment, UInt<UTerm, B1>>`
+   = note: required for `PersistentVector<BuilderPendingPayment, <P as Preset>::BuilderPendingPaymentsLimit, UInt<UTerm, B1>>` to implement `SszRead<C>`
+   = note: this error originates in the derive macro `Ssz` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `<P as Preset>::BuilderPendingPaymentsLimit: Cmp<UInt<UTerm, B1>>` is not satisfied
+  --> types/src/eip7732/beacon_state.rs:25:69
+   |
+25 | #[derive(Clone, Debug, Default, Derivative, Deserialize, Serialize, Ssz)]
+   |                                                                     ^^^ the trait `Cmp<UInt<UTerm, B1>>` is not implemented for `<P as Preset>::BuilderPendingPaymentsLimit`
+   |
+   = note: required for `<P as Preset>::BuilderPendingPaymentsLimit` to implement `IsGreaterOrEqual<UInt<UTerm, B1>>`
+   = note: required for `<P as Preset>::BuilderPendingPaymentsLimit` to implement `PersistentVectorElements<BuilderPendingPayment, UInt<UTerm, B1>>`
+   = note: required for `PersistentVector<BuilderPendingPayment, <P as Preset>::BuilderPendingPaymentsLimit, UInt<UTerm, B1>>` to implement `SszRead<C>`
+   = note: this error originates in the derive macro `Ssz` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `<P as Preset>::SlotsPerHistoricalRoot: typenum::NonZero` is not satisfied
+  --> types/src/eip7732/beacon_state.rs:25:69
+   |
+25 | #[derive(Clone, Debug, Default, Derivative, Deserialize, Serialize, Ssz)]
+   |                                                                     ^^^ the trait `typenum::NonZero` is not implemented for `<P as Preset>::SlotsPerHistoricalRoot`
+   |
+   = note: required for `BitVector<<P as Preset>::SlotsPerHistoricalRoot>` to implement `SszSize`
+note: required by a bound in `write_fixed`
+  --> /Users/greendoor/Gnotes/ssz/src/porcelain.rs:58:21
+   |
+58 | pub trait SszWrite: SszSize {
+   |                     ^^^^^^^ required by this bound in `SszWrite::write_fixed`
+59 |     // The panics could be avoided with some type-level programming, but it's not worth the trouble.
+60 |     fn write_fixed(&self, _bytes: &mut [u8]) {
+   |        ----------- required by a bound in this associated function
+   = note: this error originates in the derive macro `Ssz` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: cannot add `UInt<UInt<UInt<UTerm, B1>, B1>, B1>` to `<P as Preset>::SlotsPerHistoricalRoot`
+  --> types/src/eip7732/beacon_state.rs:25:69
+   |
+25 | #[derive(Clone, Debug, Default, Derivative, Deserialize, Serialize, Ssz)]
+   |                                                                     ^^^ no implementation for `<P as Preset>::SlotsPerHistoricalRoot + UInt<UInt<UInt<UTerm, B1>, B1>, B1>`
+   |
+   = help: the trait `derive_more::Add<UInt<UInt<UInt<UTerm, B1>, B1>, B1>>` is not implemented for `<P as Preset>::SlotsPerHistoricalRoot`
+   = note: required for `<P as Preset>::SlotsPerHistoricalRoot` to implement `MerkleBits`
+   = note: required for `BitVector<<P as Preset>::SlotsPerHistoricalRoot>` to implement `SszHash`
+   = note: this error originates in the derive macro `Ssz` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `<P as Preset>::PtcSize: typenum::NonZero` is not satisfied
+   --> types/src/eip7732/containers.rs:112:27
+    |
+112 |     pub aggregation_bits: BitVector<P::PtcSize>,  // PTC_SIZE = 512
+    |                           ^^^^^^^^^^^^^^^^^^^^^ the trait `typenum::NonZero` is not implemented for `<P as Preset>::PtcSize`
+    |
+    = note: required for `BitVector<<P as Preset>::PtcSize>` to implement `SszSize`
+help: consider further restricting the associated type
+    |
+111 | pub struct PayloadAttestation<P: Preset> where <P as Preset>::PtcSize: typenum::NonZero {
+    |                                          ++++++++++++++++++++++++++++++++++++++++++++++
+
+error[E0277]: the trait bound `<P as Preset>::PtcSize: typenum::NonZero` is not satisfied
+   --> types/src/eip7732/containers.rs:112:27
+    |
+112 |     pub aggregation_bits: BitVector<P::PtcSize>,  // PTC_SIZE = 512
+    |                           ^^^^^^^^^^^^^^^^^^^^^ the trait `typenum::NonZero` is not implemented for `<P as Preset>::PtcSize`
+    |
+    = note: required for `BitVector<<P as Preset>::PtcSize>` to implement `SszSize`
+
+error[E0277]: the trait bound `<P as Preset>::PtcSize: typenum::NonZero` is not satisfied
+   --> types/src/eip7732/containers.rs:109:63
+    |
+109 | #[derive(Clone, PartialEq, Eq, Debug, Deserialize, Serialize, Ssz)]
+    |                                                               ^^^ the trait `typenum::NonZero` is not implemented for `<P as Preset>::PtcSize`
+    |
+    = note: required for `BitVector<<P as Preset>::PtcSize>` to implement `SszSize`
+note: required by a bound in `from_ssz_unchecked`
+   --> /Users/greendoor/Gnotes/ssz/src/porcelain.rs:24:23
+    |
+24  | pub trait SszRead<C>: SszSize + Sized {
+    |                       ^^^^^^^ required by this bound in `SszRead::from_ssz_unchecked`
+...
+30  |     fn from_ssz_unchecked(context: &C, bytes: &[u8]) -> Result<Self, ReadError>;
+    |        ------------------ required by a bound in this associated function
+    = note: this error originates in the derive macro `Ssz` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `<P as Preset>::PtcSize: typenum::NonZero` is not satisfied
+   --> types/src/eip7732/containers.rs:109:63
+    |
+109 | #[derive(Clone, PartialEq, Eq, Debug, Deserialize, Serialize, Ssz)]
+    |                                                               ^^^ the trait `typenum::NonZero` is not implemented for `<P as Preset>::PtcSize`
+    |
+    = note: required for `BitVector<<P as Preset>::PtcSize>` to implement `SszSize`
+note: required by a bound in `write_fixed`
+   --> /Users/greendoor/Gnotes/ssz/src/porcelain.rs:58:21
+    |
+58  | pub trait SszWrite: SszSize {
+    |                     ^^^^^^^ required by this bound in `SszWrite::write_fixed`
+59  |     // The panics could be avoided with some type-level programming, but it's not worth the trouble.
+60  |     fn write_fixed(&self, _bytes: &mut [u8]) {
+    |        ----------- required by a bound in this associated function
+    = note: this error originates in the derive macro `Ssz` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `SignedExecutionPayloadHeader: Default` is not satisfied
+   --> types/src/eip7732/containers.rs:181:5
+    |
+162 | #[derive(Clone, PartialEq, Eq, Debug, Default, Deserialize, Serialize, Ssz)]
+    |                                       ------- in this derive macro expansion
+...
+181 |     pub signed_execution_payload_header: SignedExecutionPayloadHeader,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the trait `Default` is not implemented for `SignedExecutionPayloadHeader`
+    |
+    = note: this error originates in the derive macro `Default` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: unused import: `traits::SignatureBytes`
+ --> types/src/altair/container_impls.rs:1:11
+  |
+1 | use bls::{traits::SignatureBytes as _, AggregateSignatureBytes};
+  |           ^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+error[E0004]: non-exhaustive patterns: `&combined::SignedBeaconBlock::Eip7732(_)` not covered
+   --> types/src/combined.rs:433:15
+    |
+433 |         match self {
+    |               ^^^^ pattern `&combined::SignedBeaconBlock::Eip7732(_)` not covered
+    |
+note: `combined::SignedBeaconBlock<P>` defined here
+   --> types/src/combined.rs:375:10
+    |
+375 | pub enum SignedBeaconBlock<P: Preset> {
+    |          ^^^^^^^^^^^^^^^^^
+...
+382 |     Eip7732(Eip7732SignedBeaconBlock<P>),
+    |     ------- not covered
+    = note: the matched value is of type `&combined::SignedBeaconBlock<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+439 ~             Self::Electra(block) => block.write_variable(bytes),
+440 ~             &combined::SignedBeaconBlock::Eip7732(_) => todo!(),
+    |
+
+error[E0004]: non-exhaustive patterns: `&combined::SignedBeaconBlock::Eip7732(_)` not covered
+   --> types/src/combined.rs:448:15
+    |
+448 |         match self {
+    |               ^^^^ pattern `&combined::SignedBeaconBlock::Eip7732(_)` not covered
+    |
+note: `combined::SignedBeaconBlock<P>` defined here
+   --> types/src/combined.rs:375:10
+    |
+375 | pub enum SignedBeaconBlock<P: Preset> {
+    |          ^^^^^^^^^^^^^^^^^
+...
+382 |     Eip7732(Eip7732SignedBeaconBlock<P>),
+    |     ------- not covered
+    = note: the matched value is of type `&combined::SignedBeaconBlock<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+454 ~             Self::Electra(block) => block.hash_tree_root(),
+455 ~             &combined::SignedBeaconBlock::Eip7732(_) => todo!(),
+    |
+
+error[E0004]: non-exhaustive patterns: `&combined::SignedBeaconBlock::Eip7732(_)` not covered
+   --> types/src/combined.rs:508:15
+    |
+508 |         match self {
+    |               ^^^^ pattern `&combined::SignedBeaconBlock::Eip7732(_)` not covered
+    |
+note: `combined::SignedBeaconBlock<P>` defined here
+   --> types/src/combined.rs:375:10
+    |
+375 | pub enum SignedBeaconBlock<P: Preset> {
+    |          ^^^^^^^^^^^^^^^^^
+...
+382 |     Eip7732(Eip7732SignedBeaconBlock<P>),
+    |     ------- not covered
+    = note: the matched value is of type `&combined::SignedBeaconBlock<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+514 ~             Self::Electra(_) => Phase::Electra,
+515 ~             &combined::SignedBeaconBlock::Eip7732(_) => todo!(),
+    |
+
+error[E0004]: non-exhaustive patterns: `&combined::BeaconBlock::Eip7732(_)` not covered
+   --> types/src/combined.rs:585:15
+    |
+585 |         match self {
+    |               ^^^^ pattern `&combined::BeaconBlock::Eip7732(_)` not covered
+    |
+note: `combined::BeaconBlock<P>` defined here
+   --> types/src/combined.rs:532:10
+    |
+532 | pub enum BeaconBlock<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+539 |     Eip7732(Eip7732BeaconBlock<P>),
+    |     ------- not covered
+    = note: the matched value is of type `&combined::BeaconBlock<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+591 ~             Self::Electra(block) => block.write_variable(bytes),
+592 ~             &combined::BeaconBlock::Eip7732(_) => todo!(),
+    |
+
+error[E0004]: non-exhaustive patterns: `&combined::BeaconBlock::Eip7732(_)` not covered
+   --> types/src/combined.rs:600:15
+    |
+600 |         match self {
+    |               ^^^^ pattern `&combined::BeaconBlock::Eip7732(_)` not covered
+    |
+note: `combined::BeaconBlock<P>` defined here
+   --> types/src/combined.rs:532:10
+    |
+532 | pub enum BeaconBlock<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+539 |     Eip7732(Eip7732BeaconBlock<P>),
+    |     ------- not covered
+    = note: the matched value is of type `&combined::BeaconBlock<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+606 ~             Self::Electra(block) => block.hash_tree_root(),
+607 ~             &combined::BeaconBlock::Eip7732(_) => todo!(),
+    |
+
+error[E0004]: non-exhaustive patterns: `&mut combined::BeaconBlock::Eip7732(_)` not covered
+   --> types/src/combined.rs:613:15
+    |
+613 |         match self {
+    |               ^^^^ pattern `&mut combined::BeaconBlock::Eip7732(_)` not covered
+    |
+note: `combined::BeaconBlock<P>` defined here
+   --> types/src/combined.rs:532:10
+    |
+532 | pub enum BeaconBlock<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+539 |     Eip7732(Eip7732BeaconBlock<P>),
+    |     ------- not covered
+    = note: the matched value is of type `&mut combined::BeaconBlock<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+631 ~             },
+632 +             &mut combined::BeaconBlock::Eip7732(_) => todo!()
+    |
+
+error[E0004]: non-exhaustive patterns: `&mut combined::BeaconBlock::Eip7732(_)` not covered
+   --> types/src/combined.rs:652:15
+    |
+652 |         match &mut self {
+    |               ^^^^^^^^^ pattern `&mut combined::BeaconBlock::Eip7732(_)` not covered
+    |
+note: `combined::BeaconBlock<P>` defined here
+   --> types/src/combined.rs:532:10
+    |
+532 | pub enum BeaconBlock<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+539 |     Eip7732(Eip7732BeaconBlock<P>),
+    |     ------- not covered
+    = note: the matched value is of type `&mut combined::BeaconBlock<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+658 ~             Self::Electra(block) => block.state_root = state_root,
+659 ~             &mut combined::BeaconBlock::Eip7732(_) => todo!(),
+    |
+
+error[E0004]: non-exhaustive patterns: `combined::BeaconBlock::Eip7732(_)` not covered
+   --> types/src/combined.rs:780:15
+    |
+780 |         match self {
+    |               ^^^^ pattern `combined::BeaconBlock::Eip7732(_)` not covered
+    |
+note: `combined::BeaconBlock<P>` defined here
+   --> types/src/combined.rs:532:10
+    |
+532 | pub enum BeaconBlock<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+539 |     Eip7732(Eip7732BeaconBlock<P>),
+    |     ------- not covered
+    = note: the matched value is of type `combined::BeaconBlock<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+787 ~             Self::Electra(block) => Some(ExecutionPayload::Deneb(block.body.execution_payload)),
+788 ~             combined::BeaconBlock::Eip7732(_) => todo!(),
+    |
+
+error[E0004]: non-exhaustive patterns: `&combined::BeaconBlock::Eip7732(_)` not covered
+   --> types/src/combined.rs:792:15
+    |
+792 |         match self {
+    |               ^^^^ pattern `&combined::BeaconBlock::Eip7732(_)` not covered
+    |
+note: `combined::BeaconBlock<P>` defined here
+   --> types/src/combined.rs:532:10
+    |
+532 | pub enum BeaconBlock<P: Preset> {
+    |          ^^^^^^^^^^^
+...
+539 |     Eip7732(Eip7732BeaconBlock<P>),
+    |     ------- not covered
+    = note: the matched value is of type `&combined::BeaconBlock<P>`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+798 ~             Self::Electra(_) => Phase::Electra,
+799 ~             &combined::BeaconBlock::Eip7732(_) => todo!(),
+    |
+
+error[E0004]: non-exhaustive patterns: `Phase::Eip7732` not covered
+   --> types/src/config.rs:737:15
+    |
+737 |         match phase {
+    |               ^^^^^ pattern `Phase::Eip7732` not covered
+    |
+note: `Phase` defined here
+   --> types/src/nonstandard.rs:58:10
+    |
+58  | pub enum Phase {
+    |          ^^^^^
+...
+65  |     Eip7732,
+    |     ------- not covered
+    = note: the matched value is of type `Phase`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+743 ~             Phase::Electra => self.electra_fork_version,
+744 ~             Phase::Eip7732 => todo!(),
+    |
+
+error[E0004]: non-exhaustive patterns: `Phase::Eip7732` not covered
+   --> types/src/config.rs:809:15
+    |
+809 |         match phase {
+    |               ^^^^^ pattern `Phase::Eip7732` not covered
+    |
+note: `Phase` defined here
+   --> types/src/nonstandard.rs:58:10
+    |
+58  | pub enum Phase {
+    |          ^^^^^
+...
+65  |     Eip7732,
+    |     ------- not covered
+    = note: the matched value is of type `Phase`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+813 ~             Phase::Deneb | Phase::Electra => self.max_request_blocks_deneb,
+814 ~             Phase::Eip7732 => todo!(),
+    |
+
+error[E0004]: non-exhaustive patterns: `Phase::Eip7732` not covered
+   --> types/src/config.rs:819:15
+    |
+819 |         match phase {
+    |               ^^^^^ pattern `Phase::Eip7732` not covered
+    |
+note: `Phase` defined here
+   --> types/src/nonstandard.rs:58:10
+    |
+58  | pub enum Phase {
+    |          ^^^^^
+...
+65  |     Eip7732,
+    |     ------- not covered
+    = note: the matched value is of type `Phase`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+823 ~             Phase::Electra => self.blob_sidecar_subnet_count_electra,
+824 ~             Phase::Eip7732 => todo!(),
+    |
+
+error[E0004]: non-exhaustive patterns: `Phase::Eip7732` not covered
+   --> types/src/config.rs:829:15
+    |
+829 |         match phase {
+    |               ^^^^^ pattern `Phase::Eip7732` not covered
+    |
+note: `Phase` defined here
+   --> types/src/nonstandard.rs:58:10
+    |
+58  | pub enum Phase {
+    |          ^^^^^
+...
+65  |     Eip7732,
+    |     ------- not covered
+    = note: the matched value is of type `Phase`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+833 ~             Phase::Electra => self.max_request_blob_sidecars_electra,
+834 ~             Phase::Eip7732 => todo!(),
+    |
+
+Some errors have detailed explanations: E0004, E0277, E0308, E0432, E0782.
+For more information about an error, try `rustc --explain E0004`.
+warning: `types` (lib) generated 1 warning
+error: could not compile `types` (lib) due to 513 previous errors; 1 warning emitted
+➜  Gnotes git:(eip7732) ✗ 
+
+
+
+
+
+

@@ -147,7 +147,7 @@ pub struct BuilderPendingPayment {
 
 // Beacon Block Containers
 
-#[derive(Clone, PartialEq, Eq, Debug, Default, Deserialize, Serialize, Ssz)]
+#[derive(Clone, PartialEq, Eq, Debug, Deserialize, Serialize, Ssz)]
 #[serde(bound = "", deny_unknown_fields)]
 pub struct BeaconBlock<P: Preset> {
     #[serde(with = "serde_utils::string_or_native")]
@@ -159,7 +159,7 @@ pub struct BeaconBlock<P: Preset> {
     pub body: BeaconBlockBody<P>,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Default, Deserialize, Serialize, Ssz)]
+#[derive(Clone, PartialEq, Eq, Debug, Deserialize, Serialize, Ssz)]
 #[serde(bound = "", deny_unknown_fields)]
 pub struct BeaconBlockBody<P: Preset> {
     pub randao_reveal: SignatureBytes,

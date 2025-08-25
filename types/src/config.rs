@@ -741,6 +741,7 @@ impl Config {
             Phase::Capella => self.capella_fork_version,
             Phase::Deneb => self.deneb_fork_version,
             Phase::Electra => self.electra_fork_version,
+            Phase::Eip7732 => self.electra_fork_version, // EIP-7732 uses same version as Electra
         }
     }
 
@@ -810,7 +811,7 @@ impl Config {
             Phase::Phase0 | Phase::Altair | Phase::Bellatrix | Phase::Capella => {
                 self.max_request_blocks
             }
-            Phase::Deneb | Phase::Electra => self.max_request_blocks_deneb,
+            Phase::Deneb | Phase::Electra | Phase::Eip7732 => self.max_request_blocks_deneb,
         }
     }
 
@@ -820,7 +821,7 @@ impl Config {
             Phase::Phase0 | Phase::Altair | Phase::Bellatrix | Phase::Capella | Phase::Deneb => {
                 self.blob_sidecar_subnet_count
             }
-            Phase::Electra => self.blob_sidecar_subnet_count_electra,
+            Phase::Electra | Phase::Eip7732 => self.blob_sidecar_subnet_count_electra,
         }
     }
 
@@ -830,7 +831,7 @@ impl Config {
             Phase::Phase0 | Phase::Altair | Phase::Bellatrix | Phase::Capella | Phase::Deneb => {
                 self.max_request_blob_sidecars
             }
-            Phase::Electra => self.max_request_blob_sidecars_electra,
+            Phase::Electra | Phase::Eip7732 => self.max_request_blob_sidecars_electra,
         }
     }
 
