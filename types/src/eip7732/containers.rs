@@ -20,7 +20,7 @@ use crate::{
 
 // Core Execution Payload Containers
 
-#[derive(Clone, PartialEq, Eq, Debug, Deserialize, Serialize, Ssz)]
+#[derive(Clone, PartialEq, Eq, Default, Debug, Deserialize, Serialize, Ssz)]
 #[serde(deny_unknown_fields)]
 pub struct ExecutionPayloadHeader {
     pub parent_block_hash: H256,
@@ -38,7 +38,7 @@ pub struct ExecutionPayloadHeader {
     pub blob_kzg_commitments_root: H256,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Deserialize, Serialize, Ssz)]
+#[derive(Clone, PartialEq, Eq, Default, Debug, Deserialize, Serialize, Ssz)]
 #[serde(deny_unknown_fields)]
 pub struct SignedExecutionPayloadHeader {
     pub message: ExecutionPayloadHeader,
@@ -147,7 +147,7 @@ pub struct BuilderPendingPayment {
 
 // Beacon Block Containers
 
-#[derive(Clone, PartialEq, Eq, Debug, Deserialize, Serialize, Ssz)]
+#[derive(Clone, PartialEq, Eq, Default, Debug, Deserialize, Serialize, Ssz)]
 #[serde(bound = "", deny_unknown_fields)]
 pub struct BeaconBlock<P: Preset> {
     #[serde(with = "serde_utils::string_or_native")]
@@ -159,7 +159,7 @@ pub struct BeaconBlock<P: Preset> {
     pub body: BeaconBlockBody<P>,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Deserialize, Serialize, Ssz)]
+#[derive(Clone, PartialEq, Eq, Default, Debug, Deserialize, Serialize, Ssz)]
 #[serde(bound = "", deny_unknown_fields)]
 pub struct BeaconBlockBody<P: Preset> {
     pub randao_reveal: SignatureBytes,
