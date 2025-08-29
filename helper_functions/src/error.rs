@@ -17,6 +17,8 @@ pub(crate) enum Error {
     BlobsForPreDenebBlock { root: H256, slot: Slot },
     #[error("committee index is out of bounds")]
     CommitteeIndexOutOfBounds,
+    #[error("payload status index out of bounds: {0}")]
+    ExecutionPayloadStatusIndexOutOfBounds(usize),
     #[error("aggregation bitlist length {aggregation_bitlist_length} does not match committee length {committee_length}")]
     CommitteeLengthMismatch {
         aggregation_bitlist_length: usize,

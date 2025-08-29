@@ -369,6 +369,16 @@ impl<P: Preset> BeaconState<P> {
             Self::Eip7732(state) => Some(state.deposit_requests_start_index),
         }
     }
+
+    /// Return true if the parent block was full (both beacon block and execution payload were present).
+    pub fn is_parent_block_full(&self) -> bool {
+        match self {
+            Self::Phase0(_) | Self::Altair(_) => false,
+            Self::Bellatrix(_) | Self::Capella(_) | Self::Deneb(_) | Self::Electra(_) => true,
+            Self::Eip7732(state) => state.latest_execution_payload_header.block_hash == state.latest_block_hash,
+        }
+    }
+
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, From, VariantCount, Deserialize, Serialize)]

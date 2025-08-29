@@ -18,6 +18,7 @@ use types::{
     config::Config,
     deneb::{containers::BlobSidecar, primitives::BlobIndex},
     electra::consts::COMPOUNDING_WITHDRAWAL_PREFIX,
+    eip7732::consts::BUILDER_WITHDRAWAL_PREFIX,
     phase0::{
         consts::{TargetAggregatorsPerCommittee, ETH1_ADDRESS_WITHDRAWAL_PREFIX, FAR_FUTURE_EPOCH},
         containers::{AttestationData, Validator},
@@ -373,7 +374,17 @@ pub fn has_compounding_withdrawal_credential(validator: &Validator) -> bool {
 // > Check if ``validator`` has a 0x01 or 0x02 prefixed withdrawal credential.
 #[must_use]
 pub fn has_execution_withdrawal_credential(validator: &Validator) -> bool {
-    has_compounding_withdrawal_credential(validator) || has_eth1_withdrawal_credential(validator)
+    is_compounding_withdrawal_credential(validator.withdrawal_credentials) ||
+    is_builder_withdrawal_credential(validator.withdrawal_credentials)
+}
+
+pub fn is_builder_withdrawal_credential(withdrawal_credentials: H256) -> bool {
+    
+    withdrawal_credentials.as_bytes().starts_with(BUILDER_WITHDRAWAL_PREFIX)
+}
+pub fn has_builder_withdrawal_credential(validator:
+                                         &Validator) -> bool {
+    is_compounding_withdrawal_credential(validator.withdrawal_credentials)
 }
 
 #[cfg(test)]

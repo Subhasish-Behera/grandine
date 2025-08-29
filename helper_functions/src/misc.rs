@@ -40,6 +40,7 @@ use types::{
         SignedBeaconBlock as _,
     },
 };
+use types::phase0::containers::AttestationData;
 
 use crate::{accessors, error::Error, predicates};
 
@@ -156,6 +157,25 @@ pub(crate) fn compute_shuffled_index<P: Preset>(
 ) -> ValidatorIndex {
     shuffling::shuffle_single::<P>(index, index_count, seed)
 }
+
+
+
+//   pub fn is_attestation_same_slot<P: Preset>(
+//       state: &impl BeaconState<P>,
+//       data: &AttestationData,
+//   ) -> Result<bool> {
+//     if data.slot == 0 {
+//           return Ok(true);
+//       }
+
+//       let block_root_at_slot = accessors::get_block_root_at_slot(state, data.slot)?;
+//       let is_matching_block_root = data.beacon_block_root == block_root_at_slot;
+
+//       let previous_block_root = accessors::get_block_root_at_slot(state, data.slot - 1)?;
+//       let is_current_block_root = data.beacon_block_root != previous_block_root;
+
+//       Ok(is_matching_block_root && is_current_block_root)
+//   }
 
 fn compute_proposer_index_pre_electra<P: Preset>(
     state: &impl BeaconState<P>,
