@@ -778,9 +778,8 @@ pub fn get_attestation_participation_flags<P: Preset>(
               // For non same-slot attestations, check execution payload availability
               let slot_index = (data.slot % P::SlotsPerHistoricalRoot::U64) as usize;
 
-              let payload_available = state.execution_payload_availability()
-                  .get(slot_index)
-                  .map_err(|_| Error::ExecutionPayloadStatusIndexOutOfBounds(slot_index))?;
+              let payload_available = state.get_execution_payload_status(slot_index)
+                  .ok_or(Error::ExecutionPayloadStatusIndexOutOfBounds(slot_index))?;
               data.index == if payload_available { 1 } else { 0 }
           };
           is_matching_blockroot && is_matching_payload

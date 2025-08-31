@@ -40,7 +40,6 @@ use types::{
         SignedBeaconBlock as _,
     },
 };
-use types::phase0::containers::AttestationData;
 
 use crate::{accessors, error::Error, predicates};
 

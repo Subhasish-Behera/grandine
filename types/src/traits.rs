@@ -163,6 +163,12 @@ pub trait BeaconState<P: Preset>: SszHash<PackingFactor = U1> + Send + Sync {
     fn is_post_deneb(&self) -> bool;
     fn is_post_electra(&self) -> bool;
     fn is_post_eip7732(&self) -> bool;
+    
+    // Helper method to access execution_payload_availability for EIP7732
+    // For now a workaround.
+    fn get_execution_payload_status(&self, _slot_index: usize) -> Option<bool> {
+        None
+    }
 }
 
 #[duplicate_item(

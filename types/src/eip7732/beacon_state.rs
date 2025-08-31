@@ -118,3 +118,10 @@ pub struct BeaconState<P: Preset> {
     #[ssz(skip)]
     pub cache: Cache,
 }
+
+impl<P: Preset> BeaconState<P> {
+    // Override the method introduced in BeaconState in trait.rs
+    pub fn get_execution_payload_status(&self, slot_index: usize) -> Option<bool> {
+        self.execution_payload_availability.get(slot_index)
+    }
+}
