@@ -246,7 +246,7 @@ pub fn get_active_validator_indices<P: Preset>(
     get_active_validator_indices_by_epoch(state, epoch)
 }
 
-fn get_active_validator_indices_by_epoch<P: Preset>(
+pub fn get_active_validator_indices_by_epoch<P: Preset>(
     state: &(impl BeaconState<P> + ?Sized),
     epoch: Epoch,
 ) -> impl Iterator<Item = ValidatorIndex> + '_ {
@@ -407,7 +407,7 @@ fn get_seed<P: Preset>(
     get_seed_by_epoch(state, epoch, domain_type)
 }
 
-fn get_seed_by_epoch<P: Preset>(
+pub fn get_seed_by_epoch<P: Preset>(
     state: &(impl BeaconState<P> + ?Sized),
     epoch: Epoch,
     domain_type: DomainType,

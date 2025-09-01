@@ -1,8 +1,9 @@
 use bls::SignatureBytes;
 use serde::{Deserialize, Serialize};
-use ssz::{BitVector, ContiguousList, Ssz};
+use ssz::{BitVector, ContiguousList, ContiguousVector, Ssz};
 use serde_utils;
-use typenum::U4;
+use typenum::{U4, U512};
+use core::marker::PhantomData;
 
 use crate::{
     altair::containers::SyncAggregate,
@@ -189,3 +190,12 @@ pub struct SignedBeaconBlock<P: Preset> {
     pub signature: SignatureBytes,
 }
 
+#[derive(Clone, PartialEq, Eq, Debug, Default, Deserialize, Serialize, Ssz)]
+#[serde(bound = "", deny_unknown_fields)]
+pub struct Ptc<P: Preset> {
+    #[serde(with = "serde_utils::string_or_native_sequence")]
+    pub indices: ContiguousVector<ValidatorIndex, U512>,
+    #[serde(skip)]
+    #[ssz(skip)]
+    _phantom: PhantomData<P>,
+}
