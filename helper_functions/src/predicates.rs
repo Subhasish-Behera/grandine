@@ -18,7 +18,10 @@ use types::{
     config::Config,
     deneb::{containers::BlobSidecar, primitives::BlobIndex},
     electra::consts::COMPOUNDING_WITHDRAWAL_PREFIX,
-    eip7732::consts::BUILDER_WITHDRAWAL_PREFIX,
+    eip7732::{
+        consts::BUILDER_WITHDRAWAL_PREFIX,
+        containers::IndexedPayloadAttestation,
+    },
     phase0::{
         consts::{TargetAggregatorsPerCommittee, ETH1_ADDRESS_WITHDRAWAL_PREFIX, FAR_FUTURE_EPOCH},
         containers::{AttestationData, Validator},
@@ -158,6 +161,32 @@ fn validate_indexed_attestation<P: Preset>(
     )?
 }
 
+
+pub fn verify_indexed_payload_attestation_signature<P: Preset>(
+      config: &Config,
+      pubkey_cache: &PubkeyCache,
+      state: &impl BeaconState<P>,
+      indexed_payload_attestation: &IndexedPayloadAttestation,
+      mut verifier: impl Verifier,
+  ) -> Result<()> {
+      // Get public keys for all attesting indices
+      itertools::process_results(
+          indexed_payload_attestation
+              .attesting_indices
+              .iter()
+              .map(|validator_index| {
+                  pubkey_cache.get_or_insert(*accessors::public_key(state, *validator_index)?)
+              }),
+          |public_keys| {
+              verifier.verify_aggregate(
+                  indexed_payload_attestation.data.signing_root(config, state),
+                  indexed_payload_attestation.signature,
+                  public_keys,
+                  SignatureKind::PtcAttester,
+              )
+          },
+      )?
+}
 /// <https://github.com/ethereum/consensus-specs/blob/5e83e60a594c1d855d1396b8e25fbf43af913577/specs/phase0/validator.md#aggregation-selection>
 pub fn is_aggregator<P: Preset>(
     state: &impl BeaconState<P>,

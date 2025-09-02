@@ -275,7 +275,23 @@ pub(crate) fn compute_proposer_index<P: Preset>(
     seed: H256,
     epoch: Epoch,
 ) -> Result<ValidatorIndex> {
-    if state.is_post_electra() || epoch >= config.electra_fork_epoch {
+    if state.is_post_eip7732() {
+        // EIP-7732/EPBS: Use the new unified balance-weighted selection
+        // Convert PackedIndices to Vec<ValidatorIndex> using slice iterator
+        let indices_vec: Vec<ValidatorIndex> = indices
+            .slice(0..indices.len())
+            .into_iter()
+            .collect();
+        
+        crate::eip7732::compute_balance_weighted_selection::<P>(
+            state,
+            &indices_vec,
+            seed,
+            1,  // Select only 1 proposer
+            true,  // shuffle_indices = true for proposer selection
+        )
+        .map(|selected| selected[0])
+    } else if state.is_post_electra() || epoch >= config.electra_fork_epoch {
         compute_proposer_index_post_electra(state, indices, seed)
     } else {
         compute_proposer_index_pre_electra(state, indices, seed)

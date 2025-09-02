@@ -1,12 +1,12 @@
 use anyhow::Result;
 use core::num::NonZeroU64;
-use ssz::ContiguousVector;
+use ssz::{BitVector, ContiguousVector, ContiguousList};
 use tap::{Pipe as _, TryConv as _};
 use try_from_iterator::TryFromIterator as _;
 use typenum::U512;
 use types::{
     eip7732::{
-        containers::Ptc,
+        containers::{Ptc, IndexedPayloadAttestation, PayloadAttestation},
         consts::DOMAIN_PTC_ATTESTER,
     },
     phase0::primitives::{Slot, ValidatorIndex, H256},
@@ -72,7 +72,7 @@ pub fn get_ptc<P: Preset>(
 }
 
 pub fn compute_balance_weighted_selection<P: Preset>(
-    state: &impl BeaconState<P>,
+    state: &(impl BeaconState<P> + ?Sized),
     indices: &[ValidatorIndex],
     seed: H256,
     size: usize,
@@ -120,7 +120,7 @@ pub fn compute_balance_weighted_selection<P: Preset>(
 }
 
 pub fn compute_balance_weighted_acceptance<P: Preset>(
-    state: &impl BeaconState<P>,
+    state: &(impl BeaconState<P> + ?Sized),
     validator_index: ValidatorIndex,
     seed: H256,
     iteration: u64,
@@ -160,3 +160,41 @@ pub fn compute_balance_weighted_acceptance<P: Preset>(
     
     Ok(accepted)
 }
+
+pub fn get_payload_attesting_indices<P: Preset>(
+    state: &impl BeaconState<P>,
+    slot: Slot,
+    aggregation_bits: &BitVector<P::PtcSize>,
+) -> Result<Vec<ValidatorIndex>> {
+    let ptc = get_ptc(state, slot)?;
+    
+    let attesting_indices: Vec<ValidatorIndex> = aggregation_bits
+        .into_iter()
+        .zip(ptc.indices.iter())
+        .filter_map(|(bit, &validator_index)| bit.then_some(validator_index))
+        .collect();
+    
+    Ok(attesting_indices)
+}
+
+  pub fn get_indexed_payload_attestation<P: Preset>(
+      state: &impl BeaconState<P>,
+      payload_attestation: &PayloadAttestation<P>,
+  ) -> Result<IndexedPayloadAttestation> {
+      let attesting_indices_iter =
+          get_payload_attesting_indices(state, payload_attestation.data.slot, &payload_attestation.aggregation_bits)?;
+
+      let mut attesting_indices = ContiguousList::try_from_iter(attesting_indices_iter).expect(
+          "PayloadAttestation.aggregation_bits and IndexedPayloadAttestation.attesting_indices \
+           have compatible lengths (PTC_SIZE to MAX_VALIDATORS_PER_COMMITTEE)",
+      );
+
+      // Sorting a slice is faster than building a `BTreeMap`.
+      attesting_indices.sort_unstable();
+
+      Ok(IndexedPayloadAttestation {
+          attesting_indices,
+          data: payload_attestation.data.clone(),
+          signature: payload_attestation.signature,
+      })
+  }

@@ -585,7 +585,22 @@ pub fn get_or_init_total_active_balance<P: Preset>(
 fn get_next_sync_committee_indices<P: Preset>(
     state: &(impl BeaconState<P> + ?Sized),
 ) -> Result<ContiguousVector<ValidatorIndex, P::SyncCommitteeSize>> {
-    if state.is_post_electra() {
+    if state.is_post_eip7732() {
+        // EIP-7732/EPBS: Use the new unified balance-weighted selection
+        let next_epoch = get_next_epoch(state);
+        let active_validator_indices: Vec<ValidatorIndex> = 
+            get_active_validator_indices_by_epoch(state, next_epoch).collect();
+        let seed = get_seed_by_epoch(state, next_epoch, DOMAIN_SYNC_COMMITTEE);
+        
+        crate::eip7732::compute_balance_weighted_selection::<P>(
+            state,
+            &active_validator_indices,
+            seed,
+            P::SyncCommitteeSize::USIZE,
+            true,  // shuffle_indices = true for sync committee
+        )
+        .and_then(|indices| ContiguousVector::try_from_iter(indices).map_err(Into::into))
+    } else if state.is_post_electra() {
         get_next_sync_committee_indices_post_electra(state)
     } else {
         get_next_sync_committee_indices_pre_electra(state)

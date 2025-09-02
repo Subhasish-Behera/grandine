@@ -2,7 +2,7 @@ use bls::SignatureBytes;
 use serde::{Deserialize, Serialize};
 use ssz::{BitVector, ContiguousList, ContiguousVector, Ssz};
 use serde_utils;
-use typenum::{U4, U512};
+use typenum::U512;
 use core::marker::PhantomData;
 
 use crate::{
@@ -119,7 +119,7 @@ pub struct PayloadAttestation<P: Preset> {
 #[serde(deny_unknown_fields)]
 pub struct IndexedPayloadAttestation {
     #[serde(with = "serde_utils::string_or_native_sequence")]
-    pub attesting_indices: ContiguousList<ValidatorIndex, U4>,  // MAX_PAYLOAD_ATTESTATIONS = 4
+    pub attesting_indices: ContiguousList<ValidatorIndex, U512>,  // PTC_SIZE = 512
     pub data: PayloadAttestationData,
     pub signature: SignatureBytes,  // Aggregate signature from indexed validators
 }
