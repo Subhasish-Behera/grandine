@@ -133,6 +133,31 @@ pub fn get_block_root_at_slot<P: Preset>(state: &impl BeaconState<P>, slot: Slot
     Ok(state.block_roots().mod_index(slot).copy())
 }
 
+/// Checks if the attestation was for the block proposed at the attestation slot.
+///
+/// Returns true if:
+/// - The attestation is for slot 0 (genesis), OR
+/// - The attestation's beacon_block_root matches the block actually proposed at that slot
+///   AND it's different from the previous slot's block (indicating no skip)
+
+pub fn is_attestation_same_slot<P: Preset>(
+     state: &impl BeaconState<P>,
+     data: &AttestationData,
+) -> Result<bool> {
+
+      if data.slot == 0 {
+          return Ok(true);
+      }
+
+      let block_root_at_slot = get_block_root_at_slot(state, data.slot)?;
+      let is_matching_block_root = data.beacon_block_root == block_root_at_slot;
+      
+      let previous_block_root = get_block_root_at_slot(state, data.slot - 1)?;
+      let is_current_block_root = data.beacon_block_root != previous_block_root;
+
+      Ok(is_matching_block_root && is_current_block_root)
+  }
+
 /// <https://github.com/ethereum/consensus-specs/blob/2ef55744df782eb153fc0a3b1c7875b8c2e11730/specs/phase0/validator.md#ffg-vote>
 ///
 /// This returns the root of the block that started the epoch (i.e., the block satisfying `slot` =
@@ -221,7 +246,7 @@ pub fn get_active_validator_indices<P: Preset>(
     get_active_validator_indices_by_epoch(state, epoch)
 }
 
-fn get_active_validator_indices_by_epoch<P: Preset>(
+pub fn get_active_validator_indices_by_epoch<P: Preset>(
     state: &(impl BeaconState<P> + ?Sized),
     epoch: Epoch,
 ) -> impl Iterator<Item = ValidatorIndex> + '_ {
@@ -382,7 +407,7 @@ fn get_seed<P: Preset>(
     get_seed_by_epoch(state, epoch, domain_type)
 }
 
-fn get_seed_by_epoch<P: Preset>(
+pub fn get_seed_by_epoch<P: Preset>(
     state: &(impl BeaconState<P> + ?Sized),
     epoch: Epoch,
     domain_type: DomainType,
@@ -560,7 +585,22 @@ pub fn get_or_init_total_active_balance<P: Preset>(
 fn get_next_sync_committee_indices<P: Preset>(
     state: &(impl BeaconState<P> + ?Sized),
 ) -> Result<ContiguousVector<ValidatorIndex, P::SyncCommitteeSize>> {
-    if state.is_post_electra() {
+    if state.is_post_eip7732() {
+        // EIP-7732/EPBS: Use the new unified balance-weighted selection
+        let next_epoch = get_next_epoch(state);
+        let active_validator_indices: Vec<ValidatorIndex> = 
+            get_active_validator_indices_by_epoch(state, next_epoch).collect();
+        let seed = get_seed_by_epoch(state, next_epoch, DOMAIN_SYNC_COMMITTEE);
+        
+        crate::eip7732::compute_balance_weighted_selection::<P>(
+            state,
+            &active_validator_indices,
+            seed,
+            P::SyncCommitteeSize::USIZE,
+            true,  // shuffle_indices = true for sync committee
+        )
+        .and_then(|indices| ContiguousVector::try_from_iter(indices).map_err(Into::into))
+    } else if state.is_post_electra() {
         get_next_sync_committee_indices_post_electra(state)
     } else {
         get_next_sync_committee_indices_pre_electra(state)
@@ -739,7 +779,28 @@ pub fn get_attestation_participation_flags<P: Preset>(
     // > Matching roots
     let is_matching_source = data.source == justified_checkpoint;
     let is_matching_target = is_matching_source && data.target.root == expected_target;
-    let is_matching_head = is_matching_target && data.beacon_block_root == expected_head;
+   let is_matching_blockroot =
+          is_matching_target && data.beacon_block_root == expected_head;
+
+      let is_matching_head = if state.is_post_eip7732() {  
+          let is_matching_payload = if is_attestation_same_slot(state, &data)? {
+              // For same-slot attestations, data.index must be 0 (PAYLOAD_ABSENT)
+              if data.index != 0 {
+                  return Err(Error::CommitteeIndexOutOfBounds.into());
+              }
+              true
+          } else {
+              // For non same-slot attestations, check execution payload availability
+              let slot_index = (data.slot % P::SlotsPerHistoricalRoot::U64) as usize;
+
+              let payload_available = state.get_execution_payload_status(slot_index)
+                  .ok_or(Error::ExecutionPayloadStatusIndexOutOfBounds(slot_index))?;
+              data.index == if payload_available { 1 } else { 0 }
+          };
+          is_matching_blockroot && is_matching_payload
+      } else {
+          is_matching_blockroot
+      };
 
     ensure!(is_matching_source, Error::AttestationSourceMismatch);
 

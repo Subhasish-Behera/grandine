@@ -202,3 +202,13 @@ pub mod electra {
     mod slot_processing;
     mod state_transition;
 }
+
+pub mod eip7732 {
+    pub(crate) use block_processing::process_block;
+    pub(crate) use epoch_processing::{epoch_report, process_epoch};
+    pub(crate) use slot_processing::process_slots;
+
+    mod block_processing;
+    mod epoch_processing;
+    mod slot_processing;
+}

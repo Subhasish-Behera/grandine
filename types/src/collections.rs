@@ -12,6 +12,7 @@ use ssz::{PersistentList, PersistentVector, UnhashedBundleSize};
 use crate::{
     altair::primitives::ParticipationFlags,
     capella::containers::HistoricalSummary,
+    eip7732::containers::{BuilderPendingPayment, BuilderPendingWithdrawal},
     electra::containers::{PendingConsolidation, PendingDeposit, PendingPartialWithdrawal},
     phase0::{
         containers::{Eth1Data, PendingAttestation, Validator},
@@ -60,3 +61,10 @@ pub type PendingPartialWithdrawals<P> =
 
 pub type PendingConsolidations<P> =
     PersistentList<PendingConsolidation, <P as Preset>::PendingConsolidationsLimit>;
+
+// ePBS collections
+pub type BuilderPendingPayments<P> =
+    PersistentVector<BuilderPendingPayment, <P as Preset>::BuilderPendingPaymentsLimit>;
+
+pub type BuilderPendingWithdrawals<P> =
+    PersistentList<BuilderPendingWithdrawal, <P as Preset>::BuilderPendingWithdrawalsLimit>;

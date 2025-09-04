@@ -157,6 +157,25 @@ pub(crate) fn compute_shuffled_index<P: Preset>(
     shuffling::shuffle_single::<P>(index, index_count, seed)
 }
 
+
+
+//   pub fn is_attestation_same_slot<P: Preset>(
+//       state: &impl BeaconState<P>,
+//       data: &AttestationData,
+//   ) -> Result<bool> {
+//     if data.slot == 0 {
+//           return Ok(true);
+//       }
+
+//       let block_root_at_slot = accessors::get_block_root_at_slot(state, data.slot)?;
+//       let is_matching_block_root = data.beacon_block_root == block_root_at_slot;
+
+//       let previous_block_root = accessors::get_block_root_at_slot(state, data.slot - 1)?;
+//       let is_current_block_root = data.beacon_block_root != previous_block_root;
+
+//       Ok(is_matching_block_root && is_current_block_root)
+//   }
+
 fn compute_proposer_index_pre_electra<P: Preset>(
     state: &impl BeaconState<P>,
     indices: &PackedIndices,
@@ -256,7 +275,23 @@ pub(crate) fn compute_proposer_index<P: Preset>(
     seed: H256,
     epoch: Epoch,
 ) -> Result<ValidatorIndex> {
-    if state.is_post_electra() || epoch >= config.electra_fork_epoch {
+    if state.is_post_eip7732() {
+        // EIP-7732/EPBS: Use the new unified balance-weighted selection
+        // Convert PackedIndices to Vec<ValidatorIndex> using slice iterator
+        let indices_vec: Vec<ValidatorIndex> = indices
+            .slice(0..indices.len())
+            .into_iter()
+            .collect();
+        
+        crate::eip7732::compute_balance_weighted_selection::<P>(
+            state,
+            &indices_vec,
+            seed,
+            1,  // Select only 1 proposer
+            true,  // shuffle_indices = true for proposer selection
+        )
+        .map(|selected| selected[0])
+    } else if state.is_post_electra() || epoch >= config.electra_fork_epoch {
         compute_proposer_index_post_electra(state, indices, seed)
     } else {
         compute_proposer_index_pre_electra(state, indices, seed)

@@ -78,6 +78,13 @@ use crate::{
             SignedBlindedBeaconBlock as ElectraSignedBlindedBeaconBlock, SingleAttestation,
         },
     },
+    eip7732::{
+        beacon_state::BeaconState as Eip7732BeaconState,
+        containers::{
+            BeaconBlock as Eip7732BeaconBlock,
+            SignedBeaconBlock as Eip7732SignedBeaconBlock,
+        },
+    },
     nonstandard::Phase,
     phase0::{
         beacon_state::BeaconState as Phase0BeaconState,
@@ -111,6 +118,7 @@ pub enum BeaconState<P: Preset> {
     Capella(Hc<CapellaBeaconState<P>>),
     Deneb(Hc<DenebBeaconState<P>>),
     Electra(Hc<ElectraBeaconState<P>>),
+    Eip7732(Hc<Eip7732BeaconState<P>>),
 }
 
 // This assertion will become incorrect if later phases don't modify `BeaconState`.
@@ -141,6 +149,7 @@ impl<P: Preset> SszSize for BeaconState<P> {
         CapellaBeaconState::<P>::SIZE,
         DenebBeaconState::<P>::SIZE,
         ElectraBeaconState::<P>::SIZE,
+        Eip7732BeaconState::<P>::SIZE,
     ]);
 }
 
@@ -162,6 +171,7 @@ impl<P: Preset> SszRead<Config> for BeaconState<P> {
             Phase::Capella => Self::Capella(SszReadDefault::from_ssz_default(bytes)?),
             Phase::Deneb => Self::Deneb(SszReadDefault::from_ssz_default(bytes)?),
             Phase::Electra => Self::Electra(SszReadDefault::from_ssz_default(bytes)?),
+            Phase::Eip7732 => Self::Eip7732(SszReadDefault::from_ssz_default(bytes)?),
         };
 
         assert_eq!(slot, state.slot());
@@ -179,6 +189,7 @@ impl<P: Preset> SszWrite for BeaconState<P> {
             Self::Capella(state) => state.write_variable(bytes),
             Self::Deneb(state) => state.write_variable(bytes),
             Self::Electra(state) => state.write_variable(bytes),
+            Self::Eip7732(state) => state.write_variable(bytes),
         }
     }
 }
@@ -194,6 +205,7 @@ impl<P: Preset> SszHash for BeaconState<P> {
             Self::Capella(state) => state.hash_tree_root(),
             Self::Deneb(state) => state.hash_tree_root(),
             Self::Electra(state) => state.hash_tree_root(),
+            Self::Eip7732(state) => state.hash_tree_root(),
         }
     }
 }
@@ -223,7 +235,7 @@ impl<P: Preset> BeaconState<P> {
             (_, header) => {
                 // This match arm will silently match any new phases.
                 // Cause a compilation error if a new phase is added.
-                const_assert_eq!(Phase::CARDINALITY, 6);
+                const_assert_eq!(Phase::CARDINALITY, 7);
 
                 return Err(StatePhaseError {
                     state_phase: self.phase(),
@@ -243,6 +255,7 @@ impl<P: Preset> BeaconState<P> {
             Self::Capella(_) => Phase::Capella,
             Self::Deneb(_) => Phase::Deneb,
             Self::Electra(_) => Phase::Electra,
+            Self::Eip7732(_) => Phase::Eip7732,
         }
     }
 
@@ -260,6 +273,7 @@ impl<P: Preset> BeaconState<P> {
             Self::Capella(state) => Some(state),
             Self::Deneb(state) => Some(state),
             Self::Electra(state) => Some(state),
+            Self::Eip7732(state) => Some(state),
         }
     }
 
@@ -271,6 +285,7 @@ impl<P: Preset> BeaconState<P> {
             Self::Capella(state) => Some(state),
             Self::Deneb(state) => Some(state),
             Self::Electra(state) => Some(state),
+            Self::Eip7732(state) => Some(state),
         }
     }
 
@@ -281,6 +296,7 @@ impl<P: Preset> BeaconState<P> {
             Self::Capella(state) => Some(state),
             Self::Deneb(state) => Some(state),
             Self::Electra(state) => Some(state),
+            Self::Eip7732(state) => Some(state),
         }
     }
 
@@ -291,6 +307,7 @@ impl<P: Preset> BeaconState<P> {
             Self::Capella(state) => Some(state),
             Self::Deneb(state) => Some(state),
             Self::Electra(state) => Some(state),
+            Self::Eip7732(state) => Some(state),
         }
     }
 
@@ -300,6 +317,7 @@ impl<P: Preset> BeaconState<P> {
             Self::Capella(state) => Some(state),
             Self::Deneb(state) => Some(state),
             Self::Electra(state) => Some(state),
+            Self::Eip7732(state) => Some(state),
         }
     }
 
@@ -311,6 +329,7 @@ impl<P: Preset> BeaconState<P> {
             | Self::Capella(_)
             | Self::Deneb(_) => None,
             Self::Electra(state) => Some(state),
+            Self::Eip7732(state) => Some(state),
         }
     }
 
@@ -322,6 +341,7 @@ impl<P: Preset> BeaconState<P> {
             | Self::Capella(_)
             | Self::Deneb(_) => None,
             Self::Electra(state) => Some(state),
+            Self::Eip7732(state) => Some(state),
         }
     }
 
@@ -333,6 +353,7 @@ impl<P: Preset> BeaconState<P> {
             Self::Capella(state) => state.set_cached_root(root),
             Self::Deneb(state) => state.set_cached_root(root),
             Self::Electra(state) => state.set_cached_root(root),
+            Self::Eip7732(state) => state.set_cached_root(root),
         }
     }
 
@@ -345,8 +366,19 @@ impl<P: Preset> BeaconState<P> {
             | Self::Capella(_)
             | Self::Deneb(_) => None,
             Self::Electra(state) => Some(state.deposit_requests_start_index),
+            Self::Eip7732(state) => Some(state.deposit_requests_start_index),
         }
     }
+
+    /// Return true if the parent block was full (both beacon block and execution payload were present).
+    pub fn is_parent_block_full(&self) -> bool {
+        match self {
+            Self::Phase0(_) | Self::Altair(_) => false,
+            Self::Bellatrix(_) | Self::Capella(_) | Self::Deneb(_) | Self::Electra(_) => true,
+            Self::Eip7732(state) => state.latest_execution_payload_header.block_hash == state.latest_block_hash,
+        }
+    }
+
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, From, VariantCount, Deserialize, Serialize)]
@@ -358,6 +390,7 @@ pub enum SignedBeaconBlock<P: Preset> {
     Capella(CapellaSignedBeaconBlock<P>),
     Deneb(DenebSignedBeaconBlock<P>),
     Electra(ElectraSignedBeaconBlock<P>),
+    Eip7732(Eip7732SignedBeaconBlock<P>),
 }
 
 // This assertion will become incorrect if later phases don't modify `SignedBeaconBlock`.
@@ -376,6 +409,7 @@ impl<P: Preset> SszSize for SignedBeaconBlock<P> {
         CapellaSignedBeaconBlock::<P>::SIZE,
         DenebSignedBeaconBlock::<P>::SIZE,
         ElectraSignedBeaconBlock::<P>::SIZE,
+        Eip7732SignedBeaconBlock::<P>::SIZE,
     ]);
 }
 
@@ -397,6 +431,7 @@ impl<P: Preset> SszRead<Config> for SignedBeaconBlock<P> {
             Phase::Capella => Self::Capella(SszReadDefault::from_ssz_default(bytes)?),
             Phase::Deneb => Self::Deneb(SszReadDefault::from_ssz_default(bytes)?),
             Phase::Electra => Self::Electra(SszReadDefault::from_ssz_default(bytes)?),
+            Phase::Eip7732 => Self::Eip7732(SszReadDefault::from_ssz_default(bytes)?),
         };
 
         assert_eq!(slot, block.message().slot());
@@ -414,6 +449,7 @@ impl<P: Preset> SszWrite for SignedBeaconBlock<P> {
             Self::Capella(block) => block.write_variable(bytes),
             Self::Deneb(block) => block.write_variable(bytes),
             Self::Electra(block) => block.write_variable(bytes),
+            Self::Eip7732(block) => block.write_variable(bytes),
         }
     }
 }
@@ -429,6 +465,7 @@ impl<P: Preset> SszHash for SignedBeaconBlock<P> {
             Self::Capella(block) => block.hash_tree_root(),
             Self::Deneb(block) => block.hash_tree_root(),
             Self::Electra(block) => block.hash_tree_root(),
+            Self::Eip7732(block) => block.hash_tree_root(),
         }
     }
 }
@@ -460,6 +497,10 @@ impl<P: Preset> SignedBeaconBlock<P> {
                 let ElectraSignedBeaconBlock { message, signature } = block;
                 (message.into(), signature)
             }
+            Self::Eip7732(block) => {
+                let Eip7732SignedBeaconBlock { message, signature } = block;
+                (message.into(), signature)
+            }
         }
     }
 
@@ -478,6 +519,7 @@ impl<P: Preset> SignedBeaconBlock<P> {
             Self::Electra(block) => Some(ExecutionPayload::Deneb(
                 block.message.body.execution_payload,
             )),
+            Self::Eip7732(_) => None, // EIP-7732 blocks have execution payload in envelope
         }
     }
 
@@ -489,6 +531,7 @@ impl<P: Preset> SignedBeaconBlock<P> {
             Self::Capella(_) => Phase::Capella,
             Self::Deneb(_) => Phase::Deneb,
             Self::Electra(_) => Phase::Electra,
+            Self::Eip7732(_) => Phase::Eip7732,
         }
     }
 
@@ -513,6 +556,7 @@ pub enum BeaconBlock<P: Preset> {
     Capella(CapellaBeaconBlock<P>),
     Deneb(DenebBeaconBlock<P>),
     Electra(ElectraBeaconBlock<P>),
+    Eip7732(Eip7732BeaconBlock<P>),
 }
 
 // This assertion will become incorrect if later phases don't modify `BeaconBlock`.
@@ -528,6 +572,7 @@ impl<P: Preset> SszSize for BeaconBlock<P> {
         CapellaBeaconBlock::<P>::SIZE,
         DenebBeaconBlock::<P>::SIZE,
         ElectraBeaconBlock::<P>::SIZE,
+        Eip7732BeaconBlock::<P>::SIZE,
     ]);
 }
 
@@ -547,6 +592,7 @@ impl<P: Preset> SszRead<Config> for BeaconBlock<P> {
             Phase::Capella => Self::Capella(SszReadDefault::from_ssz_default(bytes)?),
             Phase::Deneb => Self::Deneb(SszReadDefault::from_ssz_default(bytes)?),
             Phase::Electra => Self::Electra(SszReadDefault::from_ssz_default(bytes)?),
+            Phase::Eip7732 => Self::Eip7732(SszReadDefault::from_ssz_default(bytes)?),
         };
 
         assert_eq!(slot, block.slot());
@@ -564,6 +610,7 @@ impl<P: Preset> SszWrite for BeaconBlock<P> {
             Self::Capella(block) => block.write_variable(bytes),
             Self::Deneb(block) => block.write_variable(bytes),
             Self::Electra(block) => block.write_variable(bytes),
+            Self::Eip7732(block) => block.write_variable(bytes),
         }
     }
 }
@@ -579,6 +626,7 @@ impl<P: Preset> SszHash for BeaconBlock<P> {
             Self::Capella(block) => block.hash_tree_root(),
             Self::Deneb(block) => block.hash_tree_root(),
             Self::Electra(block) => block.hash_tree_root(),
+            Self::Eip7732(block) => block.hash_tree_root(),
         }
     }
 }
@@ -604,6 +652,9 @@ impl<P: Preset> BeaconBlock<P> {
             Self::Electra(block) => {
                 block.body.graffiti = graffiti;
             }
+            Self::Eip7732(block) => {
+                block.body.graffiti = graffiti;
+            }
         }
     }
 
@@ -619,6 +670,7 @@ impl<P: Preset> BeaconBlock<P> {
             Self::Capella(message) => CapellaSignedBeaconBlock { message, signature }.into(),
             Self::Deneb(message) => DenebSignedBeaconBlock { message, signature }.into(),
             Self::Electra(message) => ElectraSignedBeaconBlock { message, signature }.into(),
+            Self::Eip7732(message) => Eip7732SignedBeaconBlock { message, signature }.into(),
         }
     }
 
@@ -631,6 +683,7 @@ impl<P: Preset> BeaconBlock<P> {
             Self::Capella(block) => block.state_root = state_root,
             Self::Deneb(block) => block.state_root = state_root,
             Self::Electra(block) => block.state_root = state_root,
+            Self::Eip7732(block) => block.state_root = state_root,
         }
 
         self
@@ -660,7 +713,7 @@ impl<P: Preset> BeaconBlock<P> {
             (_, payload) => {
                 // This match arm will silently match any new phases.
                 // Cause a compilation error if a new phase is added.
-                const_assert_eq!(Phase::CARDINALITY, 6);
+                const_assert_eq!(Phase::CARDINALITY, 7);
 
                 return Err(BlockPhaseError {
                     block_phase: self.phase(),
@@ -687,7 +740,7 @@ impl<P: Preset> BeaconBlock<P> {
             _ => {
                 // This match arm will silently match any new phases.
                 // Cause a compilation error if a new phase is added.
-                const_assert_eq!(Phase::CARDINALITY, 6);
+                const_assert_eq!(Phase::CARDINALITY, 7);
             }
         }
 
@@ -708,7 +761,7 @@ impl<P: Preset> BeaconBlock<P> {
             _ => {
                 // This match arm will silently match any new phases.
                 // Cause a compilation error if a new phase is added.
-                const_assert_eq!(Phase::CARDINALITY, 6);
+                const_assert_eq!(Phase::CARDINALITY, 7);
             }
         }
 
@@ -741,7 +794,7 @@ impl<P: Preset> BeaconBlock<P> {
             (block, header) => {
                 // This match arm will silently match any new phases.
                 // Cause a compilation error if a new phase is added.
-                const_assert_eq!(Phase::CARDINALITY, 6);
+                const_assert_eq!(Phase::CARDINALITY, 7);
 
                 Err(BlockPhaseError {
                     block_phase: block.phase(),
@@ -760,6 +813,7 @@ impl<P: Preset> BeaconBlock<P> {
             Self::Capella(block) => Some(ExecutionPayload::Capella(block.body.execution_payload)),
             Self::Deneb(block) => Some(ExecutionPayload::Deneb(block.body.execution_payload)),
             Self::Electra(block) => Some(ExecutionPayload::Deneb(block.body.execution_payload)),
+            Self::Eip7732(_) => None, // EIP-7732 blocks have execution payload in envelope
         }
     }
 
@@ -771,6 +825,7 @@ impl<P: Preset> BeaconBlock<P> {
             Self::Capella(_) => Phase::Capella,
             Self::Deneb(_) => Phase::Deneb,
             Self::Electra(_) => Phase::Electra,
+            Self::Eip7732(_) => Phase::Eip7732,
         }
     }
 }
@@ -840,6 +895,11 @@ impl<P: Preset> From<BeaconBlock<P>> for SignedBeaconBlock<P> {
                 signature: SignatureBytes::default(),
             }
             .into(),
+            BeaconBlock::Eip7732(message) => Eip7732SignedBeaconBlock {
+                message,
+                signature: SignatureBytes::default(),
+            }
+            .into(),
         }
     }
 }
@@ -869,6 +929,7 @@ impl<P: Preset> SszSize for SignedBlindedBeaconBlock<P> {
         CapellaSignedBlindedBeaconBlock::<P>::SIZE,
         DenebSignedBlindedBeaconBlock::<P>::SIZE,
         ElectraSignedBlindedBeaconBlock::<P>::SIZE,
+        ElectraSignedBlindedBeaconBlock::<P>::SIZE, // Eip7732 doesn't have blinded blocks
     ]);
 }
 
@@ -889,6 +950,7 @@ impl<P: Preset> SszRead<Phase> for SignedBlindedBeaconBlock<P> {
             Phase::Capella => Self::Capella(SszReadDefault::from_ssz_default(bytes)?),
             Phase::Deneb => Self::Deneb(SszReadDefault::from_ssz_default(bytes)?),
             Phase::Electra => Self::Electra(SszReadDefault::from_ssz_default(bytes)?),
+            Phase::Eip7732 => Self::Electra(SszReadDefault::from_ssz_default(bytes)?), // EIP-7732 uses Electra format for blinded blocks
         };
 
         Ok(block)
@@ -991,8 +1053,9 @@ impl<P: Preset> SszSize for BlindedBeaconBlock<P> {
     const SIZE: Size = Size::for_untagged_union::<{ Phase::CARDINALITY - 2 }>([
         BellatrixBlindedBeaconBlock::<P>::SIZE,
         CapellaBlindedBeaconBlock::<P>::SIZE,
-        DenebSignedBlindedBeaconBlock::<P>::SIZE,
-        ElectraSignedBlindedBeaconBlock::<P>::SIZE,
+        DenebBlindedBeaconBlock::<P>::SIZE,
+        ElectraBlindedBeaconBlock::<P>::SIZE,
+        ElectraBlindedBeaconBlock::<P>::SIZE, // Eip7732 doesn't have blinded blocks
     ]);
 }
 
@@ -1064,7 +1127,7 @@ impl<P: Preset> BlindedBeaconBlock<P> {
             (block, payload) => {
                 // This match arm will silently match any new phases.
                 // Cause a compilation error if a new phase is added.
-                const_assert_eq!(Phase::CARDINALITY, 6);
+                const_assert_eq!(Phase::CARDINALITY, 7);
 
                 Err(BlockPhaseError {
                     block_phase: block.phase(),
@@ -1084,7 +1147,7 @@ impl<P: Preset> BlindedBeaconBlock<P> {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, From, Deserialize, Serialize)]
+#[derive(Clone, PartialEq, Eq, Debug, Deserialize, Serialize)]
 #[serde(
     bound = "",
     deny_unknown_fields,
@@ -1096,6 +1159,24 @@ pub enum ExecutionPayload<P: Preset> {
     Bellatrix(BellatrixExecutionPayload<P>),
     Capella(CapellaExecutionPayload<P>),
     Deneb(DenebExecutionPayload<P>),
+}
+
+impl<P: Preset> From<BellatrixExecutionPayload<P>> for ExecutionPayload<P> {
+    fn from(payload: BellatrixExecutionPayload<P>) -> Self {
+        Self::Bellatrix(payload)
+    }
+}
+
+impl<P: Preset> From<CapellaExecutionPayload<P>> for ExecutionPayload<P> {
+    fn from(payload: CapellaExecutionPayload<P>) -> Self {
+        Self::Capella(payload)
+    }
+}
+
+impl<P: Preset> From<DenebExecutionPayload<P>> for ExecutionPayload<P> {
+    fn from(payload: DenebExecutionPayload<P>) -> Self {
+        Self::Deneb(payload)
+    }
 }
 
 impl<P: Preset> SszHash for ExecutionPayload<P> {
@@ -1113,10 +1194,12 @@ impl<P: Preset> SszHash for ExecutionPayload<P> {
 impl<P: Preset> SszSize for ExecutionPayload<P> {
     // The const parameter should be `Self::VARIANT_COUNT`, but `Self` refers to a generic type.
     // Type parameters cannot be used in `const` contexts until `generic_const_exprs` is stable.
-    const SIZE: Size = Size::for_untagged_union::<{ Phase::CARDINALITY - 3 }>([
+    const SIZE: Size = Size::for_untagged_union::<{ Phase::CARDINALITY - 2 }>([
         BellatrixExecutionPayload::<P>::SIZE,
         CapellaExecutionPayload::<P>::SIZE,
         DenebExecutionPayload::<P>::SIZE,
+        DenebExecutionPayload::<P>::SIZE,  // Electra reuses Deneb
+        DenebExecutionPayload::<P>::SIZE,  // Eip7732 reuses Deneb
     ]);
 }
 
@@ -1135,7 +1218,7 @@ impl<P: Preset> SszRead<Phase> for ExecutionPayload<P> {
             }
             Phase::Bellatrix => Self::Bellatrix(SszReadDefault::from_ssz_default(bytes)?),
             Phase::Capella => Self::Capella(SszReadDefault::from_ssz_default(bytes)?),
-            Phase::Deneb | Phase::Electra => Self::Deneb(SszReadDefault::from_ssz_default(bytes)?),
+            Phase::Deneb | Phase::Electra | Phase::Eip7732 => Self::Deneb(SszReadDefault::from_ssz_default(bytes)?),
         };
 
         Ok(block)
@@ -1148,7 +1231,7 @@ impl<P: Preset> ExecutionPayload<P> {
             (self, phase),
             (Self::Bellatrix(_), Phase::Bellatrix)
                 | (Self::Capella(_), Phase::Capella)
-                | (Self::Deneb(_), Phase::Deneb | Phase::Electra)
+                | (Self::Deneb(_), Phase::Deneb | Phase::Electra | Phase::Eip7732)
         )
     }
 
@@ -1229,6 +1312,7 @@ impl<P: Preset> SszSize for LightClientBootstrap<P> {
         CapellaLightClientBootstrap::<P>::SIZE,
         DenebLightClientBootstrap::<P>::SIZE,
         ElectraLightClientBootstrap::<P>::SIZE,
+        ElectraLightClientBootstrap::<P>::SIZE, // Eip7732 reuses Electra
     ]);
 }
 
@@ -1286,6 +1370,7 @@ impl<P: Preset> SszSize for LightClientFinalityUpdate<P> {
         CapellaLightClientFinalityUpdate::<P>::SIZE,
         DenebLightClientFinalityUpdate::<P>::SIZE,
         ElectraLightClientFinalityUpdate::<P>::SIZE,
+        ElectraLightClientFinalityUpdate::<P>::SIZE, // Eip7732 reuses Electra
     ]);
 }
 
@@ -1343,6 +1428,7 @@ impl<P: Preset> SszSize for LightClientOptimisticUpdate<P> {
         CapellaLightClientOptimisticUpdate::<P>::SIZE,
         DenebLightClientOptimisticUpdate::<P>::SIZE,
         ElectraLightClientOptimisticUpdate::<P>::SIZE,
+        ElectraLightClientOptimisticUpdate::<P>::SIZE, // Eip7732 reuses Electra
     ]);
 }
 
@@ -1389,6 +1475,7 @@ impl<P: Preset> SszSize for LightClientUpdate<P> {
         CapellaLightClientUpdate::<P>::SIZE,
         DenebLightClientUpdate::<P>::SIZE,
         ElectraLightClientUpdate::<P>::SIZE,
+        ElectraLightClientUpdate::<P>::SIZE, // Eip7732 reuses Electra
     ]);
 }
 
@@ -1485,6 +1572,7 @@ impl<P: Preset> SszSize for SignedAggregateAndProof<P> {
     const SIZE: Size = Size::for_untagged_union::<{ Phase::CARDINALITY - 4 }>([
         Phase0SignedAggregateAndProof::<P>::SIZE,
         ElectraSignedAggregateAndProof::<P>::SIZE,
+        ElectraSignedAggregateAndProof::<P>::SIZE, // Eip7732 reuses Electra
     ]);
 }
 
@@ -1495,6 +1583,7 @@ impl<P: Preset> SszRead<Phase> for SignedAggregateAndProof<P> {
                 Self::Phase0(SszReadDefault::from_ssz_default(bytes)?)
             }
             Phase::Electra => Self::Electra(SszReadDefault::from_ssz_default(bytes)?),
+            Phase::Eip7732 => Self::Electra(SszReadDefault::from_ssz_default(bytes)?), // EIP-7732 uses Electra format
         };
 
         Ok(signed_aggregate_and_proof)
@@ -1593,6 +1682,7 @@ impl<P: Preset> SszSize for Attestation<P> {
     const SIZE: Size = Size::for_untagged_union::<{ Phase::CARDINALITY - 4 }>([
         Phase0Attestation::<P>::SIZE,
         ElectraAttestation::<P>::SIZE,
+        ElectraAttestation::<P>::SIZE, // Eip7732 reuses Electra
     ]);
 }
 
@@ -1611,6 +1701,7 @@ impl<P: Preset> SszRead<Config> for Attestation<P> {
                 Self::Phase0(SszReadDefault::from_ssz_default(bytes)?)
             }
             Phase::Electra => Self::Electra(SszReadDefault::from_ssz_default(bytes)?),
+            Phase::Eip7732 => Self::Electra(SszReadDefault::from_ssz_default(bytes)?), // EIP-7732 uses Electra format
         };
 
         assert_eq!(slot, attestation.data().slot);
@@ -1701,6 +1792,7 @@ impl<P: Preset> SszSize for AttesterSlashing<P> {
     const SIZE: Size = Size::for_untagged_union::<{ Phase::CARDINALITY - 4 }>([
         Phase0AttesterSlashing::<P>::SIZE,
         ElectraAttesterSlashing::<P>::SIZE,
+        ElectraAttesterSlashing::<P>::SIZE, // Eip7732 reuses Electra
     ]);
 }
 

@@ -4,7 +4,7 @@ use core::{
     fmt::Debug,
     hash::Hash,
     num::NonZeroU64,
-    ops::{Div, Mul, Sub},
+    ops::{Add, Div, Mul, Sub},
 };
 
 use arithmetic::NonZeroExt as _;
@@ -21,7 +21,7 @@ use strum::{Display, EnumString};
 use typenum::{
     IsGreaterOrEqual, NonZero, Prod, Quot, Sub1, True, Unsigned, B1, U1, U10, U1048576,
     U1073741824, U1099511627776, U128, U134217728, U16, U16777216, U17, U2, U2048, U256, U262144,
-    U32, U4, U4096, U512, U64, U65536, U8, U8192,
+    U32, U4, U4096, U512, U64, U65536, U7, U8, U8192,
 };
 
 use crate::{
@@ -34,6 +34,7 @@ use crate::{
         primitives::{Blob, KzgCommitment},
     },
     eip7594::Cell,
+    eip7732::containers::{BuilderPendingPayment, BuilderPendingWithdrawal, PayloadAttestation},
     electra::containers::{
         Attestation as ElectraAttestation, AttesterSlashing as ElectraAttesterSlashing,
         ConsolidationRequest, DepositRequest, PendingConsolidation, PendingDeposit,
@@ -171,6 +172,19 @@ pub trait Preset: Copy + Eq + Ord + Hash + Default + Debug + Send + Sync + 'stat
         + Send
         + Sync;
 
+    // ePBS / EIP-7732
+    type PtcSize: BitVectorBits + MerkleBits + NonZero + Eq + Debug + Send + Sync;
+    type MaxPayloadAttestations: MerkleElements<PayloadAttestation<Self>> + Eq + Debug + Send + Sync;
+    type SlotsPerHistoricalRoot: BitVectorBits + MerkleBits + NonZero + Add<U7> + Debug + Send + Sync;
+    type BuilderPendingPaymentsLimit: PersistentVectorElements<BuilderPendingPayment, UnhashedBundleSize<BuilderPendingPayment>>
+        + typenum::PowerOfTwo
+        + typenum::Cmp<U1>
+        + IsGreaterOrEqual<U1, Output = True>
+        + Debug
+        + Send
+        + Sync;
+    type BuilderPendingWithdrawalsLimit: MerkleElements<BuilderPendingWithdrawal> + Eq + Debug + Send + Sync;
+
     // Derived type-level variables
     type MaxAttestersPerSlot: MerkleElements<ValidatorIndex>
         + MerkleBits
@@ -291,6 +305,13 @@ impl Preset for Mainnet {
     type PendingConsolidationsLimit = U262144;
     type PendingPartialWithdrawalsLimit = U134217728;
 
+    // ePBS / EIP-7732
+    type PtcSize = U512;
+    type MaxPayloadAttestations = U4;
+    type SlotsPerHistoricalRoot = U8192;  // 256 epochs * 32 slots
+    type BuilderPendingPaymentsLimit = U64;  // 2 * SlotsPerEpoch = 2 * 32
+    type BuilderPendingWithdrawalsLimit = U134217728;  // 2^27
+
     // Derived type-level variables
     type MaxAttestersPerSlot = Prod<Self::MaxValidatorsPerCommittee, Self::MaxCommitteesPerSlot>;
 
@@ -381,6 +402,13 @@ impl Preset for Minimal {
 
     // Derived type-level variables
     type MaxAttestersPerSlot = Prod<Self::MaxValidatorsPerCommittee, Self::MaxCommitteesPerSlot>;
+    
+    // ePBS - manual override (delegate not working?)
+    type PtcSize = U512;
+    type MaxPayloadAttestations = U4;
+    type SlotsPerHistoricalRoot = U64;  // 8 epochs * 8 slots (minimal)
+    type BuilderPendingPaymentsLimit = U64;  // 2 * SlotsPerEpoch = 2 * 32
+    type BuilderPendingWithdrawalsLimit = U134217728;  // 2^27
 
     // Meta
     const NAME: PresetName = PresetName::Minimal;
@@ -454,6 +482,13 @@ impl Preset for Medalla {
         type PendingDepositsLimit;
         type PendingConsolidationsLimit;
         type PendingPartialWithdrawalsLimit;
+
+        // ePBS / EIP-7732
+        type PtcSize;
+        type MaxPayloadAttestations;
+        type SlotsPerHistoricalRoot;
+        type BuilderPendingPaymentsLimit;
+        type BuilderPendingWithdrawalsLimit;
 
         // Derived type-level variables
         type MaxAttestersPerSlot;

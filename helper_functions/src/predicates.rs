@@ -18,6 +18,10 @@ use types::{
     config::Config,
     deneb::{containers::BlobSidecar, primitives::BlobIndex},
     electra::consts::COMPOUNDING_WITHDRAWAL_PREFIX,
+    eip7732::{
+        consts::BUILDER_WITHDRAWAL_PREFIX,
+        containers::IndexedPayloadAttestation,
+    },
     phase0::{
         consts::{TargetAggregatorsPerCommittee, ETH1_ADDRESS_WITHDRAWAL_PREFIX, FAR_FUTURE_EPOCH},
         containers::{AttestationData, Validator},
@@ -36,22 +40,18 @@ use crate::{
     verifier::Verifier,
 };
 
-// > Check if ``validator`` is active.
 #[inline]
 #[must_use]
 pub const fn is_active_validator(validator: &Validator, epoch: Epoch) -> bool {
     validator.activation_epoch <= epoch && epoch < validator.exit_epoch
 }
 
-// > Check if ``validator`` is eligible for activation.
 #[must_use]
 pub fn is_eligible_for_activation<P: Preset>(
     state: &impl BeaconState<P>,
     validator: &Validator,
 ) -> bool {
-    // > Placement in queue is finalized
     validator.activation_eligibility_epoch <= state.finalized_checkpoint().epoch
-        // > Has not yet been activated
         && validator.activation_epoch == FAR_FUTURE_EPOCH
 }
 
@@ -62,7 +62,6 @@ pub const fn is_eligible_for_penalties(validator: &Validator, previous_epoch: Ep
         || (validator.slashed && previous_epoch + 1 < validator.withdrawable_epoch)
 }
 
-// > Check if ``validator`` is slashable.
 #[inline]
 #[must_use]
 pub const fn is_slashable_validator(validator: &Validator, epoch: Epoch) -> bool {
@@ -71,7 +70,6 @@ pub const fn is_slashable_validator(validator: &Validator, epoch: Epoch) -> bool
         && validator.activation_epoch <= epoch
 }
 
-// > Check if ``data_1`` and ``data_2`` are slashable according to Casper FFG rules.
 #[inline]
 #[must_use]
 pub fn is_slashable_attestation_data(data_1: AttestationData, data_2: AttestationData) -> bool {
@@ -79,8 +77,6 @@ pub fn is_slashable_attestation_data(data_1: AttestationData, data_2: Attestatio
         || (data_1.source.epoch < data_2.source.epoch && data_2.target.epoch < data_1.target.epoch)
 }
 
-// This doesn't verify the signature when called directly with `MultiVerifier`.
-// When calling directly, use `SingleVerifier` or call `finalize` manually.
 pub fn validate_constructed_indexed_attestation<P: Preset>(
     config: &Config,
     pubkey_cache: &PubkeyCache,
@@ -129,7 +125,6 @@ fn validate_indexed_attestation<P: Preset>(
     );
 
     if validate_indices_sorted_and_unique {
-        // > Verify indices are sorted and unique
         ensure!(
             indexed_attestation
                 .attesting_indices()
@@ -139,7 +134,6 @@ fn validate_indexed_attestation<P: Preset>(
         );
     }
 
-    // > Verify aggregate signature
     itertools::process_results(
         indexed_attestation
             .attesting_indices()
@@ -157,6 +151,31 @@ fn validate_indexed_attestation<P: Preset>(
     )?
 }
 
+
+pub fn verify_indexed_payload_attestation_signature<P: Preset>(
+      config: &Config,
+      pubkey_cache: &PubkeyCache,
+      state: &impl BeaconState<P>,
+      indexed_payload_attestation: &IndexedPayloadAttestation,
+      mut verifier: impl Verifier,
+  ) -> Result<()> {
+            itertools::process_results(
+          indexed_payload_attestation
+              .attesting_indices
+              .iter()
+              .map(|validator_index| {
+                  pubkey_cache.get_or_insert(*accessors::public_key(state, *validator_index)?)
+              }),
+          |public_keys| {
+              verifier.verify_aggregate(
+                  indexed_payload_attestation.data.signing_root(config, state),
+                  indexed_payload_attestation.signature,
+                  public_keys,
+                  SignatureKind::PtcAttester,
+              )
+          },
+      )?
+}
 /// <https://github.com/ethereum/consensus-specs/blob/5e83e60a594c1d855d1396b8e25fbf43af913577/specs/phase0/validator.md#aggregation-selection>
 pub fn is_aggregator<P: Preset>(
     state: &impl BeaconState<P>,
@@ -263,9 +282,6 @@ pub fn is_merge_transition_block<P: Preset>(
     })
 }
 
-// TODO(feature/disco-states-alternative-develop): The `state` parameter appears to be unused.
-//                                                 Payloads cannot be empty after the Merge.
-//                                                 Wait for a response from other developers.
 /// <https://github.com/ethereum/consensus-specs/blob/8ae93b8265c66851e6140733a074916453dd2660/specs/bellatrix/beacon-chain.md#is_execution_enabled>
 ///
 /// The [`is_merge_transition_complete`] call is needed to reject default payloads after the Merge,
@@ -280,8 +296,7 @@ pub fn is_execution_enabled<P: Preset>(
 
 /// [`has_eth1_withdrawal_credential`](https://github.com/ethereum/consensus-specs/blob/dc17b1e2b6a4ec3a2104c277a33abae75a43b0fa/specs/capella/beacon-chain.md#has_eth1_withdrawal_credential)
 ///
-/// > Check if ``validator`` has an 0x01 prefixed "eth1" withdrawal credential.
-#[must_use]
+/#[must_use]
 pub fn has_eth1_withdrawal_credential(validator: &Validator) -> bool {
     validator
         .withdrawal_credentials
@@ -364,16 +379,25 @@ pub fn is_compounding_withdrawal_credential(withdrawal_credentials: H256) -> boo
         .starts_with(COMPOUNDING_WITHDRAWAL_PREFIX)
 }
 
-// > Check if ``validator`` has an 0x02 prefixed "compounding" withdrawal credential.
 #[must_use]
 pub fn has_compounding_withdrawal_credential(validator: &Validator) -> bool {
-    is_compounding_withdrawal_credential(validator.withdrawal_credentials)
+    is_compounding_withdrawal_credential(validator.withdrawal_credentials) ||
+    is_builder_withdrawal_credential(validator.withdrawal_credentials)
 }
 
-// > Check if ``validator`` has a 0x01 or 0x02 prefixed withdrawal credential.
 #[must_use]
 pub fn has_execution_withdrawal_credential(validator: &Validator) -> bool {
-    has_compounding_withdrawal_credential(validator) || has_eth1_withdrawal_credential(validator)
+    has_eth1_withdrawal_credential(validator) ||
+    has_compounding_withdrawal_credential(validator)
+}
+
+pub fn is_builder_withdrawal_credential(withdrawal_credentials: H256) -> bool {
+    
+    withdrawal_credentials.as_bytes().starts_with(BUILDER_WITHDRAWAL_PREFIX)
+}
+#[must_use]
+pub fn has_builder_withdrawal_credential(validator: &Validator) -> bool {
+    is_builder_withdrawal_credential(validator.withdrawal_credentials)
 }
 
 #[cfg(test)]

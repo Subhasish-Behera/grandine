@@ -27,7 +27,7 @@ use types::{
 
 use crate::{
     altair::{self, EpochReport as AltairEpochReport, Statistics as AltairStatistics},
-    bellatrix, capella, deneb, electra,
+    bellatrix, capella, deneb, eip7732, electra,
     phase0::{
         self, EpochReport as Phase0EpochReport, StatisticsForReport, StatisticsForTransition,
     },
@@ -203,7 +203,7 @@ pub fn custom_state_transition<P: Preset>(
         _ => {
             // This match arm will silently match any new phases.
             // Cause a compilation error if a new phase is added.
-            const_assert_eq!(Phase::CARDINALITY, 6);
+            const_assert_eq!(Phase::CARDINALITY, 7);
 
             unreachable!("successful slot processing ensures that phases match")
         }
@@ -267,7 +267,7 @@ pub fn verify_signatures<P: Preset>(
         _ => {
             // This match arm will silently match any new phases.
             // Cause a compilation error if a new phase is added.
-            const_assert_eq!(Phase::CARDINALITY, 6);
+            const_assert_eq!(Phase::CARDINALITY, 7);
 
             bail!(PhaseError {
                 state_phase: state.phase(),
@@ -425,7 +425,26 @@ pub fn process_slots<P: Preset>(
                 }
             }
             BeaconState::Electra(electra_state) => {
-                electra::process_slots(config, pubkey_cache, electra_state, slot)?;
+                let eip7732_fork_slot = config.fork_slot::<P>(Phase::Eip7732);
+
+                let last_slot_in_phase = Toption::Some(slot)
+                    .min(eip7732_fork_slot)
+                    .expect("result of min should always be Some because slot is always Some");
+
+                if electra_state.slot < last_slot_in_phase {
+                    electra::process_slots(config, pubkey_cache, electra_state, last_slot_in_phase)?;
+
+                    made_progress = true;
+                }
+
+                if Toption::Some(last_slot_in_phase) == eip7732_fork_slot {
+                    *state = fork::upgrade_to_eip7732(config, electra_state.as_ref().clone())?.into();
+
+                    made_progress = true;
+                }
+            }
+            BeaconState::Eip7732(eip7732_state) => {
+                eip7732::process_slots(config, pubkey_cache, eip7732_state, slot)?;
 
                 made_progress = true;
             }
@@ -465,6 +484,10 @@ pub fn process_justification_and_finalization(state: &mut BeaconState<impl Prese
             let (statistics, _, _) = altair::statistics(state);
             altair::process_justification_and_finalization(state, statistics);
         }
+        BeaconState::Eip7732(state) => {
+            let (statistics, _, _) = altair::statistics(state);
+            altair::process_justification_and_finalization(state, statistics);
+        }
     }
 
     Ok(())
@@ -482,6 +505,7 @@ pub fn process_epoch(
         BeaconState::Capella(state) => capella::process_epoch(config, pubkey_cache, state),
         BeaconState::Deneb(state) => deneb::process_epoch(config, pubkey_cache, state),
         BeaconState::Electra(state) => electra::process_epoch(config, pubkey_cache, state),
+        BeaconState::Eip7732(state) => eip7732::process_epoch(config, pubkey_cache, state),
     }
 }
 
@@ -501,6 +525,7 @@ pub fn epoch_report(
         BeaconState::Capella(state) => capella::epoch_report(config, pubkey_cache, state)?.into(),
         BeaconState::Deneb(state) => deneb::epoch_report(config, pubkey_cache, state)?.into(),
         BeaconState::Electra(state) => electra::epoch_report(config, pubkey_cache, state)?.into(),
+        BeaconState::Eip7732(state) => eip7732::epoch_report(config, pubkey_cache, state)?.into(),
     };
 
     post_process_slots_for_epoch_report(config, pubkey_cache, state)?;
@@ -586,7 +611,14 @@ fn post_process_slots_for_epoch_report<P: Preset>(
                     *state = fork::upgrade_to_electra(config, deneb_state.as_ref().clone())?.into();
                 }
             }
-            BeaconState::Electra(_) => {}
+            BeaconState::Electra(electra_state) => {
+                let eip7732_fork_slot = config.fork_slot::<P>(Phase::Eip7732);
+
+                if Toption::Some(post_slot) == eip7732_fork_slot {
+                    *state = fork::upgrade_to_eip7732(config, electra_state.as_ref().clone())?.into();
+                }
+            }
+            BeaconState::Eip7732(_) => {}
         }
     }
 
@@ -657,7 +689,7 @@ fn process_block<P: Preset>(
         (state, _) => {
             // This match arm will silently match any new phases.
             // Cause a compilation error if a new phase is added.
-            const_assert_eq!(Phase::CARDINALITY, 6);
+            const_assert_eq!(Phase::CARDINALITY, 7);
 
             bail!(PhaseError {
                 state_phase: state.phase(),
@@ -695,7 +727,7 @@ pub fn process_block_for_gossip<P: Preset>(
         (state, _) => {
             // This match arm will silently match any new phases.
             // Cause a compilation error if a new phase is added.
-            const_assert_eq!(Phase::CARDINALITY, 6);
+            const_assert_eq!(Phase::CARDINALITY, 7);
 
             bail!(PhaseError {
                 state_phase: state.phase(),
@@ -791,7 +823,7 @@ fn process_blinded_block<P: Preset>(
         (state, _) => {
             // This match arm will silently match any new phases.
             // Cause a compilation error if a new phase is added.
-            const_assert_eq!(Phase::CARDINALITY, 6);
+            const_assert_eq!(Phase::CARDINALITY, 7);
 
             bail!(PhaseError {
                 state_phase: state.phase(),
@@ -832,6 +864,11 @@ pub fn process_deposit_data(
         BeaconState::Electra(state) => {
             electra::process_deposit_data(config, pubkey_cache, state, deposit_data)
         }
+        BeaconState::Eip7732(state) => {
+            // The use of `electra::process_deposit_data` is intentional.
+            // EIP-7732 does not modify `process_deposit_data`.
+            electra::process_deposit_data(config, pubkey_cache, state, deposit_data)
+        }
     }
 }
 
@@ -858,6 +895,10 @@ pub fn statistics<P: Preset>(state: &BeaconState<P>) -> Result<Statistics> {
             statistics.into()
         }
         BeaconState::Electra(state) => {
+            let (statistics, _, _) = altair::statistics(state);
+            statistics.into()
+        }
+        BeaconState::Eip7732(state) => {
             let (statistics, _, _) = altair::statistics(state);
             statistics.into()
         }
