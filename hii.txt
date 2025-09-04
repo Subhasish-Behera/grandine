@@ -62,7 +62,7 @@ pub fn process_block<P: Preset>(
     pubkey_cache: &PubkeyCache,
     state: &mut impl PostEip7732BeaconState<P>,
     block: &BeaconBlock<P>,
-    mut verifier: impl Verifier,
+    mut verifier: impl Verifier + Clone,
     slot_report: impl SlotReport,
 ) -> Result<()> {
     #[cfg(feature = "metrics")]
@@ -78,7 +78,7 @@ pub fn process_block<P: Preset>(
         state,
         block,
         NullExecutionEngine,
-        &mut verifier,
+        verifier,
         slot_report,
     )?;
 
@@ -123,8 +123,8 @@ pub fn custom_process_block<P: Preset>(
     state: &mut impl PostEip7732BeaconState<P>,
     block: &BeaconBlock<P>,
     _execution_engine: impl ExecutionEngine<P>,
-    verifier: &mut impl Verifier,
-    mut slot_report: impl SlotReport,
+    mut verifier: impl Verifier + Clone,
+    mut slot_report: impl SlotReport + Clone,
 ) -> Result<()> {
     debug_assert_eq!(state.slot(), block.slot);
 
@@ -136,16 +136,16 @@ pub fn custom_process_block<P: Preset>(
     process_withdrawals(state)?;
     
     // Process execution payload header (replaces process_execution_payload in EIP-7732)
-    process_execution_payload_header(config, pubkey_cache, state, block, &mut *verifier)?;
+    process_execution_payload_header(config, pubkey_cache, state, block, &mut verifier)?;
     
     // Process randao (unchanged)
-    unphased::process_randao(config, pubkey_cache, state, &block.body, &mut *verifier)?;
+    unphased::process_randao(config, pubkey_cache, state, &block.body, &mut verifier)?;
     
     // Process eth1 data (unchanged)
     unphased::process_eth1_data(state, &block.body)?;
     
     // Process operations (modified for EIP-7732 to include payload attestations)
-    process_operations(config, pubkey_cache, state, &block.body, &mut *verifier, &mut slot_report)?;
+    process_operations(config, pubkey_cache, state, &block.body, verifier, &mut slot_report)?;
     
     // Note: Execution requests (deposit/withdrawal/consolidation) are moved to
     // process_execution_payload in EIP-7732, which happens when payload is revealed
@@ -405,11 +405,8 @@ pub fn process_withdrawals<P: Preset>(
         get_expected_withdrawals(state)?;
 
     // Store withdrawals root for later verification
-    use ssz::{ContiguousList, SszHash as _};
-    use tap::TryConv as _;
-    let withdrawals_list = expected_withdrawals
-        .clone()
-        .try_conv::<ContiguousList<_, P::MaxWithdrawalsPerPayload>>()?;
+    use ssz::SszHash as _;
+    let withdrawals_list: ssz::PersistentList<_, _, _> = ssz::PersistentList::try_from_iter(expected_withdrawals.iter().cloned())?;
     *state.latest_withdrawals_root_mut() = withdrawals_list.hash_tree_root();
 
     // Process each withdrawal
@@ -546,7 +543,7 @@ pub fn process_execution_payload_header<P: Preset>(
     );
     
     // Record pending payment
-    let _pending_payment = BuilderPendingPayment {
+    let pending_payment = BuilderPendingPayment {
         weight: 0,
         withdrawal: BuilderPendingWithdrawal {
             fee_recipient: header.fee_recipient,
@@ -556,7 +553,7 @@ pub fn process_execution_payload_header<P: Preset>(
         },
     };
     
-    let _payment_index = 32 + (header.slot % 32) as usize;
+    let payment_index = 32 + (header.slot % 32) as usize;
     // Set payment in builder_pending_payments  
     // TODO: Need proper mutator for PersistentVector indexing
     
@@ -576,8 +573,8 @@ pub fn process_operations<P: Preset>(
     pubkey_cache: &PubkeyCache,
     state: &mut impl PostEip7732BeaconState<P>,
     body: &impl types::traits::PostEip7732BeaconBlockBody<P>,
-    verifier: &mut impl Verifier,
-    slot_report: &mut impl SlotReport,
+    mut verifier: impl Verifier + Clone,
+    mut slot_report: impl SlotReport + Clone,
 ) -> Result<()> {
     // Verify deposits (same as Electra)
     let eth1_deposit_index = state.eth1_deposit_index();
@@ -595,8 +592,8 @@ pub fn process_operations<P: Preset>(
             pubkey_cache,
             state,
             proposer_slashing,
-            &mut *verifier,
-            &mut *slot_report,
+            verifier.clone(),
+            slot_report.clone(),
         )?;
     }
     
@@ -606,14 +603,14 @@ pub fn process_operations<P: Preset>(
             pubkey_cache,
             state,
             attester_slashing,
-            &mut *verifier,
-            &mut *slot_report,
+            verifier.clone(),
+            slot_report.clone(),
         )?;
     }
     
     // Modified attestation processing with weight tracking for EIP-7732
     for attestation in body.attestations() {
-        process_attestation(config, pubkey_cache, state, attestation, &mut *verifier, &mut *slot_report)?;
+        process_attestation(config, pubkey_cache, state, attestation, verifier.clone(), slot_report.clone())?;
     }
     
     // Process deposits (following Electra pattern)
@@ -638,17 +635,17 @@ pub fn process_operations<P: Preset>(
     
     // Process voluntary exits
     for voluntary_exit in body.voluntary_exits() {
-        unphased::process_voluntary_exit(config, pubkey_cache, state, *voluntary_exit, &mut *verifier)?
+        unphased::process_voluntary_exit(config, pubkey_cache, state, *voluntary_exit, &mut verifier)?
     }
     
     // Process BLS to execution changes
     for bls_to_execution_change in body.bls_to_execution_changes() {
-        capella::process_bls_to_execution_change(config, pubkey_cache, state, *bls_to_execution_change, &mut *verifier)?;
+        capella::process_bls_to_execution_change(config, pubkey_cache, state, *bls_to_execution_change, &mut verifier)?;
     }
     
     // New in EIP-7732: Process payload attestations
     for payload_attestation in body.payload_attestations() {
-        process_payload_attestation(config, pubkey_cache, state, payload_attestation, &mut *verifier)?;
+        process_payload_attestation(config, pubkey_cache, state, payload_attestation, verifier.clone())?;
     }
     
     // Note: deposit_request, withdrawal_request, consolidation_request
@@ -663,8 +660,8 @@ pub fn process_attestation<P: Preset>(
     pubkey_cache: &PubkeyCache,
     state: &mut impl PostEip7732BeaconState<P>,
     attestation: &types::electra::containers::Attestation<P>,
-    verifier: &mut impl Verifier,
-    slot_report: &mut impl SlotReport,
+    verifier: impl Verifier,
+    mut slot_report: impl SlotReport,
 ) -> Result<()> {
     let data = &attestation.data;
     
@@ -713,8 +710,7 @@ pub fn process_attestation<P: Preset>(
     
     // Get payment from builder pending payments and compute weight increase
     // TODO: PersistentVector doesn't have public get method
-    let payments_binding = state.builder_pending_payments().clone();
-    let payments_vec: Vec<_> = payments_binding.into_iter().collect();
+    let payments_vec: Vec<_> = state.builder_pending_payments().clone().into_iter().collect();
     let payment = payments_vec.get(payment_index)
         .ok_or_else(|| anyhow::anyhow!("Invalid payment index"))?
         .clone();
@@ -778,7 +774,7 @@ pub fn process_attestation<P: Preset>(
     slot_report.add_attestation_reward(proposer_reward);
     slot_report.update_performance(
         state,
-        attestation.data,
+        &attestation.data,
         get_attesting_indices(state, attestation)?,
     )?;
     
@@ -822,7 +818,7 @@ pub fn process_payload_attestation<P: Preset>(
 /// Verify execution payload envelope signature
 pub fn verify_execution_payload_envelope_signature<P: Preset>(
     _config: &Config,
-    _state: &impl PostEip7732BeaconState<P>,
+    _state: &BeaconState<P>,
     _signed_envelope: &SignedExecutionPayloadEnvelope<P>,
 ) -> Result<()> {
     // TODO: Implement signature verification for execution payload envelope
@@ -919,20 +915,19 @@ pub fn process_execution_payload<P: Preset>(
     let payment_index = 32 + (state.slot() % 32) as usize;
     // Get payment from builder pending payments
     // TODO: PersistentVector doesn't have public get method
-    let payments_binding = state.builder_pending_payments().clone();
-    let payments_vec: Vec<_> = payments_binding.into_iter().collect();
-    let payment = payments_vec.get(payment_index)
-        .ok_or_else(|| anyhow::anyhow!("Invalid payment index"))?;
+    let payments_vec: Vec<_> = state.builder_pending_payments().clone().into_iter().collect();
+    let mut payment = payments_vec.get(payment_index)
+        .ok_or_else(|| anyhow::anyhow!("Invalid payment index"))?
+        .clone();
     
     let exit_queue_epoch = compute_exit_epoch_and_update_churn(config, state, payment.withdrawal.amount);
-    let mut updated_payment = (*payment).clone();
-    updated_payment.withdrawal.withdrawable_epoch = 
+    payment.withdrawal.withdrawable_epoch = 
         exit_queue_epoch + config.min_validator_withdrawability_delay;
     
     // Add builder pending withdrawal
     let builder_withdrawals_list = state.builder_pending_withdrawals().clone();
     let mut builder_withdrawals: Vec<BuilderPendingWithdrawal> = builder_withdrawals_list.into_iter().cloned().collect();
-    builder_withdrawals.push(updated_payment.withdrawal);
+    builder_withdrawals.push(payment.withdrawal);
     *state.builder_pending_withdrawals_mut() = ssz::PersistentList::try_from_iter(builder_withdrawals.into_iter())?;
     
     // Clear the payment entry

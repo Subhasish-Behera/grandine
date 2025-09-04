@@ -436,10 +436,7 @@ impl<P: Preset> SignForSingleFork<P> for ExecutionPayloadHeader {
     const SIGNATURE_KIND: SignatureKind = SignatureKind::BeaconBuilder;
 
     fn epoch(&self) -> Epoch {
-        // ExecutionPayloadHeader needs to be signed at the slot's epoch
-        // The slot should be passed in context, but for now we'll need to handle this differently
-        // This is a placeholder - the actual implementation will need the slot context
-        0 // TODO: Need slot context for proper epoch calculation
+        misc::compute_epoch_at_slot::<P>(self.slot)
     }
 }
 

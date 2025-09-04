@@ -144,4 +144,56 @@ pub enum Error<P: Preset> {
     WithdrawalCredentialsMismatch { in_state: H256, in_block: H256 },
     #[error("withdrawal index overflowed")]
     WithdrawalIndexOverflow,
+    #[error("invalid payload attestation")]
+    InvalidPayloadAttestation,
+    #[error("parent block hash mismatch")]
+    ParentBlockHashMismatch,
+    #[error("parent block root mismatch")]
+    ParentBlockRootMismatch,
+    #[error("builder not active (builder_index: {builder_index})")]
+    BuilderNotActive {
+        builder_index: ValidatorIndex,
+    },
+    #[error("builder slashed (builder_index: {builder_index})")]
+    BuilderSlashed {
+        builder_index: ValidatorIndex,
+    },
+    #[error("self-build with non-zero value")]
+    SelfBuildWithNonZeroValue,
+    #[error("invalid builder credentials (builder_index: {builder_index})")]
+    InvalidBuilderCredentials {
+        builder_index: ValidatorIndex,
+    },
+    #[error("insufficient builder balance (builder_index: {builder_index}, balance: {balance}, required: {required})")]
+    InsufficientBuilderBalance {
+        builder_index: ValidatorIndex,
+        balance: u64,
+        required: u64,
+    },
+    #[error("invalid payload availability index")]
+    InvalidPayloadAvailabilityIndex,
+    #[error("payload attestation not for parent block")]
+    PayloadAttestationNotForParentBlock,
+    #[error("payload attestation not for previous slot")]
+    PayloadAttestationNotForPreviousSlot,
+    #[error("beacon block root mismatch")]
+    BeaconBlockRootMismatch,
+    #[error("builder index mismatch")]
+    BuilderIndexMismatch,
+    #[error("blob KZG commitments root mismatch")]
+    BlobKzgCommitmentsRootMismatch,
+    #[error("withdrawals root mismatch")]
+    WithdrawalsRootMismatch,
+    #[error("gas limit mismatch")]
+    GasLimitMismatch,
+    #[error("block hash mismatch")]
+    BlockHashMismatch,
+    #[error("parent hash mismatch")]
+    ParentHashMismatch,
+    #[error("prev randao mismatch")]
+    PrevRandaoMismatch,
+    #[error("timestamp mismatch")]
+    TimestampMismatch,
+    #[error("too many blob commitments")]
+    TooManyBlobCommitments,
 }

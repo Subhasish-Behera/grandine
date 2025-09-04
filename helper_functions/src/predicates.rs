@@ -395,25 +395,30 @@ pub fn is_compounding_withdrawal_credential(withdrawal_credentials: H256) -> boo
 }
 
 // > Check if ``validator`` has an 0x02 prefixed "compounding" withdrawal credential.
+// > In EIP-7732/EPBS, this also returns true for 0x03 builder withdrawal credentials.
 #[must_use]
 pub fn has_compounding_withdrawal_credential(validator: &Validator) -> bool {
-    is_compounding_withdrawal_credential(validator.withdrawal_credentials)
-}
-
-// > Check if ``validator`` has a 0x01 or 0x02 prefixed withdrawal credential.
-#[must_use]
-pub fn has_execution_withdrawal_credential(validator: &Validator) -> bool {
     is_compounding_withdrawal_credential(validator.withdrawal_credentials) ||
     is_builder_withdrawal_credential(validator.withdrawal_credentials)
+}
+
+// > Check if ``validator`` has a 0x01, 0x02, or 0x03 prefixed withdrawal credential.
+// > This covers ETH1 (0x01), compounding (0x02), and builder (0x03) withdrawal credentials.
+#[must_use]
+pub fn has_execution_withdrawal_credential(validator: &Validator) -> bool {
+    has_eth1_withdrawal_credential(validator) ||
+    has_compounding_withdrawal_credential(validator)
+    // Note: has_compounding_withdrawal_credential already includes builder (0x03)
 }
 
 pub fn is_builder_withdrawal_credential(withdrawal_credentials: H256) -> bool {
     
     withdrawal_credentials.as_bytes().starts_with(BUILDER_WITHDRAWAL_PREFIX)
 }
-pub fn has_builder_withdrawal_credential(validator:
-                                         &Validator) -> bool {
-    is_compounding_withdrawal_credential(validator.withdrawal_credentials)
+// > Check if ``validator`` has a 0x03 prefixed "builder" withdrawal credential.
+#[must_use]
+pub fn has_builder_withdrawal_credential(validator: &Validator) -> bool {
+    is_builder_withdrawal_credential(validator.withdrawal_credentials)
 }
 
 #[cfg(test)]

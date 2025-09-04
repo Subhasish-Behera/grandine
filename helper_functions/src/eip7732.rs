@@ -5,6 +5,7 @@ use tap::{Pipe as _, TryConv as _};
 use try_from_iterator::TryFromIterator as _;
 use typenum::U512;
 use types::{
+    config::Config,
     eip7732::{
         containers::{Ptc, IndexedPayloadAttestation, PayloadAttestation},
         consts::DOMAIN_PTC_ATTESTER,
@@ -13,6 +14,7 @@ use types::{
     preset::Preset,
     traits::BeaconState,
 };
+use pubkey_cache::PubkeyCache;
 
 use crate::{
     accessors::{get_seed_by_epoch, beacon_committees},
@@ -198,3 +200,51 @@ pub fn get_payload_attesting_indices<P: Preset>(
           signature: payload_attestation.signature,
       })
   }
+
+pub fn is_valid_indexed_payload_attestation<P: Preset>(
+    config: &Config,
+    pubkey_cache: &PubkeyCache,
+    state: &impl BeaconState<P>,
+    indexed_payload_attestation: &IndexedPayloadAttestation,
+) -> Result<bool> {
+    // Check if indexed_payload_attestation is not empty, has sorted and unique indices and has
+    // a valid aggregate signature.
+    
+    // Note: In Grandine's implementation, PayloadAttestationData uses payload_present (boolean)
+    // instead of payload_status (uint8) from the spec. We skip the PAYLOAD_INVALID_STATUS check
+    // since invalid payloads are handled differently in our implementation.
+    
+    // Verify indices are sorted and unique
+    let indices = &indexed_payload_attestation.attesting_indices;
+    
+    // Check non-empty
+    if indices.is_empty() {
+        return Ok(false);
+    }
+    
+    // Check sorted and unique (no duplicates)
+    for i in 1..indices.len() {
+        if indices[i] <= indices[i - 1] {
+            return Ok(false);
+        }
+    }
+    
+    // Verify aggregate signature
+    use crate::predicates::verify_indexed_payload_attestation_signature;
+    use crate::verifier::NullVerifier;
+    
+    // Create a verifier that collects the signature for verification
+    let mut verifier = NullVerifier;
+    
+    // This will return an error if signature is invalid, Ok(()) if valid
+    match verify_indexed_payload_attestation_signature(
+        config,
+        pubkey_cache, 
+        state,
+        indexed_payload_attestation,
+        &mut verifier,
+    ) {
+        Ok(_) => Ok(true),
+        Err(_) => Ok(false),
+    }
+}

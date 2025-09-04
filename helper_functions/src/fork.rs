@@ -5,7 +5,7 @@ use anyhow::Result;
 use bls::{traits::SignatureBytes as _, SignatureBytes};
 use itertools::Itertools as _;
 use pubkey_cache::PubkeyCache;
-use ssz::PersistentList;
+use ssz::{Hc, PersistentList};
 use std_ext::ArcExt as _;
 use types::{
     altair::beacon_state::BeaconState as AltairBeaconState,
@@ -22,6 +22,7 @@ use types::{
         beacon_state::BeaconState as DenebBeaconState,
         containers::ExecutionPayloadHeader as DenebExecutionPayloadHeader,
     },
+    eip7732::beacon_state::BeaconState as Eip7732BeaconState,
     electra::{
         beacon_state::BeaconState as ElectraBeaconState,
         consts::UNSET_DEPOSIT_REQUESTS_START_INDEX, containers::PendingDeposit,
@@ -664,6 +665,124 @@ pub fn upgrade_to_electra<P: Preset>(
     }
 
     Ok(post)
+}
+
+pub fn upgrade_to_eip7732<P: Preset>(
+    config: &Config,
+    pre: ElectraBeaconState<P>,
+) -> Result<Hc<Eip7732BeaconState<P>>> {
+    let epoch = accessors::get_current_epoch(&pre);
+
+    let ElectraBeaconState {
+        genesis_time,
+        genesis_validators_root,
+        slot,
+        fork,
+        latest_block_header,
+        block_roots,
+        state_roots,
+        historical_roots,
+        eth1_data,
+        eth1_data_votes,
+        eth1_deposit_index,
+        validators,
+        balances,
+        randao_mixes,
+        slashings,
+        previous_epoch_participation,
+        current_epoch_participation,
+        justification_bits,
+        previous_justified_checkpoint,
+        current_justified_checkpoint,
+        finalized_checkpoint,
+        inactivity_scores,
+        current_sync_committee,
+        next_sync_committee,
+        latest_execution_payload_header,
+        next_withdrawal_index,
+        next_withdrawal_validator_index,
+        historical_summaries,
+        deposit_requests_start_index,
+        deposit_balance_to_consume,
+        exit_balance_to_consume,
+        earliest_exit_epoch,
+        consolidation_balance_to_consume,
+        earliest_consolidation_epoch,
+        pending_deposits,
+        pending_partial_withdrawals,
+        pending_consolidations,
+        cache,
+    } = pre;
+
+    // EIP-7732 uses the same fork version as Electra
+    let fork = Fork {
+        previous_version: fork.current_version,
+        current_version: config.electra_fork_version,
+        epoch,
+    };
+
+    let post = Eip7732BeaconState {
+        // > Versioning
+        genesis_time,
+        genesis_validators_root,
+        slot,
+        fork,
+        // > History
+        latest_block_header,
+        block_roots,
+        state_roots,
+        historical_roots,
+        // > Eth1
+        eth1_data,
+        eth1_data_votes,
+        eth1_deposit_index,
+        // > Registry
+        validators,
+        balances,
+        // > Randomness
+        randao_mixes,
+        // > Slashings
+        slashings,
+        // > Participation
+        previous_epoch_participation,
+        current_epoch_participation,
+        // > Finality
+        justification_bits,
+        previous_justified_checkpoint,
+        current_justified_checkpoint,
+        finalized_checkpoint,
+        // > Inactivity
+        inactivity_scores,
+        // > Sync
+        current_sync_committee,
+        next_sync_committee,
+        // > Execution
+        latest_execution_payload_header,
+        // > Withdrawals
+        next_withdrawal_index,
+        next_withdrawal_validator_index,
+        // > Deep history valid from Capella onwards
+        historical_summaries,
+        deposit_requests_start_index,
+        deposit_balance_to_consume,
+        exit_balance_to_consume,
+        earliest_exit_epoch,
+        consolidation_balance_to_consume,
+        earliest_consolidation_epoch,
+        pending_deposits,
+        pending_partial_withdrawals,
+        pending_consolidations,
+        // > ePBS fields (new in EIP7732)
+        execution_payload_availability: Default::default(),
+        builder_pending_payments: Default::default(),
+        builder_pending_withdrawals: Default::default(),
+        latest_block_hash: Default::default(),
+        latest_withdrawals_root: Default::default(),
+        // Cache
+        cache,
+    };
+
+    Ok(post.into())
 }
 
 #[cfg(test)]
