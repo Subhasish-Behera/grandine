@@ -28,6 +28,7 @@ use types::{
     },
     config::Config,
     deneb::containers::{BlobIdentifier, BlobSidecar},
+    eip7732::containers::SignedExecutionPayloadEnvelope,
     nonstandard::{RelativeEpoch, ValidationOutcome},
     phase0::{
         containers::Checkpoint,
@@ -104,7 +105,7 @@ impl<P: Preset, E: ExecutionEngine<P> + Send, W> Run for BlockTask<P, E, W> {
                 )
             }
             BlockOrigin::Own => {
-                if Feature::TrustOwnBlockSignatures.is_enabled() {
+                if Feature::TrustOwnBlockSignaetures.is_enabled() {
                     block_processor.validate_block(
                         &store_snapshot,
                         &block,
@@ -181,6 +182,56 @@ impl<P: Preset, W> Run for BlockVerifyForGossipTask<P, W> {
         drop(wait_group);
     }
 }
+
+pub struct ExecutionPayloadEnvelopeTask<P: Preset, E , W> {
+    pub store_snapshot: Arc<Store<P, Storage<P>>>,
+    pub execution_engine: E,
+    pub mutator_tx: Sender<MutatorMessage<P, W>>,
+    pub wait_group: W,
+    pub execution_payload_envelope: Arc<SignedExecutionPayloadEnvelope<P>>,
+    pub beacon_block_seen: bool,
+    pub gossip_id: GossipId,
+    pub submission_time: Instant,
+    pub metrics: Option<Arc<Metrics>>,
+}
+
+impl <P: Preset, E: ExecutionEngine<P> + Send, W> Run for ExecutionPayloadEnvelopeTask<P, E, W> {
+    fn run(self) {
+        let Self {
+            store_snapshot,
+            execution_engine,
+            mutator_tx,
+            wait_group,
+            execution_payload_envelope,
+            beacon_block_seen,
+            gossip_id,
+            submission_time,
+            metrics,
+        } = self;
+
+        let envelope = &execution_payload_envelope.message;
+        let beacon_block_root = envelope.beacon_block_root;
+
+        // let _timer = metrics
+        //     .as_ref()
+        //     .map(|metrics| metrics.fc_execution_payload_envelope_task_times.start_timer());
+
+        let result = store_snapshot.validate_execution_payload_envelope(
+            &execution_payload_envelope,
+            beacon_block_seen,
+            &gossip_id,
+            &execution_engine,
+        );
+
+        MutatorMessage::ExecutionPayloadEnvelope {
+            wait_group,
+            result,
+            gossip_id,
+            submission_time,
+            beacon_block_seen,
+        }
+        .send(&mutator_tx);
+    }
 
 pub struct AggregateAndProofTask<P: Preset, W> {
     pub store_snapshot: Arc<Store<P, Storage<P>>>,

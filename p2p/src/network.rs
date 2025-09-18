@@ -1580,6 +1580,10 @@ impl<P: Preset> Network<P> {
             PubsubMessage::LightClientOptimisticUpdate(_) => {
                 debug!("received light client optimistic update as gossip");
             }
+            PubsubMessage::ExecutionPayload(execution_payload_envelope) => {
+                P2pToSync::GossipExecutionPayload(execution_payload_envelope, source, GossipId { source, message_id })
+                    .send(&self.channels.p2p_to_sync_tx);
+            }
         }
     }
 
