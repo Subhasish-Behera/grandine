@@ -83,6 +83,7 @@ pub struct BlockSyncService<P: Preset> {
     is_exiting: Arc<AtomicBool>,
     received_blob_sidecars: Arc<DashMap<BlobIdentifier, Slot>>,
     received_block_roots: HashMap<H256, Slot>,
+    received_execution_payloads: HashMap<H256, Slot>,
     data_dumper: Arc<DataDumper>,
     fork_choice_to_sync_rx: Option<UnboundedReceiver<SyncMessage<P>>>,
     p2p_to_sync_rx: UnboundedReceiver<P2pToSync<P>>,
@@ -212,6 +213,7 @@ impl<P: Preset> BlockSyncService<P> {
             is_exiting: Arc::new(AtomicBool::new(false)),
             received_blob_sidecars,
             received_block_roots: HashMap::new(),
+            received_execution_payloads: HashMap::new(),
             data_dumper,
             fork_choice_to_sync_rx,
             p2p_to_sync_rx,
@@ -456,12 +458,30 @@ impl<P: Preset> BlockSyncService<P> {
 
                             self.received_blob_sidecars.retain(|_, slot| *slot >= start_of_epoch);
                             self.received_block_roots.retain(|_, slot| *slot >= start_of_epoch);
+                            self.received_execution_payloads.retain(|_, slot| *slot >= start_of_epoch);
                         }
                         P2pToSync::BlobSidecarRejected(blob_identifier) => {
                             // In case blob sidecar is not valid (e.g. someone spams fake blob sidecars)
                             // Grandine should not dismiss newer valid blob sidecars with the same blob identifier
                             self.received_blob_sidecars.remove(&blob_identifier);
                         }
+                        P2pToSync::GossipExecutionPayload(execution_payload_envelope, peer_id, gossip_id) => {
+                            let payload_slot = execution_payload_envelope.message.slot;
+                            let beacon_block_root = execution_payload_envelope.message.beacon_block_root;
+                            
+                            //Use beacon_block_Root as the key for deduplication
+                            if self.register_new_received_execution_payload(beacon_block_root, payload_slot) {
+                                debug!(
+                                    "received execution payload as gossip (slot: {payload_slot}, \
+                                    beacon_block_root: {beacon_block_root:?}, peer_id: {peer_id})"
+                                );
+
+                                self.controller.on_gossip_execution_payload(
+                                    execution_payload_envelope,
+                                    gossip_id,
+                                );
+                            }
+                            
                         P2pToSync::Stop => {
                             SyncToApi::Stop.send(&self.sync_to_api_tx);
 
@@ -836,6 +856,7 @@ impl<P: Preset> BlockSyncService<P> {
 
             if self.back_sync.is_some() {
                 self.received_block_roots = HashMap::new();
+                self.received_execution_payloads = HashMap::new();
                 self.received_blob_sidecars.clear();
                 self.sync_direction = SyncDirection::Back;
                 self.sync_manager.cache_clear();
@@ -861,6 +882,10 @@ impl<P: Preset> BlockSyncService<P> {
 
     fn register_new_received_block(&mut self, block_root: H256, slot: Slot) -> bool {
         self.received_block_roots.insert(block_root, slot).is_none()
+    }
+
+    fn register_new_received_execution_payload(&mut self, beacon_block_root: H256, payload_slot: Slot) -> bool {
+        self.received_execution_payloads.insert(beacon_block_root, payload_slot).is_none()
     }
 
     fn register_new_received_blob_sidecar(

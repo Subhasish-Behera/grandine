@@ -38,6 +38,7 @@ use types::{
     },
     config::Config as ChainConfig,
     deneb::containers::BlobSidecar,
+    eip7732::containers::SignedExecutionPayloadEnvelope,
     nonstandard::ValidationOutcome,
     phase0::primitives::{ExecutionBlockHash, Slot, SubnetId, H256},
     preset::Preset,
@@ -282,6 +283,27 @@ where
             block,
             sender,
         })
+    }
+    
+    pub fn on_execution_payload( 
+        &self,
+        execution_payload_envelope: Arc<SignedExecutionPayloadEnvelope<P>>,
+        gossip_id: GossipId,
+        beacon_block_seen: bool,
+    )
+    {
+        self.spawn(ExecutionPayloadEnvelopeTask {
+            store_snapshot: self.owned_store_snapshot(),
+            execution_engine: self.execution_engine.clone(),
+            mutator_tx: self.owned_mutator_tx(),
+            wait_group: self.owned_wait_group(),
+            execution_payload_envelope,
+            beacon_block_seen,
+            gossip_id,
+            submission_time: Instant::now(),
+            metrics: self.metrics.clone(),
+        })
+
     }
 
     pub fn on_notified_fork_choice_update(&self, payload_status: PayloadStatusV1) {
@@ -550,7 +572,6 @@ where
     fn spawn_block_task(&self, block: Arc<SignedBeaconBlock<P>>, origin: BlockOrigin) {
         self.spawn_block_task_with_wait_group(self.owned_wait_group(), block, origin)
     }
-
     fn spawn_block_task_with_wait_group(
         &self,
         wait_group: W,

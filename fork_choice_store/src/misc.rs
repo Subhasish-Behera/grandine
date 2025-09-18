@@ -213,6 +213,22 @@ impl BlockOrigin {
     }
 }
 
+pub enum ExecutionPayloadEnvelopeOrigin {
+    Gossip(GossipId),
+    // Requested(Option<PeerId>),
+    // Own,
+    // Api(OneshotSender<Result<ValidationOutcome>>),
+}
+
+impl ExecutionPayloadEnvelopeOrigin {
+    #[must_use]
+    pub fn gossip_id(&self) -> Option<GossipId> {
+        match self {
+            Self::Gossip(gossip_id) => Some(gossip_id.clone()),
+        }
+    }
+}
+
 #[derive(Debug, AsRefStr)]
 pub enum AggregateAndProofOrigin<I> {
     Gossip(I),
