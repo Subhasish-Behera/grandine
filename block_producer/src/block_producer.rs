@@ -71,7 +71,10 @@ use types::{
         ExecutionRequests,
     },
     fulu::containers::{BeaconBlock as FuluBeaconBlock, BeaconBlockBody as FuluBeaconBlockBody},
-    gloas::containers::{BeaconBlock as GloasBeaconBlock, BeaconBlockBody as GloasBeaconBlockBody},
+    gloas::containers::{
+        BeaconBlock as GloasBeaconBlock, BeaconBlockBody as GloasBeaconBlockBody,
+        SignedExecutionPayloadBid,
+    },
     nonstandard::{BlockRewards, Phase, WithBlobsAndMev},
     phase0::{
         consts::FAR_FUTURE_EPOCH,
@@ -951,6 +954,7 @@ impl<P: Preset, W: Wait> BlockBuildContext<P, W> {
                             execution_requests: ExecutionRequests::default(),
                         },
                     }),
+                    // TODO(gloas): prepare `signed_execution_payload_bid` and `payload_attestations`
                     Phase::Gloas => BeaconBlock::from(GloasBeaconBlock {
                         slot,
                         proposer_index,
@@ -966,11 +970,9 @@ impl<P: Preset, W: Wait> BlockBuildContext<P, W> {
                             deposits,
                             voluntary_exits,
                             sync_aggregate,
-                            // TODO(gloas): remove "to-removed" fields
-                            execution_payload: DenebExecutionPayload::default(),
                             bls_to_execution_changes,
-                            blob_kzg_commitments: ContiguousList::default(),
-                            execution_requests: ExecutionRequests::default(),
+                            signed_execution_payload_bid: SignedExecutionPayloadBid::default(),
+                            payload_attestations: ContiguousList::default(),
                         },
                     }),
                     _ => {
@@ -1578,25 +1580,28 @@ impl<P: Preset, W: Wait> BlockBuildContext<P, W> {
                     parent_beacon_block_root,
                 })
             }
-            BeaconState::Gloas(state) => {
-                // TODO(gloas): rewrite to gloas spec
-                let (withdrawals, _) = electra::get_expected_withdrawals(state)?;
+            BeaconState::Gloas(_state) => {
+                return Ok(None);
 
-                let withdrawals = withdrawals
-                    .into_iter()
-                    .map_into()
-                    .pipe(ContiguousList::try_from_iter)?;
+                // TODO(gloas): uncomment after `get_expected_withdrawals` implemented
+                // let (withdrawals, _) = gloas::get_expected_withdrawals(state)?;
 
-                let parent_beacon_block_root =
-                    accessors::get_block_root_at_slot(state, state.slot().saturating_sub(1))?;
+                // let withdrawals = withdrawals
+                //     .into_iter()
+                //     .map_into()
+                //     .pipe(ContiguousList::try_from_iter)?;
+                //
+                // let parent_beacon_block_root =
+                //     accessors::get_block_root_at_slot(state, state.slot().saturating_sub(1))?;
 
-                PayloadAttributes::Fulu(PayloadAttributesV3 {
-                    timestamp,
-                    prev_randao,
-                    suggested_fee_recipient,
-                    withdrawals,
-                    parent_beacon_block_root,
-                })
+                // TODO(gloas): add Gloas variant for PayloadAttributes
+                // PayloadAttributes::Fulu(PayloadAttributesV3 {
+                //     timestamp,
+                //     prev_randao,
+                //     suggested_fee_recipient,
+                //     withdrawals,
+                //     parent_beacon_block_root,
+                // })
             }
         };
 
