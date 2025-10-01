@@ -905,6 +905,16 @@ pub enum AttestationValidationError<P: Preset, I> {
     SingularAttestationHasMultipleAggregationBitsSet {
         attestation: Box<AttestationItem<P, I>>,
     },
+    #[error("committee index too high for Gloas (index: {index}, attestation: {attestation:?})")]
+    CommitteeIndexTooHigh {
+        index: u64,
+        attestation: Box<AttestationItem<P, I>>,
+    },
+    #[error("committee index non-zero for same-slot attestation in Gloas (index: {index}, attestation: {attestation:?})")]
+    CommitteeIndexNonZeroSameSlot {
+        index: u64,
+        attestation: Box<AttestationItem<P, I>>,
+    },
     #[error("singular attestation validation error: {attestation:?} {source:}")]
     Other {
         source: AnyhowError,
@@ -918,6 +928,8 @@ impl<P: Preset, I> AttestationValidationError<P, I> {
         match self {
             Self::SingularAttestationOnIncorrectSubnet { attestation, .. }
             | Self::SingularAttestationHasMultipleAggregationBitsSet { attestation }
+            | Self::CommitteeIndexTooHigh { attestation, .. }
+            | Self::CommitteeIndexNonZeroSameSlot { attestation, .. }
             | Self::Other { attestation, .. } => *attestation,
         }
     }
