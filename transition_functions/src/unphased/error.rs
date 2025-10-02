@@ -4,7 +4,7 @@ use types::{
     combined::Attestation,
     phase0::{
         containers::{AttestationData, BeaconBlockHeader, Checkpoint, Deposit, Validator},
-        primitives::{Epoch, Slot, UnixSeconds, ValidatorIndex, H256},
+        primitives::{Epoch, ExecutionBlockHash, Gwei, Slot, UnixSeconds, ValidatorIndex, H256},
     },
     preset::Preset,
 };
@@ -36,11 +36,22 @@ pub enum Error<P: Preset> {
     AttestationTargetsWrongEpoch { attestation: Attestation<P> },
     #[error("post-Electra attestation with invalid (non-zero) committee index: {attestation:?}")]
     AttestationWithNonZeroCommitteeIndex { attestation: Attestation<P> },
+    #[error("bid slot ({in_bid}) does not match block slot ({in_block})")]
+    BidSlotMismatch { in_bid: Slot, in_block: Slot },
+    #[error("bid parent block hash ({in_bid}) does not match in state ({in_state})")]
+    BidParentBlockHashMismatch {
+        in_bid: ExecutionBlockHash,
+        in_state: ExecutionBlockHash,
+    },
+    #[error("bid parent block root ({in_bid}) does not match in block ({in_block})")]
+    BidParentBlockRootMismatch { in_bid: H256, in_block: H256 },
     #[error("block is not newer than latest block header ({block_slot} <= {block_header_slot})")]
     BlockNotNewerThanLatestBlockHeader {
         block_slot: Slot,
         block_header_slot: Slot,
     },
+    #[error("builder balance is not sufficient (balance: {balance}, payments: {payments})")]
+    BuilderBalanceNotSufficient { balance: Gwei, payments: Gwei },
     #[error("deposit count is incorrect (computed: {computed}, in_block: {in_block})")]
     DepositCountMismatch { computed: u64, in_block: u64 },
     #[error("deposit proof is invalid: {deposit:?}")]
@@ -48,6 +59,10 @@ pub enum Error<P: Preset> {
         // Boxed to pass `clippy::large_enum_variant`.
         deposit: Box<Deposit>,
     },
+    #[error("the execution payload bid is not from builder")]
+    ExecutionPayloadBidNotBuilder,
+    #[error("execution payload bid's signature is invalid")]
+    ExecutionPayloadBidSignatureInvalid,
     #[error(
         "parent hash in execution payload ({in_block:?}) \
          does not match latest execution payload header ({in_state:?})"
@@ -68,6 +83,8 @@ pub enum Error<P: Preset> {
     },
     #[error("no attesters slashed")]
     NoAttestersSlashed,
+    #[error("non zero bid value for self-build block")]
+    NoneZeroBidValue,
     #[error("block parent root ({in_block:?}) does not match latest block header ({computed:?})")]
     ParentRootMismatch { computed: H256, in_block: H256 },
     #[error("proposer (validator {index}) is slashed")]
@@ -107,6 +124,8 @@ pub enum Error<P: Preset> {
         index: ValidatorIndex,
         exit_epoch: Epoch,
     },
+    #[error("validator {index} is already slashed")]
+    ValidatorAlreadySlashed { index: ValidatorIndex },
     #[error(
         "validator {index} has not been active long enough \
          (activation_epoch: {activation_epoch}, current_epoch: {current_epoch})"

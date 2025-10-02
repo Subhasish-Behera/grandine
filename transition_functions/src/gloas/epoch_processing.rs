@@ -1,16 +1,27 @@
 use anyhow::Result;
 use arithmetic::NonZeroExt as _;
 use helper_functions::{
-    accessors::{get_current_epoch, get_next_epoch},
+    accessors::{get_builder_payment_quorum_threshold, get_current_epoch, get_next_epoch},
     electra::{initiate_validator_exit, is_eligible_for_activation_queue},
     misc::{compute_activation_exit_epoch, vec_of_default},
+    mutators::compute_exit_epoch_and_update_churn,
     predicates::{is_active_validator, is_eligible_for_activation},
 };
+use itertools::Itertools as _;
 use pubkey_cache::PubkeyCache;
-use ssz::SszHash as _;
+use ssz::{PersistentVector, SszHash as _};
+use tap::Pipe as _;
+use try_from_iterator::TryFromIterator as _;
+use typenum::Unsigned as _;
 use types::{
-    capella::containers::HistoricalSummary, config::Config,
-    gloas::beacon_state::BeaconState as GloasBeaconState, preset::Preset, traits::BeaconState,
+    capella::containers::HistoricalSummary,
+    config::Config,
+    gloas::{
+        beacon_state::BeaconState,
+        containers::{BuilderPendingPayment, BuilderPendingWithdrawal},
+    },
+    preset::{BuilderPendingPaymentsLength, Preset},
+    traits::{BeaconState as _, PostGloasBeaconState},
 };
 
 use super::epoch_intermediates;
@@ -26,7 +37,7 @@ use prometheus_metrics::METRICS;
 pub fn process_epoch(
     config: &Config,
     pubkey_cache: &PubkeyCache,
-    state: &mut GloasBeaconState<impl Preset>,
+    state: &mut BeaconState<impl Preset>,
 ) -> Result<()> {
     #[cfg(feature = "metrics")]
     let _timer = METRICS
@@ -76,16 +87,57 @@ pub fn process_epoch(
     altair::process_participation_flag_updates(state);
     altair::process_sync_committee_updates(pubkey_cache, state)?;
 
-    // > [New in Fulu:EIP7917]
     // TODO(gloas): update `state` param to be compatible with GloasBeaconState
     // fulu::process_proposer_lookahead(config, state)?;
+
+    process_builder_pending_payments(config, state)?;
 
     state.cache.advance_epoch();
 
     Ok(())
 }
 
-fn process_historical_summaries_update<P: Preset>(state: &mut GloasBeaconState<P>) -> Result<()> {
+fn process_builder_pending_payments<P: Preset>(
+    config: &Config,
+    state: &mut impl PostGloasBeaconState<P>,
+) -> Result<()> {
+    let quorum = get_builder_payment_quorum_threshold(state);
+    let payments = state.builder_pending_payments().into_iter().collect_vec();
+
+    for payment in payments {
+        if payment.weight > quorum {
+            // TODO(gloas): remove this comment after update `compute_exit_epoch_and_update_churn`
+            // to be GloasBeaconState compatible
+            let exit_queue_epoch =
+                compute_exit_epoch_and_update_churn(config, state, payment.withdrawal.amount);
+            let withdrawable_epoch =
+                exit_queue_epoch.saturating_add(config.min_validator_withdrawability_delay);
+
+            state
+                .builder_pending_withdrawals_mut()
+                .push(BuilderPendingWithdrawal {
+                    withdrawable_epoch,
+                    ..payment.withdrawal
+                });
+        }
+    }
+
+    *state.builder_pending_payments_mut() = payments
+        .into_iter()
+        .copied()
+        .skip(P::SlotsPerEpoch::USIZE)
+        .chain(core::iter::repeat_n(
+            BuilderPendingPayment::default(),
+            P::SlotsPerEpoch::USIZE,
+        ))
+        .take(BuilderPendingPaymentsLength::<P>::USIZE)
+        .pipe(PersistentVector::try_from_iter)
+        .map_err(Into::into)?;
+
+    Ok(())
+}
+
+fn process_historical_summaries_update<P: Preset>(state: &mut BeaconState<P>) -> Result<()> {
     let next_epoch = get_next_epoch(state);
 
     // > Set historical block root accumulator.
@@ -104,7 +156,7 @@ fn process_historical_summaries_update<P: Preset>(state: &mut GloasBeaconState<P
 pub fn epoch_report<P: Preset>(
     config: &Config,
     pubkey_cache: &PubkeyCache,
-    state: &mut GloasBeaconState<P>,
+    state: &mut BeaconState<P>,
 ) -> Result<EpochReport> {
     let (statistics, mut summaries, participation) = altair::statistics(state);
 
@@ -162,7 +214,7 @@ pub fn epoch_report<P: Preset>(
 
 fn process_registry_updates<P: Preset>(
     config: &Config,
-    state: &mut GloasBeaconState<P>,
+    state: &mut BeaconState<P>,
     summaries: &mut [impl ValidatorSummary],
 ) -> Result<()> {
     let current_epoch = get_current_epoch(state);

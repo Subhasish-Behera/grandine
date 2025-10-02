@@ -56,7 +56,7 @@ pub struct BeaconBlockBody<P: Preset> {
     pub payload_attestations: ContiguousList<PayloadAttestation<P>, P::MaxPayloadAttestation>,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Default, Deserialize, Serialize, Ssz)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Deserialize, Serialize, Ssz)]
 #[serde(bound = "", deny_unknown_fields)]
 pub struct BuilderPendingPayment {
     #[serde(with = "serde_utils::string_or_native")]
@@ -64,7 +64,7 @@ pub struct BuilderPendingPayment {
     pub withdrawal: BuilderPendingWithdrawal,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Default, Deserialize, Serialize, Ssz)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Deserialize, Serialize, Ssz)]
 #[serde(bound = "", deny_unknown_fields)]
 pub struct BuilderPendingWithdrawal {
     pub fee_recipient: ExecutionAddress,
@@ -87,7 +87,7 @@ pub struct DataColumnSidecar<P: Preset> {
     pub beacon_block_root: H256,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Default, Deserialize, Serialize, Ssz)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Deserialize, Serialize, Ssz)]
 #[serde(bound = "", deny_unknown_fields)]
 pub struct ExecutionPayloadBid {
     pub parent_block_hash: ExecutionBlockHash,
@@ -219,7 +219,7 @@ pub struct SignedBeaconBlock<P: Preset> {
     pub signature: SignatureBytes,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Default, Deserialize, Serialize, Ssz)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Deserialize, Serialize, Ssz)]
 #[serde(bound = "", deny_unknown_fields)]
 pub struct SignedExecutionPayloadBid {
     pub message: ExecutionPayloadBid,
