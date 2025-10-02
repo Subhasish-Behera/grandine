@@ -63,6 +63,16 @@ pub fn is_epoch_start<P: Preset>(slot: Slot) -> bool {
     slots_since_epoch_start::<P>(slot) == 0
 }
 
+#[must_use]
+pub const fn builder_payment_index_for_current_epoch<P: Preset>(slot: Slot) -> u64 {
+    P::SlotsPerEpoch::U64.saturating_add(slot % P::SlotsPerEpoch::U64)
+}
+
+#[must_use]
+pub const fn builder_payment_index_for_previous_epoch<P: Preset>(slot: Slot) -> u64 {
+    slot % P::SlotsPerEpoch::U64
+}
+
 #[expect(
     clippy::unnecessary_min_or_max,
     reason = "GENESIS_EPOCH const might be adjusted independently."
@@ -876,7 +886,10 @@ fn compute_balance_weighted_acceptance<P: Preset>(
     let seed = hashing::hash_256_64(seed, i.saturating_div(16));
     let random_bytes = seed.as_fixed_bytes();
     let offset = usize::try_from((i % 16) * 2)?;
-    let random_value = u16::from_le_bytes([random_bytes[offset], random_bytes[offset + 1]]) as u64;
+    let random_value = u64::from(u16::from_le_bytes([
+        random_bytes[offset],
+        random_bytes[offset + 1],
+    ]));
     let effective_balance = state
         .validators()
         .get(index)

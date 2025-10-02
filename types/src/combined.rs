@@ -372,6 +372,7 @@ impl<P: Preset> BeaconState<P> {
         }
     }
 
+    #[expect(clippy::same_name_method)]
     pub fn post_electra(&self) -> Option<&dyn PostElectraBeaconState<P>> {
         match self {
             Self::Phase0(_)

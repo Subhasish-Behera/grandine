@@ -810,11 +810,12 @@ pub fn get_attestation_participation_flags<P: Preset>(
             true
         } else {
             let slot = usize::try_from(data.slot)?;
-            let is_payload_available = post_gloas
-                .execution_payload_availability()
-                .get(slot % SlotsPerHistoricalRoot::<P>::USIZE)
-                .ok_or(Error::PayloadAvailabilityOutOfRange)?
-                as u64;
+            let is_payload_available = u64::from(
+                post_gloas
+                    .execution_payload_availability()
+                    .get(slot % SlotsPerHistoricalRoot::<P>::USIZE)
+                    .ok_or(Error::PayloadAvailabilityOutOfRange)?,
+            );
 
             data.index == is_payload_available
         };
@@ -975,6 +976,7 @@ pub fn get_consolidation_churn_limit<P: Preset>(
     get_balance_churn_limit(config, state) - get_activation_exit_churn_limit(config, state)
 }
 
+// TODO: (gloas): make `state` param gloas compatible
 #[must_use]
 pub fn get_pending_balance_to_withdraw<P: Preset>(
     state: &impl PostElectraBeaconState<P>,

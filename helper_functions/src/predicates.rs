@@ -10,6 +10,7 @@ use bls::SignatureBytes;
 use itertools::Itertools as _;
 use pubkey_cache::PubkeyCache;
 use ssz::SszHash as _;
+use std_ext::DefaultExt as _;
 use tap::TryConv as _;
 use typenum::Unsigned as _;
 use types::{
@@ -267,7 +268,11 @@ pub fn is_in_inactivity_leak<P: Preset>(state: &impl BeaconState<P>) -> bool {
 pub fn is_merge_transition_complete<P: Preset>(
     state: &(impl PostBellatrixBeaconState<P> + ?Sized),
 ) -> bool {
-    !state.latest_execution_payload_header().is_default_payload()
+    if let Some(state) = state.post_gloas() {
+        !state.latest_execution_payload_bid().is_default()
+    } else {
+        !state.latest_execution_payload_header().is_default_payload()
+    }
 }
 
 /// <https://github.com/ethereum/consensus-specs/blob/8ae93b8265c66851e6140733a074916453dd2660/specs/bellatrix/beacon-chain.md#is_merge_transition_block>
@@ -409,7 +414,6 @@ pub fn has_builder_withdrawal_credential(validator: &Validator) -> bool {
 }
 
 // > Checks if the attestation was for the block proposed at the attestation slot
-#[must_use]
 pub fn is_attestation_same_slot<P: Preset>(
     state: &impl BeaconState<P>,
     data: &AttestationData,
@@ -457,7 +461,6 @@ pub fn validate_received_indexed_payload_attestation<P: Preset>(
 
 // > Check if ``indexed_payload_attestation`` is not empty,
 // has sorted and unique indices and has a valid aggregate signature.
-#[must_use]
 fn validate_indexed_payload_attestation<P: Preset>(
     config: &Config,
     pubkey_cache: &PubkeyCache,

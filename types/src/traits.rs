@@ -96,7 +96,7 @@ use crate::{
         beacon_state::BeaconState as GloasBeaconState,
         containers::{
             BeaconBlock as GloasBeaconBlock, BeaconBlockBody as GloasBeaconBlockBody,
-            ExecutionPayloadBid,
+            ExecutionPayloadBid, PayloadAttestation, SignedExecutionPayloadBid,
         },
     },
     nonstandard::Phase,
@@ -166,6 +166,7 @@ pub trait BeaconState<P: Preset>: SszHash<PackingFactor = U1> + Send + Sync {
     fn validators_mut_with_balances(&mut self) -> (&mut Validators<P>, &Balances<P>);
     fn balances_mut_with_slashings(&mut self) -> (&mut Balances<P>, &Slashings<P>);
 
+    fn post_electra(&self) -> Option<&dyn PostElectraBeaconState<P>>;
     fn post_fulu(&self) -> Option<&dyn PostFuluBeaconState<P>>;
     fn post_gloas(&self) -> Option<&dyn PostGloasBeaconState<P>>;
 
@@ -185,6 +186,7 @@ pub trait BeaconState<P: Preset>: SszHash<PackingFactor = U1> + Send + Sync {
     get_ref_mut(field, method)
     validators_mut_with_balances_body
     balances_mut_with_slashings_body
+    post_electra_body
     post_fulu_body
     post_gloas_body
     is_post_deneb_body
@@ -199,6 +201,7 @@ pub trait BeaconState<P: Preset>: SszHash<PackingFactor = U1> + Send + Sync {
     [self.make_mut().method()]
     [self.make_mut().validators_mut_with_balances()]
     [self.make_mut().balances_mut_with_slashings()]
+    [self.as_ref().post_electra()]
     [self.as_ref().post_fulu()]
     [self.as_ref().post_gloas()]
     [self.as_ref().is_post_deneb()]
@@ -213,6 +216,7 @@ pub trait BeaconState<P: Preset>: SszHash<PackingFactor = U1> + Send + Sync {
     [self.as_mut().method()]
     [self.as_mut().validators_mut_with_balances()]
     [self.as_mut().balances_mut_with_slashings()]
+    [self.as_ref().post_electra()]
     [self.as_ref().post_fulu()]
     [self.as_ref().post_gloas()]
     [self.as_ref().is_post_deneb()]
@@ -229,6 +233,7 @@ pub trait BeaconState<P: Preset>: SszHash<PackingFactor = U1> + Send + Sync {
     [(&mut self.balances, &self.slashings)]
     [None]
     [None]
+    [None]
     [false]
     [false]
     [false]
@@ -241,6 +246,7 @@ pub trait BeaconState<P: Preset>: SszHash<PackingFactor = U1> + Send + Sync {
     [&mut self.field]
     [(&mut self.validators, &self.balances)]
     [(&mut self.balances, &self.slashings)]
+    [None]
     [None]
     [None]
     [false]
@@ -257,6 +263,7 @@ pub trait BeaconState<P: Preset>: SszHash<PackingFactor = U1> + Send + Sync {
     [(&mut self.balances, &self.slashings)]
     [None]
     [None]
+    [None]
     [false]
     [false]
     [false]
@@ -269,6 +276,7 @@ pub trait BeaconState<P: Preset>: SszHash<PackingFactor = U1> + Send + Sync {
     [&mut self.field]
     [(&mut self.validators, &self.balances)]
     [(&mut self.balances, &self.slashings)]
+    [None]
     [None]
     [None]
     [false]
@@ -285,6 +293,7 @@ pub trait BeaconState<P: Preset>: SszHash<PackingFactor = U1> + Send + Sync {
     [(&mut self.balances, &self.slashings)]
     [None]
     [None]
+    [None]
     [true]
     [false]
     [false]
@@ -297,6 +306,7 @@ pub trait BeaconState<P: Preset>: SszHash<PackingFactor = U1> + Send + Sync {
     [&mut self.field]
     [(&mut self.validators, &self.balances)]
     [(&mut self.balances, &self.slashings)]
+    [Some(self)]
     [None]
     [None]
     [true]
@@ -312,6 +322,7 @@ pub trait BeaconState<P: Preset>: SszHash<PackingFactor = U1> + Send + Sync {
     [(&mut self.validators, &self.balances)]
     [(&mut self.balances, &self.slashings)]
     [Some(self)]
+    [Some(self)]
     [None]
     [true]
     [true]
@@ -325,6 +336,7 @@ pub trait BeaconState<P: Preset>: SszHash<PackingFactor = U1> + Send + Sync {
     [&mut self.field]
     [(&mut self.validators, &self.balances)]
     [(&mut self.balances, &self.slashings)]
+    [None]
     [None]
     [Some(self)]
     [true]
@@ -394,6 +406,7 @@ pub trait BeaconState<P: Preset>: SszHash<PackingFactor = U1> + Send + Sync {
             Self::Gloas(state) => state.balances_mut_with_slashings(),
         }
     ]
+    [self.post_electra()]
     [self.post_fulu()]
     [self.post_gloas()]
     [
@@ -476,6 +489,10 @@ impl<parameters> BeaconState<P> for implementor {
 
     fn balances_mut_with_slashings(&mut self) -> (&mut Balances<P>, &Slashings<P>) {
         balances_mut_with_slashings_body
+    }
+
+    fn post_electra(&self) -> Option<&dyn PostElectraBeaconState<P>> {
+        post_electra_body
     }
 
     fn post_fulu(&self) -> Option<&dyn PostFuluBeaconState<P>> {
@@ -895,7 +912,7 @@ pub trait PostGloasBeaconState<P: Preset>: PostAltairBeaconState<P> {
     fn proposer_lookahead_mut(&mut self) -> &mut ProposerLookahead<P>;
 
     // PostGloasBeaconState (the new fields)
-    fn latest_execution_payload_bid(&self) -> &ExecutionPayloadBid;
+    fn latest_execution_payload_bid(&self) -> ExecutionPayloadBid;
     fn execution_payload_availability(&self) -> BitVector<SlotsPerHistoricalRoot<P>>;
     fn builder_pending_payments(&self) -> &BuilderPendingPayments<P>;
     fn builder_pending_withdrawals(&self) -> &BuilderPendingWithdrawals<P>;
@@ -940,6 +957,7 @@ impl<parameters> PostGloasBeaconState<P> for implementor {
         [earliest_exit_epoch]              [Epoch];
         [consolidation_balance_to_consume] [Gwei];
         [earliest_consolidation_epoch]     [Epoch];
+        [latest_execution_payload_bid]     [ExecutionPayloadBid];
         [execution_payload_availability]   [BitVector<SlotsPerHistoricalRoot<P>>];
         [latest_block_hash]                [ExecutionBlockHash];
         [latest_withdrawals_root]          [H256];
@@ -950,7 +968,6 @@ impl<parameters> PostGloasBeaconState<P> for implementor {
 
     #[duplicate_item(
         field                         return_type;
-        [latest_execution_payload_bid][ExecutionPayloadBid];
         [pending_deposits]            [PendingDeposits<P>];
         [pending_partial_withdrawals] [PendingPartialWithdrawals<P>];
         [pending_consolidations]      [PendingConsolidations<P>];
@@ -1179,14 +1196,13 @@ pub trait BeaconBlockBody<P: Preset>: SszHash<PackingFactor = U1> {
     fn attestations_root(&self) -> H256;
 
     fn pre_electra(&self) -> Option<&dyn PreElectraBeaconBlockBody<P>>;
-    // TODO(gloas): fn pre_gloas()
 
     fn post_altair(&self) -> Option<&dyn PostAltairBeaconBlockBody<P>>;
     fn post_bellatrix(&self) -> Option<&dyn PostBellatrixBeaconBlockBody<P>>;
     fn post_deneb(&self) -> Option<&dyn PostDenebBeaconBlockBody<P>>;
     fn post_electra(&self) -> Option<&dyn PostElectraBeaconBlockBody<P>>;
     fn post_fulu(&self) -> Option<&dyn PostFuluBeaconBlockBody<P>>;
-    // TODO(gloas): fn post_gloas()
+    fn post_gloas(&self) -> Option<&dyn PostGloasBeaconBlockBody<P>>;
 
     fn combined_attester_slashings(
         &self,
@@ -1197,24 +1213,24 @@ pub trait BeaconBlockBody<P: Preset>: SszHash<PackingFactor = U1> {
 
 // TODO(gloas): add `pre_gloas` and `post_gloas` columns
 #[duplicate_item(
-    implementor                          pre_electra_body post_altair_body post_bellatrix_body post_deneb_body post_electra_body post_fulu_body;
+    implementor                          pre_electra_body post_altair_body post_bellatrix_body post_deneb_body post_electra_body post_fulu_body post_gloas_body;
 
-    [Phase0BeaconBlockBody<P>]           [Some(self)]     [None]           [None]              [None]          [None]            [None];
-    [AltairBeaconBlockBody<P>]           [Some(self)]     [Some(self)]     [None]              [None]          [None]            [None];
-    [BellatrixBeaconBlockBody<P>]        [Some(self)]     [Some(self)]     [Some(self)]        [None]          [None]            [None];
-    [CapellaBeaconBlockBody<P>]          [Some(self)]     [Some(self)]     [Some(self)]        [None]          [None]            [None];
-    [DenebBeaconBlockBody<P>]            [Some(self)]     [Some(self)]     [Some(self)]        [Some(self)]    [None]            [None];
-    [ElectraBeaconBlockBody<P>]          [None]           [Some(self)]     [Some(self)]        [Some(self)]    [Some(self)]      [None];
-    [FuluBeaconBlockBody<P>]             [None]           [Some(self)]     [Some(self)]        [Some(self)]    [Some(self)]      [Some(self)];
-    [GloasBeaconBlockBody<P>]            [None]           [Some(self)]     [None]              [None]          [None]            [None];
+    [Phase0BeaconBlockBody<P>]           [Some(self)]     [None]           [None]              [None]          [None]            [None]         [None];
+    [AltairBeaconBlockBody<P>]           [Some(self)]     [Some(self)]     [None]              [None]          [None]            [None]         [None];
+    [BellatrixBeaconBlockBody<P>]        [Some(self)]     [Some(self)]     [Some(self)]        [None]          [None]            [None]         [None];
+    [CapellaBeaconBlockBody<P>]          [Some(self)]     [Some(self)]     [Some(self)]        [None]          [None]            [None]         [None];
+    [DenebBeaconBlockBody<P>]            [Some(self)]     [Some(self)]     [Some(self)]        [Some(self)]    [None]            [None]         [None];
+    [ElectraBeaconBlockBody<P>]          [None]           [Some(self)]     [Some(self)]        [Some(self)]    [Some(self)]      [None]         [None];
+    [FuluBeaconBlockBody<P>]             [None]           [Some(self)]     [Some(self)]        [Some(self)]    [Some(self)]      [Some(self)]   [None];
+    [GloasBeaconBlockBody<P>]            [None]           [Some(self)]     [None]              [None]          [None]            [None]         [Some(self)];
 
     // `BlindedBeaconBlockBody` does not implement `PostBellatrixBeaconBlockBody`
     // because it does not have an `execution_payload` field.
-    [BellatrixBlindedBeaconBlockBody<P>] [Some(self)]     [Some(self)]     [None]              [None]          [None]            [None];
-    [CapellaBlindedBeaconBlockBody<P>]   [Some(self)]     [Some(self)]     [None]              [None]          [None]            [None];
-    [DenebBlindedBeaconBlockBody<P>]     [Some(self)]     [Some(self)]     [None]              [Some(self)]    [None]            [None];
-    [ElectraBlindedBeaconBlockBody<P>]   [None]           [Some(self)]     [None]              [Some(self)]    [Some(self)]      [None];
-    [FuluBlindedBeaconBlockBody<P>]      [None]           [Some(self)]     [None]              [Some(self)]    [Some(self)]      [Some(self)];
+    [BellatrixBlindedBeaconBlockBody<P>] [Some(self)]     [Some(self)]     [None]              [None]          [None]            [None]         [None];
+    [CapellaBlindedBeaconBlockBody<P>]   [Some(self)]     [Some(self)]     [None]              [None]          [None]            [None]         [None];
+    [DenebBlindedBeaconBlockBody<P>]     [Some(self)]     [Some(self)]     [None]              [Some(self)]    [None]            [None]         [None];
+    [ElectraBlindedBeaconBlockBody<P>]   [None]           [Some(self)]     [None]              [Some(self)]    [Some(self)]      [None]         [None];
+    [FuluBlindedBeaconBlockBody<P>]      [None]           [Some(self)]     [None]              [Some(self)]    [Some(self)]      [Some(self)]   [None];
 )]
 impl<P: Preset> BeaconBlockBody<P> for implementor {
     fn randao_reveal(&self) -> SignatureBytes {
@@ -1279,6 +1295,10 @@ impl<P: Preset> BeaconBlockBody<P> for implementor {
 
     fn post_fulu(&self) -> Option<&dyn PostFuluBeaconBlockBody<P>> {
         post_fulu_body
+    }
+
+    fn post_gloas(&self) -> Option<&dyn PostGloasBeaconBlockBody<P>> {
+        post_gloas_body
     }
 
     fn combined_attester_slashings(
@@ -1395,8 +1415,6 @@ impl<P: Preset> PreElectraBeaconBlockBody<P> for DenebBlindedBeaconBlockBody<P> 
         &self.attester_slashings
     }
 }
-
-// TODO(gloas): PreGloasBeaconBlockBody trait for those removing fields
 
 pub trait PostAltairBeaconBlockBody<P: Preset>: BeaconBlockBody<P> {
     fn sync_aggregate(&self) -> SyncAggregate<P>;
@@ -1735,8 +1753,51 @@ impl<P: Preset> PostFuluBeaconBlockBody<P> for FuluBeaconBlockBody<P> {}
 
 impl<P: Preset> PostFuluBeaconBlockBody<P> for FuluBlindedBeaconBlockBody<P> {}
 
-// TODO(gloas): PostGloasBeaconBlockBody trait for those added fields and
-// some fields from previous fork that still relevant in Gloas, derive from `PostAltairBeaconBlockBody`
+pub trait PostGloasBeaconBlockBody<P: Preset>: PostAltairBeaconBlockBody<P> {
+    fn sync_aggregate(&self) -> SyncAggregate<P>;
+    fn bls_to_execution_changes(
+        &self,
+    ) -> &ContiguousList<SignedBlsToExecutionChange, P::MaxBlsToExecutionChanges>;
+    fn attestations(&self) -> &ContiguousList<ElectraAttestation<P>, P::MaxAttestationsElectra>;
+    fn attester_slashings(
+        &self,
+    ) -> &ContiguousList<ElectraAttesterSlashing<P>, P::MaxAttesterSlashingsElectra>;
+    fn signed_execution_payload_bid(&self) -> SignedExecutionPayloadBid;
+    fn payload_attestations(
+        &self,
+    ) -> &ContiguousList<PayloadAttestation<P>, P::MaxPayloadAttestation>;
+}
+
+#[duplicate_item(
+    implementor
+    get_copy(field)
+    get_ref(field);
+
+    [GloasBeaconBlockBody<P>]
+    [self.field]
+    [&self.field];
+)]
+impl<P: Preset> PostGloasBeaconBlockBody<P> for implementor {
+    #[duplicate_item(
+        field                               return_type;
+        [sync_aggregate]                    [SyncAggregate<P>];
+        [signed_execution_payload_bid]      [SignedExecutionPayloadBid];
+    )]
+    fn field(&self) -> return_type {
+        get_copy([field])
+    }
+
+    #[duplicate_item(
+        field                           return_type;
+        [bls_to_execution_changes]      [ContiguousList<SignedBlsToExecutionChange, P::MaxBlsToExecutionChanges>];
+        [attestations]                  [ContiguousList<ElectraAttestation<P>, P::MaxAttestationsElectra>];
+        [attester_slashings]            [ContiguousList<ElectraAttesterSlashing<P>, P::MaxAttesterSlashingsElectra>];
+        [payload_attestations]          [ContiguousList<PayloadAttestation<P>, P::MaxPayloadAttestation>];
+    )]
+    fn field(&self) -> &return_type {
+        get_ref([field])
+    }
+}
 
 pub trait ExecutionPayload<P: Preset>: SszHash<PackingFactor = U1> {
     fn block_hash(&self) -> ExecutionBlockHash;
