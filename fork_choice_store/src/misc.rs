@@ -2,7 +2,7 @@ use core::{
     fmt::{Formatter, Result as FmtResult},
     num::NonZeroUsize,
 };
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use anyhow::{Error as AnyhowError, Result};
 use derivative::Derivative;
@@ -35,25 +35,67 @@ use types::{
 
 use crate::{segment::Position, store::Store};
 
+/// Block-specific metadata shared between empty and full variants (ePBS).
+/// Similar to Prysm's BlockNode - contains immutable data about the block itself.
+/// Note: Checkpoints are NOT here because they are chain-specific (depend on ancestry).
 #[derive(Clone, Derivative)]
 #[derivative(Debug(bound = ""))]
-pub struct ChainLink<P: Preset> {
+pub struct BlockNode<P: Preset> {
     pub block_root: H256,
     #[derivative(Debug(format_with = "fmt_block_concisely"))]
     pub block: Arc<SignedBeaconBlock<P>>,
+    /// Total weight across both empty and full variants
+    #[derivative(Debug = "ignore")]
+    pub total_weight: RwLock<Gwei>,
+}
+
+impl<P: Preset> BlockNode<P> {
+    #[must_use]
+    pub fn slot(&self) -> Slot {
+        self.block.message().slot()
+    }
+
+    #[must_use]
+    pub fn parent_root(&self) -> H256 {
+        self.block.message().parent_root()
+    }
+}
+
+/// ChainLink now references shared BlockNode and contains variant-specific and chain-specific data.
+/// For ePBS: empty variant has block_state, full variant has execution_state.
+#[derive(Clone, Derivative)]
+#[derivative(Debug(bound = ""))]
+pub struct ChainLink<P: Preset> {
+    /// Shared block metadata (same Arc across empty and full variants)
+    pub block_node: Arc<BlockNode<P>>,
+
+    /// For empty variant: block_state (after beacon block processing)
+    /// For full variant: execution_state (after execution payload processing)
     #[derivative(Debug(format_with = "fmt_as_wildcard"))]
-    pub state: Option<Arc<BeaconState<P>>>,
+    pub block_state: Option<Arc<BeaconState<P>>>,
+
+    /// For full variant: execution_state (after execution payload processing)
+    /// None for empty variant
+    #[derivative(Debug(format_with = "fmt_as_wildcard"))]
+    pub execution_state: Option<Arc<BeaconState<P>>>,
+
+    /// True if this is a full variant (has execution_state), false for empty variant
+    pub is_full: bool,
+
+    /// Chain-specific checkpoints (depend on which parent this block built on)
     pub current_justified_checkpoint: Checkpoint,
     pub finalized_checkpoint: Checkpoint,
     pub unrealized_justified_checkpoint: Checkpoint,
     pub unrealized_finalized_checkpoint: Checkpoint,
+
+    /// Execution engine validation status (separate from empty/full distinction)
     pub payload_status: PayloadStatus,
 }
 
 impl<P: Preset> ChainLink<P> {
     #[must_use]
     pub fn slot(&self) -> Slot {
-        self.block.message().slot()
+        self.block_node.slot()
     }
 
     #[must_use]
@@ -63,7 +105,7 @@ impl<P: Preset> ChainLink<P> {
 
     #[must_use]
     pub fn execution_block_hash(&self) -> Option<ExecutionBlockHash> {
-        self.block.execution_block_hash()
+        self.block_node.block.execution_block_hash()
     }
 
     #[must_use]
@@ -83,7 +125,11 @@ impl<P: Preset> ChainLink<P> {
 
     #[must_use]
     pub fn state<S: Storage<P>>(&self, store: &Store<P, S>) -> Arc<BeaconState<P>> {
-        store.load_beacon_state(self.block_root, self.slot(), self.state.as_ref())
+        store.load_beacon_state(
+            self.block_node.block_root,
+            self.slot(),
+            self.block_state.as_ref(),
+        )
     }
 
     // TODO(feature/deneb): Confirm that post-Deneb states are always post-Merge. See:

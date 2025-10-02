@@ -5,7 +5,7 @@ use std::{
         binary_heap::{BinaryHeap, PeekMut},
         HashSet as StdHashSet,
     },
-    sync::{Arc, OnceLock},
+    sync::{Arc, OnceLock, RwLock},
 };
 
 use anyhow::{anyhow, bail, ensure, Result};
@@ -110,6 +110,9 @@ pub struct Store<P: Preset, S: Storage<P>> {
     equivocating_indices: HashSet<ValidatorIndex>,
     // This contains blocks starting with the anchor and ending with the last finalized block.
     finalized: Vector<ChainLink<P>>,
+    // ePBS: Shared BlockNode metadata indexed by block_root.
+    // Contains immutable block data shared between empty and full variants.
+    block_nodes: HashMap<H256, Arc<misc::BlockNode<P>>>,
     // If `Store.unfinalized` has any elements, the number of them indicates the number of forks.
     // Some of the forks may be non-viable. If the anchor is not the genesis block, all of them may
     // be non-viable.
@@ -117,9 +120,14 @@ pub struct Store<P: Preset, S: Storage<P>> {
     // If `Store.unfinalized` is empty, there is only one fork stored entirely in `Store.finalized`
     // and it is considered viable. Currently this fork is assumed to consist of a single block, but
     // that may no longer be true when persistence is implemented.
+    //
+    // ePBS: Segments can contain both empty and full variants of the same block as separate entries.
     unfinalized: OrdMap<SegmentId, Segment<P>>,
     finalized_indices: HashMap<H256, usize>,
+    // ePBS: Maps block_root to empty variant location
     unfinalized_locations: HashMap<H256, Location>,
+    // ePBS: Maps block_root to full variant location
+    unfinalized_full_locations: HashMap<H256, Location>,
     // `Store.head_segment_id` holds the ID of the segment in `Store.unfinalized` whose last block
     // is the head. A `None` in `Store.head_segment_id` indicates that there are no viable forks in
     // `Store.unfinalized`.
@@ -270,10 +278,18 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
             root: block_root,
         };
 
-        let anchor = ChainLink {
+        // Create BlockNode for anchor
+        let anchor_block_node = Arc::new(misc::BlockNode {
             block_root,
-            block: anchor_block,
-            state: Some(anchor_state.clone_arc()),
+            block: anchor_block.clone(),
+            total_weight: RwLock::new(0),
+        });
+
+        let anchor = ChainLink {
+            block_node: anchor_block_node.clone(),
+            block_state: Some(anchor_state.clone_arc()),
+            execution_state: None,
+            is_full: false,
             current_justified_checkpoint: checkpoint,
             finalized_checkpoint: checkpoint,
             unrealized_justified_checkpoint: checkpoint,
@@ -285,6 +301,9 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         let latest_messages = core::iter::repeat_n(None, validator_count).collect();
 
         blacklisted_blocks.extend(chain_config.blacklisted_blocks.iter());
+
+        let mut block_nodes = HashMap::default();
+        block_nodes.insert(block_root, anchor_block_node);
 
         Self {
             chain_config,
@@ -298,9 +317,11 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
             proposer_boost_root: H256::zero(),
             equivocating_indices: HashSet::new(),
             finalized: Vector::unit(anchor),
+            block_nodes,
             unfinalized: ordmap! {},
             finalized_indices: HashMap::unit(block_root, 0),
             unfinalized_locations: hashmap! {},
+            unfinalized_full_locations: hashmap! {},
             head_segment_id: None,
             justified_active_balances: Self::active_balances(&anchor_state),
             timely_proposer_score: OnceLock::new(),
@@ -1215,10 +1236,24 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
 
         let payload_status = Self::initial_payload_status(&state);
 
+        // Create or get BlockNode
+        let block_node = self
+            .block_nodes
+            .entry(block_root)
+            .or_insert_with(|| {
+                Arc::new(misc::BlockNode {
+                    block_root,
+                    block: block.clone_arc(),
+                    total_weight: RwLock::new(0),
+                })
+            })
+            .clone();
+
         let chain_link = ChainLink {
-            block_root,
-            block: block.clone_arc(),
-            state: Some(state),
+            block_node,
+            block_state: Some(state),
+            execution_state: None,
+            is_full: false,
             current_justified_checkpoint: justified_checkpoint,
             finalized_checkpoint,
             unrealized_justified_checkpoint,
@@ -2678,8 +2713,8 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
     }
 
     fn insert_block(&mut self, chain_link: ChainLink<P>) -> Result<()> {
-        let block_root = chain_link.block_root;
-        let block = &chain_link.block;
+        let block_root = chain_link.block_node.block_root;
+        let block = &chain_link.block_node.block;
         let parent_root = block.message().parent_root();
         let execution_block_hash = block.execution_block_hash();
 
@@ -2922,10 +2957,10 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
                 // (as long as the justified block is not orphaned, which is possible according to
                 // the Fork Choice specification). It is not sufficient because it does not prevent
                 // `ChainLink`s with unloaded states from becoming justified or finalized later.
-                if let Some(state) = chain_link.state.take() {
+                if let Some(state) = chain_link.block_state.take() {
                     if misc::is_epoch_start::<P>(chain_link.slot()) {
                         to_persist.push(ChainLink {
-                            state: Some(state),
+                            block_state: Some(state),
                             ..chain_link.clone()
                         });
                     }
