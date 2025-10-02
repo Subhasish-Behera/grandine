@@ -912,7 +912,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
             && self
                 .ancestor(self.proposer_boost_root, unfinalized_block.slot())
                 .expect("every unfinalized block has an ancestor at every unfinalized slot")
-                == unfinalized_block.chain_link.block_root;
+                == unfinalized_block.chain_link.block_node.block_root;
 
         let proposer_score = if ancestor_of_boosted_block {
             // > Calculate proposer score if ``proposer_boost_root`` is set
@@ -923,7 +923,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         };
 
         // > Ties broken by favoring block with lexicographically higher root
-        let tiebreaker = unfinalized_block.chain_link.block_root;
+        let tiebreaker = unfinalized_block.chain_link.block_node.block_root;
 
         (attestation_score + proposer_score, tiebreaker)
     }
@@ -3247,6 +3247,19 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
                     };
 
                     unfinalized_block.attesting_balance = new_balance;
+
+                    // ePBS: Update total_weight in shared BlockNode
+                    // This aggregates weights from both empty and full variants
+                    if let Ok(mut total_weight) =
+                        unfinalized_block.chain_link.block_node.total_weight.write()
+                    {
+                        *total_weight = total_weight
+                            .checked_add_signed(difference)
+                            .unwrap_or_else(|| {
+                                error!("BlockNode total_weight overflow");
+                                *total_weight
+                            });
+                    }
                 }
             }
         }
@@ -3314,6 +3327,29 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         }
 
         Ok(propagated_and_dissolved_differences)
+    }
+
+    /// ePBS: Get the preferred variant (empty or full) for a given block_root.
+    /// Follows Prysm's approach: if full variant exists and has weight >= empty variant,
+    /// return full variant. Otherwise return empty variant.
+    fn get_preferred_variant(&self, block_root: H256) -> Option<&UnfinalizedBlock<P>> {
+        // Get empty variant
+        let empty_location = self.unfinalized_locations.get(&block_root)?;
+        let empty_block = &self.unfinalized[&empty_location.segment_id][empty_location.position];
+
+        // Check if full variant exists
+        if let Some(full_location) = self.unfinalized_full_locations.get(&block_root) {
+            let full_block = &self.unfinalized[&full_location.segment_id][full_location.position];
+
+            // Compare weights: if full >= empty, prefer full
+            // This mirrors Prysm's store.go:42-44
+            if full_block.attesting_balance >= empty_block.attesting_balance {
+                return Some(full_block);
+            }
+        }
+
+        // Default to empty variant
+        Some(empty_block)
     }
 
     fn update_head_segment_id(&mut self) {
@@ -3613,14 +3649,33 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
 
             let segment = &self.unfinalized[segment_id];
 
-            self.unfinalized_chain_ending_with(segment, *position)
+            // ePBS: Collect execution hashes while deduplicating by BlockNode
+            let mut seen_block_roots = HashSet::new();
+            let execution_hashes: HashSet<_> = self
+                .unfinalized_chain_ending_with(segment, *position)
                 .skip(1)
-                .map_while(ChainLink::execution_block_hash)
-                .collect::<HashSet<_>>()
-                .into_iter()
-                .for_each(|hash| {
-                    self.set_block_payload_status(hash, payload_status);
-                });
+                .filter_map(|chain_link| {
+                    let block_root = chain_link.block_node.block_root;
+
+                    // Skip if we've already processed this BlockNode
+                    if !seen_block_roots.insert(block_root) {
+                        return None;
+                    }
+
+                    // Prefer full variant for execution_block_hash
+                    if let Some(full_location) = self.unfinalized_full_locations.get(&block_root) {
+                        self.unfinalized[&full_location.segment_id][full_location.position]
+                            .chain_link
+                            .execution_block_hash()
+                    } else {
+                        chain_link.execution_block_hash()
+                    }
+                })
+                .collect();
+
+            execution_hashes.into_iter().for_each(|hash| {
+                self.set_block_payload_status(hash, payload_status);
+            });
 
             if self.last_finalized().payload_status != payload_status {
                 for chain_link in self.finalized.iter_mut() {
@@ -3655,16 +3710,37 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         last_included: Position,
     ) -> Vec<ExecutionBlockHash> {
         let mut hashes = vec![];
+        let mut seen_block_roots = std::collections::HashSet::new();
 
-        for hash in self
-            .unfinalized_chain_ending_with(ending_segment, last_included)
-            .map_while(ChainLink::execution_block_hash)
-        {
-            if hash == ancestor {
-                return hashes;
+        for chain_link in self.unfinalized_chain_ending_with(ending_segment, last_included) {
+            let block_root = chain_link.block_node.block_root;
+
+            // ePBS: Skip if we've already processed this BlockNode
+            // This handles the case where both empty and full variants exist in the segment
+            if !seen_block_roots.insert(block_root) {
+                continue;
             }
 
-            hashes.push(hash);
+            // ePBS: Prefer full variant for execution_block_hash
+            let execution_hash = if let Some(full_location) = self.unfinalized_full_locations.get(&block_root) {
+                // Use full variant's execution_block_hash
+                self.unfinalized[&full_location.segment_id][full_location.position]
+                    .chain_link
+                    .execution_block_hash()
+            } else {
+                // Use current (empty) variant's execution_block_hash
+                chain_link.execution_block_hash()
+            };
+
+            if let Some(hash) = execution_hash {
+                if hash == ancestor {
+                    return hashes;
+                }
+                hashes.push(hash);
+            } else {
+                // Stop traversal when we hit a block without execution payload
+                break;
+            }
         }
 
         vec![]
@@ -3915,6 +3991,77 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
 
     pub fn mark_requested_blobs_from_el(&mut self, block_root: H256, slot: Slot) {
         self.requested_blobs_from_el.insert(block_root, slot);
+    }
+
+    /// ePBS: Handle arrival of ExecutionPayloadEnvelope to create full variant
+    pub fn on_execution_payload(
+        &mut self,
+        envelope: &types::gloas::containers::ExecutionPayloadEnvelope<P>,
+    ) -> Result<()> {
+        let block_root = envelope.beacon_block_root;
+
+        // Get existing BlockNode (must exist from when empty block arrived)
+        let block_node = self
+            .block_nodes
+            .get(&block_root)
+            .ok_or_else(|| anyhow!("BlockNode not found for block_root {block_root:?}"))?
+            .clone();
+
+        // Get empty variant location
+        let empty_location = self
+            .unfinalized_locations
+            .get(&block_root)
+            .ok_or_else(|| anyhow!("Empty variant not found for block_root {block_root:?}"))?
+            .copied();
+
+        // Check if full variant already exists
+        if self.unfinalized_full_locations.contains_key(&block_root) {
+            // Full variant already exists, nothing to do
+            return Ok(());
+        }
+
+        let empty_chain_link = &self.unfinalized[&empty_location.segment_id]
+            [empty_location.position]
+            .chain_link;
+
+        // Process execution payload to get execution_state
+        // TODO: Actually process the payload - for now we'll need the state to be provided
+        // This is a simplified version - real implementation needs state transition
+        let execution_state = empty_chain_link.block_state.clone(); // Placeholder
+
+        // Create full variant ChainLink with same BlockNode
+        let full_chain_link = ChainLink {
+            block_node,
+            block_state: None, // Full variant doesn't need block_state
+            execution_state: Some(
+                execution_state
+                    .ok_or_else(|| anyhow!("No state available for execution payload"))?,
+            ),
+            is_full: true,
+            // Copy checkpoints from empty variant (same block, same chain context)
+            current_justified_checkpoint: empty_chain_link.current_justified_checkpoint,
+            finalized_checkpoint: empty_chain_link.finalized_checkpoint,
+            unrealized_justified_checkpoint: empty_chain_link.unrealized_justified_checkpoint,
+            unrealized_finalized_checkpoint: empty_chain_link.unrealized_finalized_checkpoint,
+            payload_status: empty_chain_link.payload_status,
+        };
+
+        // Add full variant to same segment as empty variant
+        let full_block = UnfinalizedBlock::new(full_chain_link);
+        self.unfinalized
+            .get_mut(&empty_location.segment_id)
+            .ok_or_else(|| anyhow!("Segment not found"))?
+            .push(full_block);
+
+        // Track full variant location
+        let full_position = self.unfinalized[&empty_location.segment_id].last_position();
+        self.unfinalized_full_locations
+            .insert(block_root, Location {
+                segment_id: empty_location.segment_id,
+                position: full_position,
+            });
+
+        Ok(())
     }
 
     pub fn track_collection_metrics(&self, metrics: &Arc<Metrics>) {
