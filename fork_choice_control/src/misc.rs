@@ -9,6 +9,7 @@ use execution_engine::PayloadStatusV1;
 use fork_choice_store::{
     AggregateAndProofAction, AggregateAndProofOrigin, AttestationAction, AttestationItem,
     AttestationValidationError, BlobSidecarOrigin, BlockOrigin, ChainLink, DataColumnSidecarOrigin,
+    ExecutionPayloadEnvelopeOrigin, PayloadAttestationOrigin,
 };
 use serde::Serialize;
 use strum::IntoStaticStr;
@@ -22,6 +23,7 @@ use types::{
         containers::{DataColumnIdentifier, DataColumnSidecar},
         primitives::ColumnIndex,
     },
+    gloas::containers::{PayloadAttestation, SignedExecutionPayloadEnvelope},
     phase0::primitives::{Slot, ValidatorIndex},
     preset::Preset,
 };
@@ -39,6 +41,8 @@ pub struct Delayed<P: Preset> {
     pub attestations: Vec<PendingAttestation<P>>,
     pub blob_sidecars: Vec<PendingBlobSidecar<P>>,
     pub data_column_sidecars: Vec<PendingDataColumnSidecar<P>>,
+    pub execution_payload_envelopes: Vec<PendingExecutionPayloadEnvelope<P>>,
+    pub payload_attestations: Vec<PendingPayloadAttestation<P>>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -167,6 +171,21 @@ pub struct PendingDataColumnSidecar<P: Preset> {
     pub data_column_sidecar: Arc<DataColumnSidecar<P>>,
     pub block_seen: bool,
     pub origin: DataColumnSidecarOrigin,
+    pub submission_time: Instant,
+}
+
+#[derive(Debug)]
+pub struct PendingExecutionPayloadEnvelope<P: Preset> {
+    pub envelope: Arc<SignedExecutionPayloadEnvelope<P>>,
+    pub beacon_block_seen: bool,
+    pub origin: ExecutionPayloadEnvelopeOrigin,
+    pub submission_time: Instant,
+}
+
+#[derive(Debug)]
+pub struct PendingPayloadAttestation<P: Preset> {
+    pub attestation: Arc<PayloadAttestation<P>>,
+    pub origin: PayloadAttestationOrigin,
     pub submission_time: Instant,
 }
 

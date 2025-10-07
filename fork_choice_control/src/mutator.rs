@@ -77,8 +77,9 @@ use crate::{
     misc::{
         BlockBlobAvailability, BlockDataColumnAvailability, Delayed, MutatorRejectionReason,
         PendingAggregateAndProof, PendingAttestation, PendingBlobSidecar, PendingBlock,
-        PendingChainLink, PendingDataColumnSidecar, ProcessingTimings, ReorgSource,
-        VerifyAggregateAndProofResult, VerifyAttestationResult, WaitingForCheckpointState,
+        PendingChainLink, PendingDataColumnSidecar, PendingExecutionPayloadEnvelope,
+        ProcessingTimings, ReorgSource, VerifyAggregateAndProofResult, VerifyAttestationResult,
+        WaitingForCheckpointState,
     },
     storage::Storage,
     tasks::{
@@ -3018,6 +3019,40 @@ where
             .or_default()
             .data_column_sidecars
             .push(pending_data_column_sidecar);
+    }
+
+    fn delay_execution_payload_envelope_until_beacon_block(
+        &mut self,
+        pending_envelope: PendingExecutionPayloadEnvelope<P>,
+    ) {
+        let beacon_block_root = pending_envelope.envelope.message.beacon_block_root;
+
+        debug!(
+            "delaying execution payload envelope until beacon block \
+             (beacon_block_root: {:?}, slot: {})",
+            beacon_block_root, pending_envelope.envelope.message.slot
+        );
+
+        self.delayed_until_block
+            .entry(beacon_block_root)
+            .or_default()
+            .execution_payload_envelopes
+            .push(pending_envelope);
+    }
+
+    fn delay_execution_payload_envelope_until_slot(
+        &mut self,
+        pending_envelope: PendingExecutionPayloadEnvelope<P>,
+    ) {
+        let slot = pending_envelope.envelope.message.slot;
+
+        debug!("delaying execution payload envelope until slot {slot}");
+
+        self.delayed_until_slot
+            .entry(slot)
+            .or_default()
+            .execution_payload_envelopes
+            .push(pending_envelope);
     }
 
     fn take_delayed_until_blobs(&mut self, block_root: H256) -> Option<PendingBlock<P>> {

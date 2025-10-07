@@ -52,6 +52,7 @@ use types::{
         containers::{DataColumnIdentifier, DataColumnSidecar},
         primitives::ColumnIndex,
     },
+    gloas::containers::{PayloadAttestation, SignedExecutionPayloadEnvelope},
     nonstandard::{BlobSidecarWithId, DataColumnSidecarWithId, PayloadStatus, Phase, WithStatus},
     phase0::{
         consts::{ATTESTATION_PROPAGATION_SLOT_RANGE, GENESIS_EPOCH, GENESIS_SLOT},
@@ -72,9 +73,10 @@ use crate::{
         AttestationAction, AttestationItem, AttestationValidationError, AttesterSlashingOrigin,
         BlobSidecarAction, BlobSidecarOrigin, BlockAction, BranchPoint, ChainLink,
         DataAvailabilityPolicy, DataColumnSidecarAction, DataColumnSidecarOrigin, Difference,
-        DifferenceAtLocation, DissolvedDifference, LatestMessage, Location,
-        PartialAttestationAction, PartialBlockAction, PayloadAction, Score, SegmentId, Storage,
-        UnfinalizedBlock, ValidAttestation,
+        DifferenceAtLocation, DissolvedDifference, ExecutionPayloadEnvelopeAction,
+        ExecutionPayloadEnvelopeOrigin, LatestMessage, Location, PartialAttestationAction,
+        PartialBlockAction, PayloadAction, PayloadAttestationAction, PayloadAttestationOrigin,
+        Score, SegmentId, Storage, UnfinalizedBlock, ValidAttestation,
     },
     segment::{Position, Segment},
     state_cache_processor::StateCacheProcessor,
@@ -2283,6 +2285,46 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
                 metrics,
             )
         }
+    }
+
+    /// Validates ExecutionPayloadEnvelope received via gossip
+    ///
+    /// TODO: Implement full validation according to Gloas spec:
+    /// 1. [IGNORE] Timing check with MAXIMUM_GOSSIP_CLOCK_DISPARITY
+    /// 2. [IGNORE] First payload per parent_block_hash
+    /// 3. [IGNORE/DELAY] Beacon block must be seen
+    /// 4. [REJECT] Builder index must be valid and active
+    /// 5. [REJECT] Builder signature must be valid
+    /// 6. [REJECT] Payload header must match actual payload
+    /// 7. [REJECT] Payload header must match beacon block commitment
+    /// 8. [REJECT] Blob commitments must match beacon block
+    /// 9. [REJECT] KZG aggregated proof must be valid (if struct has field)
+    /// 10. [REJECT] Parent block hash must be known to execution client
+    pub fn validate_execution_payload_envelope(
+        &self,
+        envelope: Arc<SignedExecutionPayloadEnvelope<P>>,
+        beacon_block_seen: bool,
+        origin: &ExecutionPayloadEnvelopeOrigin,
+    ) -> Result<ExecutionPayloadEnvelopeAction<P>> {
+        // STUB: Just accept for now
+        // Real implementation should perform all 10 validation rules
+        Ok(ExecutionPayloadEnvelopeAction::Accept(envelope))
+    }
+
+    /// Validates PayloadAttestation received via gossip
+    ///
+    /// TODO: Implement validation:
+    /// 1. [IGNORE] Timing check (not too old)
+    /// 2. [IGNORE/DELAY] Beacon block must be seen
+    /// 3. [REJECT] Signature validation using validate_indexed_payload_attestation
+    pub fn validate_payload_attestation(
+        &self,
+        attestation: Arc<PayloadAttestation<P>>,
+        origin: &PayloadAttestationOrigin,
+    ) -> Result<PayloadAttestationAction> {
+        // STUB: Just accept for now
+        // Real implementation should validate signature and timing
+        Ok(PayloadAttestationAction::Accept(attestation))
     }
 
     /// [`on_tick`](https://github.com/ethereum/consensus-specs/blob/v1.3.0/specs/phase0/fork-choice.md#on_tick)

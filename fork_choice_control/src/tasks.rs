@@ -729,17 +729,16 @@ impl<P: Preset, W> Run for ExecutionPayloadEnvelopeTask<P, W> {
             metrics,
         } = self;
 
-        let _beacon_block_root = execution_payload_envelope.message.beacon_block_root;
-        let _slot = execution_payload_envelope.message.slot;
+        let _timer = metrics
+            .as_ref()
+            .map(|metrics| metrics.fc_execution_payload_envelope_task_times.start_timer());
 
-        let _ = store_snapshot;
-        let _ = metrics;
-
-        // TODO: Add full validation
-        // For now, just accept and send to mutator
-        let result = Ok(ExecutionPayloadEnvelopeAction::Accept(
+        // Call validation stub (will be implemented later with full validation)
+        let result = store_snapshot.validate_execution_payload_envelope(
             execution_payload_envelope,
-        ));
+            beacon_block_seen,
+            &origin,
+        );
 
         MutatorMessage::ExecutionPayloadEnvelope {
             wait_group,
