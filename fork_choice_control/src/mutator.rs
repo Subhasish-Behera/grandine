@@ -2070,17 +2070,10 @@ where
                         "handling execution payload envelope for slot {slot}, beacon_block_root {beacon_block_root:?}"
                     );
 
-                    // Store the execution payload envelope
-                    // TODO: Implement proper storage and processing logic based on fork_choice_store
-                    // For now, just accept the gossip message
+                    self.accept_execution_payload_envelope(&wait_group, &execution_payload_envelope);
 
                     if let Some(gossip_id) = origin.gossip_id() {
                         self.send_to_p2p(P2pMessage::Accept(gossip_id));
-                    }
-
-                    if beacon_block_seen {
-                        // If we've already seen the beacon block, we can potentially trigger block processing
-                        debug!("beacon block already seen for execution payload, triggering potential head change");
                     }
 
                     drop(wait_group);
@@ -2091,29 +2084,26 @@ where
                     }
                     drop(wait_group);
                 }
-                ExecutionPayloadEnvelopeAction::DelayUntilBeaconBlock(envelope, _block_root) => {
-                    // TODO: Implement delay infrastructure (PendingExecutionPayloadEnvelope struct, delay storage, retry logic)
-                    // For now, treat as Ignore to avoid blocking
-                    warn!(
-                        "execution payload envelope delayed until beacon block - treating as Ignore \
-                         (slot: {}, block_root: {:?})",
-                        envelope.message.slot, envelope.message.beacon_block_root
-                    );
-                    if let Some(gossip_id) = origin.gossip_id() {
-                        self.send_to_p2p(P2pMessage::Ignore(gossip_id));
-                    }
+                ExecutionPayloadEnvelopeAction::DelayUntilBeaconBlock(envelope, block_root) => {
+                    let pending_envelope = PendingExecutionPayloadEnvelope {
+                        envelope,
+                        beacon_block_seen,
+                        origin,
+                        submission_time,
+                    };
+
+                    self.delay_execution_payload_envelope_until_beacon_block(pending_envelope);
                     drop(wait_group);
                 }
                 ExecutionPayloadEnvelopeAction::DelayUntilSlot(envelope) => {
-                    // TODO: Implement delay infrastructure
-                    // For now, treat as Ignore to avoid blocking
-                    warn!(
-                        "execution payload envelope delayed until slot - treating as Ignore (slot: {})",
-                        envelope.message.slot
-                    );
-                    if let Some(gossip_id) = origin.gossip_id() {
-                        self.send_to_p2p(P2pMessage::Ignore(gossip_id));
-                    }
+                    let pending_envelope = PendingExecutionPayloadEnvelope {
+                        envelope,
+                        beacon_block_seen,
+                        origin,
+                        submission_time,
+                    };
+
+                    self.delay_execution_payload_envelope_until_slot(pending_envelope);
                     drop(wait_group);
                 }
             },
@@ -2631,6 +2621,31 @@ where
             .send_data_column_sidecar_event(block_root, data_column_sidecar);
 
         origin
+    }
+
+    fn accept_execution_payload_envelope(
+        &mut self,
+        wait_group: &W,
+        envelope: &Arc<SignedExecutionPayloadEnvelope<P>>,
+    ) {
+        let beacon_block_root = envelope.message.beacon_block_root;
+
+        // TODO: Apply envelope to store (when store method is implemented)
+        // self.store_mut().apply_execution_payload_envelope(envelope.clone_arc());
+
+        // TODO: Track seen execution parents to detect first-per-parent
+        // let parent_hash = envelope.message.payload.parent_hash();
+        // self.seen_execution_parents.insert(parent_hash);
+
+        self.update_store_snapshot();
+
+        // TODO: Send event to event channels
+        // self.event_channels.send_execution_payload_envelope_event(beacon_block_root, envelope);
+
+        // TODO: Persist envelope if not in prune mode
+        // if !self.storage.prune_storage_enabled() {
+        //     self.spawn(PersistExecutionPayloadEnvelopeTask { ... });
+        // }
     }
 
     fn notify_about_finalized_checkpoint(&self) {
