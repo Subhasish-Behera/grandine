@@ -1445,7 +1445,29 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
 
         let index = misc::committee_index(&attestation.item);
 
-        let AttestationData { slot, target, .. } = attestation.data();
+        let AttestationData { slot, target, beacon_block_root, .. } = attestation.data();
+
+        // [New in Gloas:EIP7732] Attestation data index validation
+        if self.phase() >= Phase::Gloas {
+            // Rule 1: attestation.data.index must be < 2
+            if index > 1 {
+                return Err(AttestationValidationError::CommitteeIndexTooHigh {
+                    index,
+                    attestation: Box::new(attestation),
+                });
+            }
+
+            // Rule 2: If head_block.slot == attestation.data.slot, then index must be 0
+            // Get the head block referenced by the attestation
+            if let Some(head_block) = self.chain_link(beacon_block_root) {
+                if head_block.slot() == slot && index != 0 {
+                    return Err(AttestationValidationError::CommitteeIndexNonZeroSameSlot {
+                        index,
+                        attestation: Box::new(attestation),
+                    });
+                }
+            }
+        }
 
         // TODO(feature/deneb): Figure out why this validation is split over 2 methods.
         // TODO(feature/deneb): This appears to be unfinished.

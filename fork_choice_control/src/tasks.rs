@@ -4,7 +4,7 @@ use std::{
     time::Instant,
 };
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use eth2_libp2p::GossipId;
 use execution_engine::{ExecutionEngine, NullExecutionEngine};
 use features::Feature;
@@ -30,6 +30,7 @@ use types::{
     config::Config,
     deneb::containers::{BlobIdentifier, BlobSidecar},
     fulu::containers::{DataColumnIdentifier, DataColumnSidecar},
+    gloas::containers::{PayloadAttestationMessage, SignedExecutionPayloadEnvelope},
     nonstandard::{RelativeEpoch, ValidationOutcome},
     phase0::{
         containers::Checkpoint,
@@ -41,8 +42,8 @@ use types::{
 
 use crate::{
     block_processor::BlockProcessor,
-    messages::MutatorMessage,
-    misc::{ProcessingTimings, VerifyAggregateAndProofResult},
+    messages::{MutatorMessage, P2pMessage},
+    misc::{MutatorRejectionReason, ProcessingTimings, VerifyAggregateAndProofResult},
     state_at_slot_cache::StateAtSlotCache,
     storage::Storage,
 };
@@ -701,4 +702,105 @@ impl<P: Preset> Run for StateAtSlotCacheFlushTask<P> {
             warn!("failed to flush state at slot cache: {error:?}");
         }
     }
+}
+
+pub struct ExecutionPayloadEnvelopeTask<P: Preset, W> {
+    pub store_snapshot: Arc<Store<P, Storage<P>>>,
+    pub mutator_tx: Sender<MutatorMessage<P, W>>,
+    pub wait_group: W,
+    pub execution_payload_envelope: Arc<SignedExecutionPayloadEnvelope<P>>,
+    pub beacon_block_seen: bool,
+    pub gossip_id: GossipId,
+    pub submission_time: Instant,
+    pub metrics: Option<Arc<Metrics>>,
+}
+
+impl<P: Preset, W> Run for ExecutionPayloadEnvelopeTask<P, W> {
+    fn run(self) {
+        let Self {
+            store_snapshot,
+            mutator_tx,
+            wait_group,
+            execution_payload_envelope,
+            beacon_block_seen,
+            gossip_id,
+            submission_time,
+            metrics,
+        } = self;
+
+        let _ = wait_group;
+
+        let _beacon_block_root = execution_payload_envelope.message.beacon_block_root;
+        let _slot = execution_payload_envelope.message.slot;
+
+        // TODO: Add full validation
+        // For now, just accept and send to mutator
+        MutatorMessage::ExecutionPayloadEnvelope {
+            execution_payload_envelope,
+            beacon_block_seen,
+            gossip_id,
+        }
+        .send(&mutator_tx);
+    }
+}
+
+pub struct PayloadAttestationTask<P: Preset, W> {
+    pub store_snapshot: Arc<Store<P, Storage<P>>>,
+    pub mutator_tx: Sender<MutatorMessage<P, W>>,
+    pub wait_group: W,
+    pub payload_attestation: Arc<PayloadAttestationMessage>,
+    pub gossip_id: GossipId,
+    pub submission_time: Instant,
+}
+
+impl<P: Preset, W> Run for PayloadAttestationTask<P, W> {
+    fn run(self) {
+        let Self {
+            store_snapshot,
+            mutator_tx,
+            wait_group,
+            payload_attestation,
+            gossip_id,
+            submission_time,
+        } = self;
+
+        let _ = wait_group;
+
+        let _slot = payload_attestation.data.slot;
+        let _beacon_block_root = payload_attestation.data.beacon_block_root;
+
+        // TODO: Add full validation
+        // For now, just accept and send to mutator
+        MutatorMessage::PayloadAttestation {
+            payload_attestation,
+            gossip_id,
+        }
+        .send(&mutator_tx);
+    }
+}
+
+fn validate_execution_payload_envelope<P: Preset>(
+    _store: &Store<P, Storage<P>>,
+    _envelope: &SignedExecutionPayloadEnvelope<P>,
+) -> Result<()> {
+    // TODO: Add full validation including:
+    // - State lookup at the correct slot
+    // - Proposer index verification
+    // - Signature verification
+    // https://github.com/grandinetech/grandine/issues/TBD
+
+    Ok(())
+}
+
+fn validate_payload_attestation<P: Preset>(
+    _store: &Store<P, Storage<P>>,
+    _attestation: &PayloadAttestationMessage,
+) -> Result<()> {
+    // TODO: Add full validation including:
+    // - State lookup at the correct slot
+    // - Validator index bounds checking
+    // - Signature verification
+    // https://github.com/grandinetech/grandine/issues/TBD
+
+    Ok(())
 }

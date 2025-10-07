@@ -22,6 +22,7 @@ use types::{
         containers::{DataColumnIdentifier, DataColumnSidecar, MatrixEntry},
         primitives::ColumnIndex,
     },
+    gloas::containers::{PayloadAttestationMessage, SignedExecutionPayloadEnvelope},
     phase0::{
         containers::Checkpoint,
         primitives::{ExecutionBlockHash, Slot, ValidatorIndex, H256},
@@ -135,6 +136,15 @@ pub enum MutatorMessage<P: Preset, W> {
         data_column_identifier: DataColumnIdentifier,
         block_seen: bool,
         submission_time: Instant,
+    },
+    ExecutionPayloadEnvelope {
+        execution_payload_envelope: Arc<SignedExecutionPayloadEnvelope<P>>,
+        beacon_block_seen: bool,
+        gossip_id: GossipId,
+    },
+    PayloadAttestation {
+        payload_attestation: Arc<PayloadAttestationMessage>,
+        gossip_id: GossipId,
     },
     FinishedPersistingBlobSidecars {
         wait_group: W,

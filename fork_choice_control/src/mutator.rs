@@ -280,6 +280,19 @@ where
                     block_seen,
                     submission_time,
                 ),
+                MutatorMessage::ExecutionPayloadEnvelope {
+                    execution_payload_envelope,
+                    beacon_block_seen,
+                    gossip_id,
+                } => self.handle_execution_payload_envelope(
+                    execution_payload_envelope,
+                    beacon_block_seen,
+                    gossip_id,
+                ),
+                MutatorMessage::PayloadAttestation {
+                    payload_attestation,
+                    gossip_id,
+                } => self.handle_payload_attestation(payload_attestation, gossip_id),
                 MutatorMessage::FinishedPersistingBlobSidecars {
                     wait_group,
                     persisted_blob_ids,
@@ -2027,6 +2040,50 @@ where
 
         self.store_mut().store_sampling_columns(sampling_columns);
         self.update_store_snapshot();
+    }
+
+    fn handle_execution_payload_envelope(
+        &mut self,
+        execution_payload_envelope: Arc<types::gloas::containers::SignedExecutionPayloadEnvelope<P>>,
+        beacon_block_seen: bool,
+        gossip_id: GossipId,
+    ) {
+        let beacon_block_root = execution_payload_envelope.message.beacon_block_root;
+        let slot = execution_payload_envelope.message.slot;
+
+        debug!(
+            "handling execution payload envelope for slot {slot}, beacon_block_root {beacon_block_root:?}"
+        );
+
+        // Store the execution payload envelope
+        // TODO: Implement proper storage and processing logic based on fork_choice_store
+        // For now, just accept the gossip message
+
+        self.send_to_p2p(P2pMessage::Accept(gossip_id));
+
+        if beacon_block_seen {
+            // If we've already seen the beacon block, we can potentially trigger block processing
+            debug!("beacon block already seen for execution payload, triggering potential head change");
+        }
+    }
+
+    fn handle_payload_attestation(
+        &mut self,
+        payload_attestation: Arc<types::gloas::containers::PayloadAttestationMessage>,
+        gossip_id: GossipId,
+    ) {
+        let slot = payload_attestation.data.slot;
+        let beacon_block_root = payload_attestation.data.beacon_block_root;
+
+        debug!(
+            "handling payload attestation for slot {slot}, beacon_block_root {beacon_block_root:?}"
+        );
+
+        // Store the payload attestation
+        // TODO: Implement proper storage and processing logic based on fork_choice_store
+        // For now, just accept the gossip message
+
+        self.send_to_p2p(P2pMessage::Accept(gossip_id));
     }
 
     #[expect(clippy::cognitive_complexity)]
