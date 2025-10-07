@@ -3105,6 +3105,8 @@ where
             attestations,
             blob_sidecars,
             data_column_sidecars,
+            execution_payload_envelopes,
+            payload_attestations,
         } = delayed;
 
         for pending_block in blocks {
@@ -3125,6 +3127,14 @@ where
 
         for pending_data_column_sidecar in data_column_sidecars {
             self.retry_data_column_sidecar(wait_group.clone(), pending_data_column_sidecar, None);
+        }
+
+        for pending_envelope in execution_payload_envelopes {
+            self.retry_execution_payload_envelope(wait_group.clone(), pending_envelope);
+        }
+
+        for pending_payload_attestation in payload_attestations {
+            self.retry_payload_attestation(wait_group.clone(), pending_payload_attestation);
         }
     }
 
@@ -3251,6 +3261,56 @@ where
                 submission_time,
                 metrics: self.metrics.clone(),
             },
+        });
+    }
+
+    fn retry_execution_payload_envelope(
+        &self,
+        wait_group: W,
+        pending_envelope: PendingExecutionPayloadEnvelope<P>,
+    ) {
+        trace!("retrying delayed execution payload envelope: {pending_envelope:?}");
+
+        let PendingExecutionPayloadEnvelope {
+            envelope,
+            beacon_block_seen,
+            origin,
+            submission_time,
+        } = pending_envelope;
+
+        self.spawn(ExecutionPayloadEnvelopeTask {
+            store_snapshot: self.owned_store(),
+            mutator_tx: self.owned_mutator_tx(),
+            wait_group,
+            execution_payload_envelope: envelope,
+            beacon_block_seen,
+            origin,
+            submission_time,
+            metrics: self.metrics.clone(),
+        });
+    }
+
+    fn retry_payload_attestation(
+        &self,
+        wait_group: W,
+        pending_payload_attestation: PendingPayloadAttestation<P, GossipId>,
+    ) {
+        trace!("retrying delayed payload attestation: {pending_payload_attestation:?}");
+
+        let PendingPayloadAttestation {
+            attestation,
+            origin,
+            submission_time,
+        } = pending_payload_attestation;
+
+        self.spawn(PayloadAttestationTask {
+            store_snapshot: self.owned_store(),
+            mutator_tx: self.owned_mutator_tx(),
+            wait_group,
+            payload_attestation: attestation,
+            origin,
+            submission_time,
+            metrics: self.metrics.clone(),
         });
     }
 
