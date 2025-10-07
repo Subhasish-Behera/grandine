@@ -2051,13 +2051,12 @@ where
 
     fn handle_execution_payload_envelope(
         &mut self,
-        wait_group: &W,
+        wait_group: W,
         result: Result<ExecutionPayloadEnvelopeAction<P>>,
         origin: ExecutionPayloadEnvelopeOrigin,
         beacon_block_seen: bool,
         submission_time: Instant,
     ) {
-        let _ = wait_group;
         let _ = submission_time;
 
         match result {
@@ -2082,17 +2081,39 @@ where
                         // If we've already seen the beacon block, we can potentially trigger block processing
                         debug!("beacon block already seen for execution payload, triggering potential head change");
                     }
+
+                    drop(wait_group);
                 }
                 ExecutionPayloadEnvelopeAction::Ignore => {
                     if let Some(gossip_id) = origin.gossip_id() {
                         self.send_to_p2p(P2pMessage::Ignore(gossip_id));
                     }
+                    drop(wait_group);
                 }
-                ExecutionPayloadEnvelopeAction::DelayUntilBeaconBlock(_, _) => {
-                    // TODO: Implement delay logic
+                ExecutionPayloadEnvelopeAction::DelayUntilBeaconBlock(envelope, _block_root) => {
+                    // TODO: Implement delay infrastructure (PendingExecutionPayloadEnvelope struct, delay storage, retry logic)
+                    // For now, treat as Ignore to avoid blocking
+                    warn!(
+                        "execution payload envelope delayed until beacon block - treating as Ignore \
+                         (slot: {}, block_root: {:?})",
+                        envelope.message.slot, envelope.message.beacon_block_root
+                    );
+                    if let Some(gossip_id) = origin.gossip_id() {
+                        self.send_to_p2p(P2pMessage::Ignore(gossip_id));
+                    }
+                    drop(wait_group);
                 }
-                ExecutionPayloadEnvelopeAction::DelayUntilSlot(_) => {
-                    // TODO: Implement delay logic
+                ExecutionPayloadEnvelopeAction::DelayUntilSlot(envelope) => {
+                    // TODO: Implement delay infrastructure
+                    // For now, treat as Ignore to avoid blocking
+                    warn!(
+                        "execution payload envelope delayed until slot - treating as Ignore (slot: {})",
+                        envelope.message.slot
+                    );
+                    if let Some(gossip_id) = origin.gossip_id() {
+                        self.send_to_p2p(P2pMessage::Ignore(gossip_id));
+                    }
+                    drop(wait_group);
                 }
             },
             Err(error) => {
@@ -2100,18 +2121,18 @@ where
                 if let Some(gossip_id) = origin.gossip_id() {
                     self.send_to_p2p(P2pMessage::Ignore(gossip_id));
                 }
+                drop(wait_group);
             }
         }
     }
 
     fn handle_payload_attestation(
         &mut self,
-        wait_group: &W,
+        wait_group: W,
         result: Result<PayloadAttestationAction>,
         origin: PayloadAttestationOrigin,
         submission_time: Instant,
     ) {
-        let _ = wait_group;
         let _ = submission_time;
 
         match result {
@@ -2131,24 +2152,43 @@ where
                     if let Some(gossip_id) = origin.gossip_id() {
                         self.send_to_p2p(P2pMessage::Accept(gossip_id));
                     }
+
+                    drop(wait_group);
                 }
                 PayloadAttestationAction::Ignore => {
                     if let Some(gossip_id) = origin.gossip_id() {
                         self.send_to_p2p(P2pMessage::Ignore(gossip_id));
                     }
+
+                    drop(wait_group);
                 }
-                PayloadAttestationAction::DelayUntilBeaconBlock(_, _) => {
-                    // TODO: Implement delay logic
+                PayloadAttestationAction::DelayUntilBeaconBlock(attestation, _block_root) => {
+                    warn!("payload attestation delayed until beacon block - treating as Ignore");
+
+                    if let Some(gossip_id) = origin.gossip_id() {
+                        self.send_to_p2p(P2pMessage::Ignore(gossip_id));
+                    }
+
+                    drop(wait_group);
                 }
-                PayloadAttestationAction::DelayUntilSlot(_) => {
-                    // TODO: Implement delay logic
+                PayloadAttestationAction::DelayUntilSlot(attestation) => {
+                    warn!("payload attestation delayed until slot - treating as Ignore");
+
+                    if let Some(gossip_id) = origin.gossip_id() {
+                        self.send_to_p2p(P2pMessage::Ignore(gossip_id));
+                    }
+
+                    drop(wait_group);
                 }
             },
             Err(error) => {
                 warn!("payload attestation validation failed: {error:?}");
+
                 if let Some(gossip_id) = origin.gossip_id() {
                     self.send_to_p2p(P2pMessage::Ignore(gossip_id));
                 }
+
+                drop(wait_group);
             }
         }
     }
