@@ -42,7 +42,7 @@ pub struct Delayed<P: Preset> {
     pub blob_sidecars: Vec<PendingBlobSidecar<P>>,
     pub data_column_sidecars: Vec<PendingDataColumnSidecar<P>>,
     pub execution_payload_envelopes: Vec<PendingExecutionPayloadEnvelope<P>>,
-    pub payload_attestations: Vec<PendingPayloadAttestation<P>>,
+    pub payload_attestations: Vec<PendingPayloadAttestation<P, GossipId>>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -183,9 +183,9 @@ pub struct PendingExecutionPayloadEnvelope<P: Preset> {
 }
 
 #[derive(Debug)]
-pub struct PendingPayloadAttestation<P: Preset> {
+pub struct PendingPayloadAttestation<P: Preset, I> {
     pub attestation: Arc<PayloadAttestation<P>>,
-    pub origin: PayloadAttestationOrigin,
+    pub origin: PayloadAttestationOrigin<I>,
     pub submission_time: Instant,
 }
 

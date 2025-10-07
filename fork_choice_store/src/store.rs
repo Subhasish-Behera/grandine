@@ -2317,14 +2317,15 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
     /// 1. [IGNORE] Timing check (not too old)
     /// 2. [IGNORE/DELAY] Beacon block must be seen
     /// 3. [REJECT] Signature validation using validate_indexed_payload_attestation
-    pub fn validate_payload_attestation(
+    pub fn validate_payload_attestation<I>(
         &self,
         attestation: Arc<PayloadAttestation<P>>,
-        origin: &PayloadAttestationOrigin,
-    ) -> Result<PayloadAttestationAction> {
+        origin: PayloadAttestationOrigin<I>,
+    ) -> Result<PayloadAttestationAction<P, I>> {
         // STUB: Just accept for now
         // Real implementation should validate signature and timing
-        Ok(PayloadAttestationAction::Accept(attestation))
+        let item = PayloadAttestationItem::unverified(attestation, origin);
+        Ok(PayloadAttestationAction::Accept(item))
     }
 
     /// [`on_tick`](https://github.com/ethereum/consensus-specs/blob/v1.3.0/specs/phase0/fork-choice.md#on_tick)

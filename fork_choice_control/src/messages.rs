@@ -148,8 +148,8 @@ pub enum MutatorMessage<P: Preset, W> {
     },
     PayloadAttestation {
         wait_group: W,
-        result: Result<PayloadAttestationAction>,
-        origin: PayloadAttestationOrigin,
+        result: Result<PayloadAttestationAction<P, GossipId>>,
+        origin: PayloadAttestationOrigin<GossipId>,
         submission_time: Instant,
     },
     FinishedPersistingBlobSidecars {

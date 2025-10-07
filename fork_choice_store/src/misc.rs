@@ -751,33 +751,110 @@ impl<P: Preset> ExecutionPayloadEnvelopeAction<P> {
 
 // ePBS: Payload Attestation processing
 #[derive(Debug)]
-pub enum PayloadAttestationOrigin {
-    Gossip(GossipId),
+pub enum PayloadAttestationOrigin<I> {
+    Gossip(I),
     Own,
 }
 
-impl PayloadAttestationOrigin {
+impl<I> PayloadAttestationOrigin<I> {
     #[must_use]
-    pub fn gossip_id(self) -> Option<GossipId> {
+    pub fn gossip_id(self) -> Option<I> {
         match self {
             Self::Gossip(gossip_id) => Some(gossip_id),
             Self::Own => None,
         }
     }
+
+    #[must_use]
+    pub const fn verify_signatures(&self) -> bool {
+        // Only verify signatures for gossip messages, not for own messages
+        matches!(self, Self::Gossip(_))
+    }
 }
 
 #[derive(Debug)]
-pub enum PayloadAttestationAction {
-    Accept(Arc<PayloadAttestationMessage>),
-    Ignore,
-    DelayUntilBeaconBlock(Arc<PayloadAttestationMessage>, H256),
-    DelayUntilSlot(Arc<PayloadAttestationMessage>),
+pub struct PayloadAttestationItem<P: Preset, I> {
+    pub item: Arc<PayloadAttestation<P>>,
+    pub origin: PayloadAttestationOrigin<I>,
+    pub signature_status: SignatureStatus,
 }
 
-impl PayloadAttestationAction {
+impl<P: Preset, I> PayloadAttestationItem<P, I> {
+    #[must_use]
+    pub const fn unverified(
+        item: Arc<PayloadAttestation<P>>,
+        origin: PayloadAttestationOrigin<I>,
+    ) -> Self {
+        Self {
+            item,
+            origin,
+            signature_status: SignatureStatus::Unverified,
+        }
+    }
+
+    #[must_use]
+    pub const fn verified(
+        item: Arc<PayloadAttestation<P>>,
+        origin: PayloadAttestationOrigin<I>,
+    ) -> Self {
+        Self {
+            item,
+            origin,
+            signature_status: SignatureStatus::Verified,
+        }
+    }
+
+    #[must_use]
+    pub fn into_verified(self) -> Self {
+        let Self { item, origin, .. } = self;
+
+        Self {
+            item,
+            origin,
+            signature_status: SignatureStatus::Verified,
+        }
+    }
+
+    #[must_use]
+    pub fn verify_signatures(&self) -> bool {
+        !self.signature_status.is_verified() && self.origin.verify_signatures()
+    }
+
+    #[must_use]
+    pub fn slot(&self) -> Slot {
+        self.item.data.slot
+    }
+
+    #[must_use]
+    pub fn beacon_block_root(&self) -> H256 {
+        self.item.data.beacon_block_root
+    }
+}
+
+#[derive(Debug)]
+pub enum PayloadAttestationAction<P: Preset, I> {
+    Accept(PayloadAttestationItem<P, I>),
+    Ignore(PayloadAttestationItem<P, I>),
+    DelayUntilBeaconBlock(PayloadAttestationItem<P, I>, H256),
+    DelayUntilSlot(PayloadAttestationItem<P, I>),
+}
+
+impl<P: Preset, I> PayloadAttestationAction<P, I> {
     #[must_use]
     pub const fn accepted(&self) -> bool {
         matches!(self, Self::Accept(_))
+    }
+
+    #[must_use]
+    pub fn into_verified(self) -> Self {
+        match self {
+            Self::Accept(item) => Self::Accept(item.into_verified()),
+            Self::Ignore(item) => Self::Ignore(item.into_verified()),
+            Self::DelayUntilBeaconBlock(item, root) => {
+                Self::DelayUntilBeaconBlock(item.into_verified(), root)
+            }
+            Self::DelayUntilSlot(item) => Self::DelayUntilSlot(item.into_verified()),
+        }
     }
 }
 
