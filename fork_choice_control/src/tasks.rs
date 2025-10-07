@@ -11,7 +11,8 @@ use features::Feature;
 use fork_choice_store::{
     AggregateAndProofOrigin, AttestationItem, AttestationOrigin, AttesterSlashingOrigin,
     BlobSidecarOrigin, BlockAction, BlockOrigin, DataColumnSidecarAction, DataColumnSidecarOrigin,
-    StateCacheProcessor, Store,
+    ExecutionPayloadEnvelopeAction, ExecutionPayloadEnvelopeOrigin, PayloadAttestationAction,
+    PayloadAttestationOrigin, StateCacheProcessor, Store,
 };
 use futures::channel::mpsc::Sender as MultiSender;
 use helper_functions::{
@@ -710,7 +711,7 @@ pub struct ExecutionPayloadEnvelopeTask<P: Preset, W> {
     pub wait_group: W,
     pub execution_payload_envelope: Arc<SignedExecutionPayloadEnvelope<P>>,
     pub beacon_block_seen: bool,
-    pub gossip_id: GossipId,
+    pub origin: ExecutionPayloadEnvelopeOrigin,
     pub submission_time: Instant,
     pub metrics: Option<Arc<Metrics>>,
 }
@@ -723,22 +724,29 @@ impl<P: Preset, W> Run for ExecutionPayloadEnvelopeTask<P, W> {
             wait_group,
             execution_payload_envelope,
             beacon_block_seen,
-            gossip_id,
+            origin,
             submission_time,
             metrics,
         } = self;
 
-        let _ = wait_group;
-
         let _beacon_block_root = execution_payload_envelope.message.beacon_block_root;
         let _slot = execution_payload_envelope.message.slot;
 
+        let _ = store_snapshot;
+        let _ = metrics;
+
         // TODO: Add full validation
         // For now, just accept and send to mutator
-        MutatorMessage::ExecutionPayloadEnvelope {
+        let result = Ok(ExecutionPayloadEnvelopeAction::Accept(
             execution_payload_envelope,
+        ));
+
+        MutatorMessage::ExecutionPayloadEnvelope {
+            wait_group,
+            result,
+            origin,
             beacon_block_seen,
-            gossip_id,
+            submission_time,
         }
         .send(&mutator_tx);
     }
@@ -749,7 +757,7 @@ pub struct PayloadAttestationTask<P: Preset, W> {
     pub mutator_tx: Sender<MutatorMessage<P, W>>,
     pub wait_group: W,
     pub payload_attestation: Arc<PayloadAttestationMessage>,
-    pub gossip_id: GossipId,
+    pub origin: PayloadAttestationOrigin,
     pub submission_time: Instant,
 }
 
@@ -760,20 +768,24 @@ impl<P: Preset, W> Run for PayloadAttestationTask<P, W> {
             mutator_tx,
             wait_group,
             payload_attestation,
-            gossip_id,
+            origin,
             submission_time,
         } = self;
-
-        let _ = wait_group;
 
         let _slot = payload_attestation.data.slot;
         let _beacon_block_root = payload_attestation.data.beacon_block_root;
 
+        let _ = store_snapshot;
+
         // TODO: Add full validation
         // For now, just accept and send to mutator
+        let result = Ok(PayloadAttestationAction::Accept(payload_attestation));
+
         MutatorMessage::PayloadAttestation {
-            payload_attestation,
-            gossip_id,
+            wait_group,
+            result,
+            origin,
+            submission_time,
         }
         .send(&mutator_tx);
     }

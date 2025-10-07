@@ -37,8 +37,9 @@ use fork_choice_store::{
     AggregateAndProofAction, ApplyBlockChanges, ApplyTickChanges, AttestationAction,
     AttestationItem, AttestationOrigin, AttestationValidationError, AttesterSlashingOrigin,
     BlobSidecarAction, BlobSidecarOrigin, BlockAction, BlockOrigin, ChainLink,
-    DataColumnSidecarAction, DataColumnSidecarOrigin, Error, PayloadAction, StateCacheProcessor,
-    Store, ValidAttestation,
+    DataColumnSidecarAction, DataColumnSidecarOrigin, Error, ExecutionPayloadEnvelopeAction,
+    ExecutionPayloadEnvelopeOrigin, PayloadAction, PayloadAttestationAction,
+    PayloadAttestationOrigin, StateCacheProcessor, Store, ValidAttestation,
 };
 use futures::channel::{mpsc::Sender as MultiSender, oneshot::Sender as OneshotSender};
 use helper_functions::{accessors, misc, predicates, verifier::NullVerifier};
@@ -281,18 +282,24 @@ where
                     submission_time,
                 ),
                 MutatorMessage::ExecutionPayloadEnvelope {
-                    execution_payload_envelope,
+                    wait_group,
+                    result,
+                    origin,
                     beacon_block_seen,
-                    gossip_id,
+                    submission_time,
                 } => self.handle_execution_payload_envelope(
-                    execution_payload_envelope,
+                    wait_group,
+                    result,
+                    origin,
                     beacon_block_seen,
-                    gossip_id,
+                    submission_time,
                 ),
                 MutatorMessage::PayloadAttestation {
-                    payload_attestation,
-                    gossip_id,
-                } => self.handle_payload_attestation(payload_attestation, gossip_id),
+                    wait_group,
+                    result,
+                    origin,
+                    submission_time,
+                } => self.handle_payload_attestation(wait_group, result, origin, submission_time),
                 MutatorMessage::FinishedPersistingBlobSidecars {
                     wait_group,
                     persisted_blob_ids,
@@ -2044,46 +2051,106 @@ where
 
     fn handle_execution_payload_envelope(
         &mut self,
-        execution_payload_envelope: Arc<types::gloas::containers::SignedExecutionPayloadEnvelope<P>>,
+        wait_group: &W,
+        result: Result<ExecutionPayloadEnvelopeAction<P>>,
+        origin: ExecutionPayloadEnvelopeOrigin,
         beacon_block_seen: bool,
-        gossip_id: GossipId,
+        submission_time: Instant,
     ) {
-        let beacon_block_root = execution_payload_envelope.message.beacon_block_root;
-        let slot = execution_payload_envelope.message.slot;
+        let _ = wait_group;
+        let _ = submission_time;
 
-        debug!(
-            "handling execution payload envelope for slot {slot}, beacon_block_root {beacon_block_root:?}"
-        );
+        match result {
+            Ok(action) => match action {
+                ExecutionPayloadEnvelopeAction::Accept(execution_payload_envelope) => {
+                    let beacon_block_root = execution_payload_envelope.message.beacon_block_root;
+                    let slot = execution_payload_envelope.message.slot;
 
-        // Store the execution payload envelope
-        // TODO: Implement proper storage and processing logic based on fork_choice_store
-        // For now, just accept the gossip message
+                    debug!(
+                        "handling execution payload envelope for slot {slot}, beacon_block_root {beacon_block_root:?}"
+                    );
 
-        self.send_to_p2p(P2pMessage::Accept(gossip_id));
+                    // Store the execution payload envelope
+                    // TODO: Implement proper storage and processing logic based on fork_choice_store
+                    // For now, just accept the gossip message
 
-        if beacon_block_seen {
-            // If we've already seen the beacon block, we can potentially trigger block processing
-            debug!("beacon block already seen for execution payload, triggering potential head change");
+                    if let Some(gossip_id) = origin.gossip_id() {
+                        self.send_to_p2p(P2pMessage::Accept(gossip_id));
+                    }
+
+                    if beacon_block_seen {
+                        // If we've already seen the beacon block, we can potentially trigger block processing
+                        debug!("beacon block already seen for execution payload, triggering potential head change");
+                    }
+                }
+                ExecutionPayloadEnvelopeAction::Ignore => {
+                    if let Some(gossip_id) = origin.gossip_id() {
+                        self.send_to_p2p(P2pMessage::Ignore(gossip_id));
+                    }
+                }
+                ExecutionPayloadEnvelopeAction::DelayUntilBeaconBlock(_, _) => {
+                    // TODO: Implement delay logic
+                }
+                ExecutionPayloadEnvelopeAction::DelayUntilSlot(_) => {
+                    // TODO: Implement delay logic
+                }
+            },
+            Err(error) => {
+                warn!("execution payload envelope validation failed: {error:?}");
+                if let Some(gossip_id) = origin.gossip_id() {
+                    self.send_to_p2p(P2pMessage::Ignore(gossip_id));
+                }
+            }
         }
     }
 
     fn handle_payload_attestation(
         &mut self,
-        payload_attestation: Arc<types::gloas::containers::PayloadAttestationMessage>,
-        gossip_id: GossipId,
+        wait_group: &W,
+        result: Result<PayloadAttestationAction>,
+        origin: PayloadAttestationOrigin,
+        submission_time: Instant,
     ) {
-        let slot = payload_attestation.data.slot;
-        let beacon_block_root = payload_attestation.data.beacon_block_root;
+        let _ = wait_group;
+        let _ = submission_time;
 
-        debug!(
-            "handling payload attestation for slot {slot}, beacon_block_root {beacon_block_root:?}"
-        );
+        match result {
+            Ok(action) => match action {
+                PayloadAttestationAction::Accept(payload_attestation) => {
+                    let slot = payload_attestation.data.slot;
+                    let beacon_block_root = payload_attestation.data.beacon_block_root;
 
-        // Store the payload attestation
-        // TODO: Implement proper storage and processing logic based on fork_choice_store
-        // For now, just accept the gossip message
+                    debug!(
+                        "handling payload attestation for slot {slot}, beacon_block_root {beacon_block_root:?}"
+                    );
 
-        self.send_to_p2p(P2pMessage::Accept(gossip_id));
+                    // Store the payload attestation
+                    // TODO: Implement proper storage and processing logic based on fork_choice_store
+                    // For now, just accept the gossip message
+
+                    if let Some(gossip_id) = origin.gossip_id() {
+                        self.send_to_p2p(P2pMessage::Accept(gossip_id));
+                    }
+                }
+                PayloadAttestationAction::Ignore => {
+                    if let Some(gossip_id) = origin.gossip_id() {
+                        self.send_to_p2p(P2pMessage::Ignore(gossip_id));
+                    }
+                }
+                PayloadAttestationAction::DelayUntilBeaconBlock(_, _) => {
+                    // TODO: Implement delay logic
+                }
+                PayloadAttestationAction::DelayUntilSlot(_) => {
+                    // TODO: Implement delay logic
+                }
+            },
+            Err(error) => {
+                warn!("payload attestation validation failed: {error:?}");
+                if let Some(gossip_id) = origin.gossip_id() {
+                    self.send_to_p2p(P2pMessage::Ignore(gossip_id));
+                }
+            }
+        }
     }
 
     #[expect(clippy::cognitive_complexity)]

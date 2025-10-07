@@ -24,6 +24,7 @@ use types::{
     },
     deneb::containers::BlobSidecar,
     fulu::containers::DataColumnSidecar,
+    gloas::containers::{PayloadAttestationMessage, SignedExecutionPayloadEnvelope},
     nonstandard::{PayloadStatus, Publishable, ValidationOutcome},
     phase0::{
         containers::{AttestationData, Checkpoint},
@@ -714,6 +715,70 @@ pub enum PartialAttestationAction {
     Ignore,
     DelayUntilBlock(H256),
     DelayUntilSlot,
+}
+
+// ePBS: Execution Payload Envelope processing
+#[derive(Debug)]
+pub enum ExecutionPayloadEnvelopeOrigin {
+    Gossip(GossipId),
+    Own,
+}
+
+impl ExecutionPayloadEnvelopeOrigin {
+    #[must_use]
+    pub fn gossip_id(self) -> Option<GossipId> {
+        match self {
+            Self::Gossip(gossip_id) => Some(gossip_id),
+            Self::Own => None,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum ExecutionPayloadEnvelopeAction<P: Preset> {
+    Accept(Arc<SignedExecutionPayloadEnvelope<P>>),
+    Ignore,
+    DelayUntilBeaconBlock(Arc<SignedExecutionPayloadEnvelope<P>>, H256),
+    DelayUntilSlot(Arc<SignedExecutionPayloadEnvelope<P>>),
+}
+
+impl<P: Preset> ExecutionPayloadEnvelopeAction<P> {
+    #[must_use]
+    pub const fn accepted(&self) -> bool {
+        matches!(self, Self::Accept(_))
+    }
+}
+
+// ePBS: Payload Attestation processing
+#[derive(Debug)]
+pub enum PayloadAttestationOrigin {
+    Gossip(GossipId),
+    Own,
+}
+
+impl PayloadAttestationOrigin {
+    #[must_use]
+    pub fn gossip_id(self) -> Option<GossipId> {
+        match self {
+            Self::Gossip(gossip_id) => Some(gossip_id),
+            Self::Own => None,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum PayloadAttestationAction {
+    Accept(Arc<PayloadAttestationMessage>),
+    Ignore,
+    DelayUntilBeaconBlock(Arc<PayloadAttestationMessage>, H256),
+    DelayUntilSlot(Arc<PayloadAttestationMessage>),
+}
+
+impl PayloadAttestationAction {
+    #[must_use]
+    pub const fn accepted(&self) -> bool {
+        matches!(self, Self::Accept(_))
+    }
 }
 
 #[derive(Clone)]

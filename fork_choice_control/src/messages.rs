@@ -12,6 +12,8 @@ use fork_choice_store::{
     AggregateAndProofOrigin, AttestationAction, AttestationItem, AttestationValidationError,
     AttesterSlashingOrigin, BlobSidecarAction, BlobSidecarOrigin, BlockAction, BlockOrigin,
     ChainLink, DataColumnSidecarAction, DataColumnSidecarOrigin,
+    ExecutionPayloadEnvelopeAction, ExecutionPayloadEnvelopeOrigin, PayloadAttestationAction,
+    PayloadAttestationOrigin,
 };
 use log::debug;
 use serde::Serialize;
@@ -138,13 +140,17 @@ pub enum MutatorMessage<P: Preset, W> {
         submission_time: Instant,
     },
     ExecutionPayloadEnvelope {
-        execution_payload_envelope: Arc<SignedExecutionPayloadEnvelope<P>>,
+        wait_group: W,
+        result: Result<ExecutionPayloadEnvelopeAction<P>>,
+        origin: ExecutionPayloadEnvelopeOrigin,
         beacon_block_seen: bool,
-        gossip_id: GossipId,
+        submission_time: Instant,
     },
     PayloadAttestation {
-        payload_attestation: Arc<PayloadAttestationMessage>,
-        gossip_id: GossipId,
+        wait_group: W,
+        result: Result<PayloadAttestationAction>,
+        origin: PayloadAttestationOrigin,
+        submission_time: Instant,
     },
     FinishedPersistingBlobSidecars {
         wait_group: W,

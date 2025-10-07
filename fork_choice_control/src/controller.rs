@@ -24,8 +24,8 @@ use eth2_libp2p::{GossipId, PeerId};
 use execution_engine::{ExecutionEngine, PayloadStatusV1};
 use fork_choice_store::{
     AggregateAndProofOrigin, AttestationItem, AttestationOrigin, AttesterSlashingOrigin,
-    BlobSidecarOrigin, BlockOrigin, DataColumnSidecarOrigin, StateCacheProcessor, Store,
-    StoreConfig,
+    BlobSidecarOrigin, BlockOrigin, DataColumnSidecarOrigin, ExecutionPayloadEnvelopeOrigin,
+    PayloadAttestationOrigin, StateCacheProcessor, Store, StoreConfig,
 };
 use futures::channel::{mpsc::Sender as MultiSender, oneshot::Sender as OneshotSender};
 use genesis::AnchorCheckpointProvider;
@@ -354,7 +354,7 @@ where
         .send(&self.mutator_tx);
     }
 
-    pub fn on_execution_payload(
+    pub fn on_gossip_execution_payload(
         &self,
         execution_payload_envelope: Arc<SignedExecutionPayloadEnvelope<P>>,
         gossip_id: GossipId,
@@ -366,7 +366,7 @@ where
             wait_group: self.owned_wait_group(),
             execution_payload_envelope,
             beacon_block_seen,
-            gossip_id,
+            origin: ExecutionPayloadEnvelopeOrigin::Gossip(gossip_id),
             submission_time: Instant::now(),
             metrics: self.metrics.clone(),
         })
@@ -382,7 +382,7 @@ where
             mutator_tx: self.owned_mutator_tx(),
             wait_group: self.owned_wait_group(),
             payload_attestation,
-            gossip_id,
+            origin: PayloadAttestationOrigin::Gossip(gossip_id),
             submission_time: Instant::now(),
         })
     }
