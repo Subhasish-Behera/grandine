@@ -52,7 +52,7 @@ use types::{
         containers::{DataColumnIdentifier, DataColumnSidecar},
         primitives::ColumnIndex,
     },
-    gloas::containers::{PayloadAttestation, SignedExecutionPayloadEnvelope},
+    gloas::containers::{IndexedPayloadAttestation, PayloadAttestation, SignedExecutionPayloadEnvelope},
     nonstandard::{BlobSidecarWithId, DataColumnSidecarWithId, PayloadStatus, Phase, WithStatus},
     phase0::{
         consts::{ATTESTATION_PROPAGATION_SLOT_RANGE, GENESIS_EPOCH, GENESIS_SLOT},
@@ -75,8 +75,8 @@ use crate::{
         DataAvailabilityPolicy, DataColumnSidecarAction, DataColumnSidecarOrigin, Difference,
         DifferenceAtLocation, DissolvedDifference, ExecutionPayloadEnvelopeAction,
         ExecutionPayloadEnvelopeOrigin, LatestMessage, Location, PartialAttestationAction,
-        PartialBlockAction, PayloadAction, PayloadAttestationAction, PayloadAttestationOrigin,
-        Score, SegmentId, Storage, UnfinalizedBlock, ValidAttestation,
+        PartialBlockAction, PayloadAction, PayloadAttestationAction, PayloadAttestationItem,
+        PayloadAttestationOrigin, Score, SegmentId, Storage, UnfinalizedBlock, ValidAttestation,
     },
     segment::{Position, Segment},
     state_cache_processor::StateCacheProcessor,
@@ -2289,42 +2289,177 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
 
     /// Validates ExecutionPayloadEnvelope received via gossip
     ///
-    /// TODO: Implement full validation according to Gloas spec:
-    /// 1. [IGNORE] Timing check with MAXIMUM_GOSSIP_CLOCK_DISPARITY
-    /// 2. [IGNORE] First payload per parent_block_hash
-    /// 3. [IGNORE/DELAY] Beacon block must be seen
-    /// 4. [REJECT] Builder index must be valid and active
-    /// 5. [REJECT] Builder signature must be valid
-    /// 6. [REJECT] Payload header must match actual payload
-    /// 7. [REJECT] Payload header must match beacon block commitment
-    /// 8. [REJECT] Blob commitments must match beacon block
-    /// 9. [REJECT] KZG aggregated proof must be valid (if struct has field)
-    /// 10. [REJECT] Parent block hash must be known to execution client
+    /// Spec: https://github.com/ethereum/consensus-specs/blob/master/specs/gloas/p2p-interface.md#execution_payload
     pub fn validate_execution_payload_envelope(
         &self,
         envelope: Arc<SignedExecutionPayloadEnvelope<P>>,
         beacon_block_seen: bool,
         origin: &ExecutionPayloadEnvelopeOrigin,
     ) -> Result<ExecutionPayloadEnvelopeAction<P>> {
-        // STUB: Just accept for now
-        // Real implementation should perform all 10 validation rules
+        let slot = envelope.message.slot;
+        let beacon_block_root = envelope.message.beacon_block_root;
+        let builder_index = envelope.message.builder_index;
+
+        // [IGNORE] The envelope is not from a future slot (with MAXIMUM_GOSSIP_CLOCK_DISPARITY allowance)
+        // i.e. validate that envelope.slot <= current_slot
+        if self.slot() < slot {
+            return Ok(ExecutionPayloadEnvelopeAction::DelayUntilSlot(envelope));
+        }
+
+        // [IGNORE] The envelope is from a slot greater than the latest finalized slot
+        // i.e. validate that envelope.slot > compute_start_slot_at_epoch(state.finalized_checkpoint.epoch)
+        if slot <= self.finalized_slot() {
+            return Ok(ExecutionPayloadEnvelopeAction::Ignore);
+        }
+
+        // [IGNORE] The envelope's beacon_block_root has been seen (via gossip or non-gossip sources)
+        // (a client MAY queue envelope for processing once the block is retrieved)
+        if !beacon_block_seen {
+            return Ok(ExecutionPayloadEnvelopeAction::DelayUntilBeaconBlock(
+                envelope,
+                beacon_block_root,
+            ));
+        }
+
+        // Get the beacon block to validate against
+        let Some(chain_link) = self.chain_link(beacon_block_root) else {
+            // Block not in store yet, delay until it arrives
+            return Ok(ExecutionPayloadEnvelopeAction::DelayUntilBeaconBlock(
+                envelope,
+                beacon_block_root,
+            ));
+        };
+
+        let block = &chain_link.block;
+        let state = chain_link.state(self);
+
+        // [REJECT] The builder_index must be a valid and active validator
+        ensure!(
+            (builder_index as usize) < state.validators().len_usize(),
+            Error::ValidatorIndexOutOfBounds {
+                validator_index: builder_index,
+                validator_count: state.validators().len_usize(),
+            },
+        );
+
+        let validator = &state.validators()[builder_index as usize];
+        ensure!(
+            predicates::is_active_validator(validator, accessors::get_current_epoch(&state)),
+            Error::ValidatorNotActive { builder_index },
+        );
+
+        // [REJECT] The builder signature envelope.signature is valid with respect to the builder_index pubkey
+        // TODO: Implement signature validation when signing domain is available
+        // For now, we skip signature validation as it requires:
+        // - get_domain(state, DOMAIN_BEACON_BUILDER, compute_epoch_at_slot(envelope.slot))
+        // - signing_root = compute_signing_root(envelope.message, domain)
+        // - verify_signature(pubkey, signing_root, envelope.signature)
+
+        // [REJECT] The execution payload header in the beacon block matches the payload
+        // TODO: Implement when ExecutionPayloadHeader comparison is available
+        // This requires comparing:
+        // - block.body.execution_payload_header.block_hash == hash_tree_root(envelope.payload)
+        // - All other header fields match
+
+        // [REJECT] Blob KZG commitments in envelope match those in the beacon block
+        let block_commitments = &block.message().body().blob_kzg_commitments;
+        let envelope_commitments = &envelope.message.blob_kzg_commitments;
+        ensure!(
+            block_commitments.as_ref() == envelope_commitments.as_ref(),
+            Error::BlobKzgCommitmentsMismatch,
+        );
+
+        // [REJECT] KZG proof validation (if the envelope has kzg_aggregated_proof field)
+        // TODO: Implement when KZG proof verification is available for envelopes
+        // This would verify the aggregated KZG proof over all blob commitments
+
+        // [IGNORE] This is the first payload envelope for this parent_block_hash
+        // TODO: Track seen execution parent hashes to implement first-per-parent rule
+        // For now, we accept duplicate envelopes (they will be ignored in store application)
+
+        // All validations passed
         Ok(ExecutionPayloadEnvelopeAction::Accept(envelope))
     }
 
     /// Validates PayloadAttestation received via gossip
     ///
-    /// TODO: Implement validation:
-    /// 1. [IGNORE] Timing check (not too old)
-    /// 2. [IGNORE/DELAY] Beacon block must be seen
-    /// 3. [REJECT] Signature validation using validate_indexed_payload_attestation
+    /// Spec: https://github.com/ethereum/consensus-specs/blob/master/specs/gloas/p2p-interface.md#payload_attestation_message
     pub fn validate_payload_attestation<I>(
         &self,
         attestation: Arc<PayloadAttestation<P>>,
         origin: PayloadAttestationOrigin<I>,
     ) -> Result<PayloadAttestationAction<P, I>> {
-        // STUB: Just accept for now
-        // Real implementation should validate signature and timing
-        let item = PayloadAttestationItem::unverified(attestation, origin);
+        let slot = attestation.data.slot;
+        let beacon_block_root = attestation.data.beacon_block_root;
+
+        // [IGNORE] The attestation is not from a future slot
+        if self.slot() < slot {
+            ensure!(
+                false,
+                Error::PayloadAttestationFromFutureSlot {
+                    slot,
+                    current_slot: self.slot(),
+                },
+            );
+        }
+
+        // [IGNORE] The attestation is from a slot greater than the latest finalized slot
+        if slot <= self.finalized_slot() {
+            ensure!(
+                false,
+                Error::PayloadAttestationTooOld {
+                    slot,
+                    finalized_slot: self.finalized_slot(),
+                },
+            );
+        }
+
+        // [IGNORE] The attestation's beacon_block_root has been seen
+        // (a client MAY queue attestation for processing once the block is retrieved)
+        if !self.contains_block(beacon_block_root) {
+            let item = PayloadAttestationItem::unverified(attestation, origin);
+            return Ok(PayloadAttestationAction::DelayUntilBeaconBlock(
+                item,
+                beacon_block_root,
+            ));
+        }
+
+        // Get the beacon block and state for validation
+        let Some(chain_link) = self.chain_link(beacon_block_root) else {
+            let item = PayloadAttestationItem::unverified(attestation, origin);
+            return Ok(PayloadAttestationAction::DelayUntilBeaconBlock(
+                item,
+                beacon_block_root,
+            ));
+        };
+
+        let state = chain_link.state(self);
+
+        // Convert PayloadAttestation to IndexedPayloadAttestation
+        // Get attesting indices from aggregation bits
+        let attesting_indices = attestation
+            .aggregation_bits
+            .iter_one_indices()
+            .map(|index| index as ValidatorIndex)
+            .collect::<ContiguousList<_, P::PtcSize>>();
+
+        let indexed_attestation = IndexedPayloadAttestation {
+            attesting_indices,
+            data: attestation.data,
+            signature: attestation.signature,
+        };
+
+        // [REJECT] The signature is valid using validate_indexed_payload_attestation
+        predicates::validate_received_indexed_payload_attestation(
+            &self.chain_config,
+            &self.pubkey_cache,
+            &state,
+            &indexed_attestation,
+            SingleVerifier,
+        )?;
+
+        // All validations passed
+        let item = PayloadAttestationItem::verified(attestation, origin);
         Ok(PayloadAttestationAction::Accept(item))
     }
 
