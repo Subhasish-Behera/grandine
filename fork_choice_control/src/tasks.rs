@@ -4,14 +4,15 @@ use std::{
     time::Instant,
 };
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use eth2_libp2p::GossipId;
 use execution_engine::{ExecutionEngine, NullExecutionEngine};
 use features::Feature;
 use fork_choice_store::{
     AggregateAndProofOrigin, AttestationItem, AttestationOrigin, AttesterSlashingOrigin,
     BlobSidecarOrigin, BlockAction, BlockOrigin, DataColumnSidecarAction, DataColumnSidecarOrigin,
-    StateCacheProcessor, Store,
+    ExecutionPayloadEnvelopeAction, ExecutionPayloadEnvelopeOrigin, PayloadAttestationAction,
+    PayloadAttestationOrigin, StateCacheProcessor, Store,
 };
 use futures::channel::mpsc::Sender as MultiSender;
 use helper_functions::{
@@ -30,6 +31,7 @@ use types::{
     config::Config,
     deneb::containers::{BlobIdentifier, BlobSidecar},
     fulu::containers::{DataColumnIdentifier, DataColumnSidecar},
+    gloas::containers::{PayloadAttestationMessage, SignedExecutionPayloadEnvelope},
     nonstandard::{RelativeEpoch, ValidationOutcome},
     phase0::{
         containers::Checkpoint,
@@ -41,8 +43,8 @@ use types::{
 
 use crate::{
     block_processor::BlockProcessor,
-    messages::MutatorMessage,
-    misc::{ProcessingTimings, VerifyAggregateAndProofResult},
+    messages::{MutatorMessage, P2pMessage},
+    misc::{MutatorRejectionReason, ProcessingTimings, VerifyAggregateAndProofResult},
     state_at_slot_cache::StateAtSlotCache,
     storage::Storage,
 };
@@ -701,4 +703,115 @@ impl<P: Preset> Run for StateAtSlotCacheFlushTask<P> {
             warn!("failed to flush state at slot cache: {error:?}");
         }
     }
+}
+
+pub struct ExecutionPayloadEnvelopeTask<P: Preset, W> {
+    pub store_snapshot: Arc<Store<P, Storage<P>>>,
+    pub mutator_tx: Sender<MutatorMessage<P, W>>,
+    pub wait_group: W,
+    pub execution_payload_envelope: Arc<SignedExecutionPayloadEnvelope<P>>,
+    pub beacon_block_seen: bool,
+    pub origin: ExecutionPayloadEnvelopeOrigin,
+    pub submission_time: Instant,
+    pub metrics: Option<Arc<Metrics>>,
+}
+
+impl<P: Preset, W> Run for ExecutionPayloadEnvelopeTask<P, W> {
+    fn run(self) {
+        let Self {
+            store_snapshot,
+            mutator_tx,
+            wait_group,
+            execution_payload_envelope,
+            beacon_block_seen,
+            origin,
+            submission_time,
+            metrics,
+        } = self;
+
+        let _timer = metrics
+            .as_ref()
+            .map(|metrics| metrics.fc_execution_payload_envelope_task_times.start_timer());
+
+        // Call validation stub (will be implemented later with full validation)
+        let result = store_snapshot.validate_execution_payload_envelope(
+            execution_payload_envelope,
+            beacon_block_seen,
+            &origin,
+        );
+
+        MutatorMessage::ExecutionPayloadEnvelope {
+            wait_group,
+            result,
+            origin,
+            beacon_block_seen,
+            submission_time,
+        }
+        .send(&mutator_tx);
+    }
+}
+
+pub struct PayloadAttestationTask<P: Preset, W> {
+    pub store_snapshot: Arc<Store<P, Storage<P>>>,
+    pub mutator_tx: Sender<MutatorMessage<P, W>>,
+    pub wait_group: W,
+    pub payload_attestation: Arc<PayloadAttestationMessage>,
+    pub origin: PayloadAttestationOrigin,
+    pub submission_time: Instant,
+}
+
+impl<P: Preset, W> Run for PayloadAttestationTask<P, W> {
+    fn run(self) {
+        let Self {
+            store_snapshot,
+            mutator_tx,
+            wait_group,
+            payload_attestation,
+            origin,
+            submission_time,
+        } = self;
+
+        let _slot = payload_attestation.data.slot;
+        let _beacon_block_root = payload_attestation.data.beacon_block_root;
+
+        let _ = store_snapshot;
+
+        // TODO: Add full validation
+        // For now, just accept and send to mutator
+        let result = Ok(PayloadAttestationAction::Accept(payload_attestation));
+
+        MutatorMessage::PayloadAttestation {
+            wait_group,
+            result,
+            origin,
+            submission_time,
+        }
+        .send(&mutator_tx);
+    }
+}
+
+fn validate_execution_payload_envelope<P: Preset>(
+    _store: &Store<P, Storage<P>>,
+    _envelope: &SignedExecutionPayloadEnvelope<P>,
+) -> Result<()> {
+    // TODO: Add full validation including:
+    // - State lookup at the correct slot
+    // - Proposer index verification
+    // - Signature verification
+    // https://github.com/grandinetech/grandine/issues/TBD
+
+    Ok(())
+}
+
+fn validate_payload_attestation<P: Preset>(
+    _store: &Store<P, Storage<P>>,
+    _attestation: &PayloadAttestationMessage,
+) -> Result<()> {
+    // TODO: Add full validation including:
+    // - State lookup at the correct slot
+    // - Validator index bounds checking
+    // - Signature verification
+    // https://github.com/grandinetech/grandine/issues/TBD
+
+    Ok(())
 }

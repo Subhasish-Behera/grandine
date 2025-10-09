@@ -162,6 +162,22 @@ pub enum Error<P: Preset> {
     ValidatorNotAggregator {
         aggregate_and_proof: Arc<SignedAggregateAndProof<P>>,
     },
+    #[error("builder validator is not active (builder_index: {builder_index})")]
+    ValidatorNotActive {
+        builder_index: ValidatorIndex,
+    },
+    #[error("blob KZG commitments mismatch between envelope and beacon block")]
+    BlobKzgCommitmentsMismatch,
+    #[error("payload attestation from future slot (slot: {slot}, current: {current_slot})")]
+    PayloadAttestationFromFutureSlot {
+        slot: Slot,
+        current_slot: Slot,
+    },
+    #[error("payload attestation is too old (slot: {slot}, finalized: {finalized_slot})")]
+    PayloadAttestationTooOld {
+        slot: Slot,
+        finalized_slot: Slot,
+    },
 }
 
 assert_eq_size!(Error<Mainnet>, [usize; 4]);

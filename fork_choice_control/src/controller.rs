@@ -24,8 +24,8 @@ use eth2_libp2p::{GossipId, PeerId};
 use execution_engine::{ExecutionEngine, PayloadStatusV1};
 use fork_choice_store::{
     AggregateAndProofOrigin, AttestationItem, AttestationOrigin, AttesterSlashingOrigin,
-    BlobSidecarOrigin, BlockOrigin, DataColumnSidecarOrigin, StateCacheProcessor, Store,
-    StoreConfig,
+    BlobSidecarOrigin, BlockOrigin, DataColumnSidecarOrigin, ExecutionPayloadEnvelopeOrigin,
+    PayloadAttestationOrigin, StateCacheProcessor, Store, StoreConfig,
 };
 use futures::channel::{mpsc::Sender as MultiSender, oneshot::Sender as OneshotSender};
 use genesis::AnchorCheckpointProvider;
@@ -44,6 +44,7 @@ use types::{
         containers::{DataColumnSidecar, MatrixEntry},
         primitives::ColumnIndex,
     },
+    gloas::containers::{PayloadAttestationMessage, SignedExecutionPayloadEnvelope},
     nonstandard::ValidationOutcome,
     phase0::{
         containers::BeaconBlockHeader,
@@ -66,7 +67,8 @@ use crate::{
     storage::Storage,
     tasks::{
         AggregateAndProofTask, AttestationTask, AttesterSlashingTask, BlobSidecarTask, BlockTask,
-        BlockVerifyForGossipTask, DataColumnSidecarTask, StateAtSlotCacheFlushTask,
+        BlockVerifyForGossipTask, DataColumnSidecarTask, ExecutionPayloadEnvelopeTask,
+        PayloadAttestationTask, StateAtSlotCacheFlushTask,
     },
     thread_pool::{Spawn, ThreadPool},
     unbounded_sink::UnboundedSink,
@@ -350,6 +352,39 @@ where
             payload_status,
         }
         .send(&self.mutator_tx);
+    }
+
+    pub fn on_gossip_execution_payload(
+        &self,
+        execution_payload_envelope: Arc<SignedExecutionPayloadEnvelope<P>>,
+        gossip_id: GossipId,
+        beacon_block_seen: bool,
+    ) {
+        self.spawn(ExecutionPayloadEnvelopeTask {
+            store_snapshot: self.owned_store_snapshot(),
+            mutator_tx: self.owned_mutator_tx(),
+            wait_group: self.owned_wait_group(),
+            execution_payload_envelope,
+            beacon_block_seen,
+            origin: ExecutionPayloadEnvelopeOrigin::Gossip(gossip_id),
+            submission_time: Instant::now(),
+            metrics: self.metrics.clone(),
+        })
+    }
+
+    pub fn on_gossip_payload_attestation(
+        &self,
+        payload_attestation: Arc<PayloadAttestationMessage>,
+        gossip_id: GossipId,
+    ) {
+        self.spawn(PayloadAttestationTask {
+            store_snapshot: self.owned_store_snapshot(),
+            mutator_tx: self.owned_mutator_tx(),
+            wait_group: self.owned_wait_group(),
+            payload_attestation,
+            origin: PayloadAttestationOrigin::Gossip(gossip_id),
+            submission_time: Instant::now(),
+        })
     }
 
     pub fn on_notified_new_payload(
