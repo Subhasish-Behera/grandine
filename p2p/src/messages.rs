@@ -25,6 +25,7 @@ use types::{
         containers::{DataColumnIdentifier, DataColumnSidecar, DataColumnsByRootIdentifier},
         primitives::ColumnIndex,
     },
+    gloas::containers::{PayloadAttestationMessage, SignedExecutionPayloadEnvelope},
     nonstandard::Phase,
     phase0::{
         containers::{Checkpoint, ProposerSlashing, SignedVoluntaryExit},
@@ -72,8 +73,10 @@ pub enum P2pToSync<P: Preset> {
     GossipDataColumnSidecar(Arc<DataColumnSidecar<P>>, SubnetId, GossipId),
     BlobSidecarRejected(BlobIdentifier),
     DataColumnSidecarRejected(DataColumnIdentifier),
+    GossipExecutionPayload(Arc<SignedExecutionPayloadEnvelope<P>>, PeerId, GossipId),
+    GossipPayloadAttestation(Arc<PayloadAttestationMessage>, GossipId),
     PeerCgcUpdated(PeerId),
-    RequestCustodyGroupBackfill(HashSet<u64>, Slot),
+    RequestCustodyGroupBackfill(HashSet<u64>),
     Stop,
 }
 
@@ -179,18 +182,6 @@ impl ArchiverToSync {
     }
 }
 
-pub enum BlockSyncServiceMessage {
-    RequestData,
-}
-
-impl BlockSyncServiceMessage {
-    pub fn send(self, tx: &UnboundedSender<Self>) {
-        if tx.unbounded_send(self).is_err() {
-            debug!("send to block sync service failed because the receiver was dropped");
-        }
-    }
-}
-
 #[derive(Serialize)]
 #[serde(bound = "")]
 pub enum ValidatorToP2p<P: Preset> {
@@ -205,6 +196,7 @@ pub enum ValidatorToP2p<P: Preset> {
     PublishSyncCommitteeMessage(Box<(SubnetId, SyncCommitteeMessage)>),
     PublishContributionAndProof(Box<SignedContributionAndProof<P>>),
     UpdateDataColumnSubnets(u64, bool),
+    UpdateEarliestAvailableSlot(Slot),
 }
 
 impl<P: Preset> ValidatorToP2p<P> {

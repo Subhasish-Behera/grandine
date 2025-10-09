@@ -6,6 +6,7 @@ use core::{
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
+    time::SystemTime,
 };
 
 use anyhow::Result;
@@ -51,9 +52,7 @@ use crate::{
         BackSync, BackSyncDataBySlot, Data as BackSyncData, Error as BackSyncError, SyncCheckpoint,
         SyncMode as BackSyncMode,
     },
-    messages::{
-        ArchiverToSync, BlockSyncServiceMessage, P2pToSync, SyncToApi, SyncToMetrics, SyncToP2p,
-    },
+    messages::{ArchiverToSync, P2pToSync, SyncToApi, SyncToMetrics, SyncToP2p},
     misc::{PeerReportReason, RPCRequestType},
     sync_manager::{SyncBatch, SyncManager, SyncTarget},
 };
@@ -97,6 +96,7 @@ pub struct BlockSyncService<P: Preset> {
     is_exiting: Arc<AtomicBool>,
     received_blob_sidecars: Arc<DashMap<BlobIdentifier, Slot>>,
     received_block_roots: HashMap<H256, Slot>,
+    received_execution_payloads: HashMap<H256, Slot>,
     received_data_column_sidecars: Arc<DashMap<DataColumnIdentifier, Slot>>,
     data_dumper: Arc<DataDumper>,
     fork_choice_to_sync_rx: Option<UnboundedReceiver<SyncMessage<P>>>,
@@ -106,8 +106,6 @@ pub struct BlockSyncService<P: Preset> {
     sync_to_metrics_tx: Option<UnboundedSender<SyncToMetrics>>,
     archiver_to_sync_tx: Option<UnboundedSender<ArchiverToSync>>,
     archiver_to_sync_rx: Option<UnboundedReceiver<ArchiverToSync>>,
-    self_tx: UnboundedSender<BlockSyncServiceMessage>,
-    self_rx: UnboundedReceiver<BlockSyncServiceMessage>,
 }
 
 impl<P: Preset> Drop for BlockSyncService<P> {
@@ -206,8 +204,6 @@ impl<P: Preset> BlockSyncService<P> {
             sync_to_metrics_tx,
         } = channels;
 
-        let (self_tx, self_rx) = futures::channel::mpsc::unbounded();
-
         // `is_back_synced` is set correctly only when back-sync is enabled. Otherwise it is set
         // to `true` and users can attempt to query historical data even after checkpoint sync.
         let is_back_synced = back_sync.is_none();
@@ -239,6 +235,7 @@ impl<P: Preset> BlockSyncService<P> {
             is_exiting: Arc::new(AtomicBool::new(false)),
             received_blob_sidecars,
             received_block_roots: HashMap::new(),
+            received_execution_payloads: HashMap::new(),
             received_data_column_sidecars,
             data_dumper,
             fork_choice_to_sync_rx,
@@ -248,12 +245,10 @@ impl<P: Preset> BlockSyncService<P> {
             sync_to_metrics_tx,
             archiver_to_sync_tx,
             archiver_to_sync_rx,
-            self_tx,
-            self_rx,
         };
 
         service.set_back_synced(is_back_synced);
-        service.set_forward_synced(is_forward_synced);
+        service.set_forward_synced(is_forward_synced)?;
 
         Ok(service)
     }
@@ -267,7 +262,7 @@ impl<P: Preset> BlockSyncService<P> {
         loop {
             select! {
                 _ = interval.select_next_some() => {
-                    self.request_blobs_and_blocks_if_ready();
+                    self.request_blobs_and_blocks_if_ready()?;
 
                     if self.sync_direction == SyncDirection::Back {
                         if let Some(back_sync) = &self.back_sync {
@@ -314,7 +309,7 @@ impl<P: Preset> BlockSyncService<P> {
                         }
                         P2pToSync::AddPeer(peer_id, status) => {
                             self.sync_manager.add_peer(peer_id, status);
-                            self.request_blobs_and_blocks_if_ready();
+                            self.request_blobs_and_blocks_if_ready()?;
                         }
                         P2pToSync::RemovePeer(peer_id) => {
                             let batches_to_retry = self.sync_manager.remove_peer(&peer_id);
@@ -525,7 +520,7 @@ impl<P: Preset> BlockSyncService<P> {
                                 self.check_back_sync_progress()?;
                             }
 
-                            self.request_blobs_and_blocks_if_ready();
+                            self.request_blobs_and_blocks_if_ready()?;
                         }
                         P2pToSync::BlocksByRangeRequestFinished(peer_id, request_id) => {
                             let request_direction = self.sync_manager.request_direction(request_id);
@@ -541,7 +536,7 @@ impl<P: Preset> BlockSyncService<P> {
                                 self.check_back_sync_progress()?;
                             }
 
-                            self.request_blobs_and_blocks_if_ready();
+                            self.request_blobs_and_blocks_if_ready()?;
                         }
                         P2pToSync::DataColumnsByRangeRequestFinished(request_id) => {
                             let request_direction = self.sync_manager.request_direction(request_id);
@@ -552,7 +547,7 @@ impl<P: Preset> BlockSyncService<P> {
                                 self.check_back_sync_progress()?;
                             }
 
-                            self.request_blobs_and_blocks_if_ready();
+                            self.request_blobs_and_blocks_if_ready()?;
                         }
                         P2pToSync::FinalizedCheckpoint(finalized_checkpoint) => {
                             let start_of_epoch = misc::compute_start_slot_at_epoch::<P>(
@@ -564,6 +559,7 @@ impl<P: Preset> BlockSyncService<P> {
                                 self.received_blob_sidecars.retain(|_, slot| *slot >= start_of_epoch);
                             }
                             self.received_block_roots.retain(|_, slot| *slot >= start_of_epoch);
+                            self.received_execution_payloads.retain(|_, slot| *slot >= start_of_epoch);
                         }
                         P2pToSync::BlobSidecarRejected(blob_identifier) => {
                             // In case blob sidecar is not valid (e.g. someone spams fake blob sidecars)
@@ -576,13 +572,57 @@ impl<P: Preset> BlockSyncService<P> {
                         P2pToSync::PeerCgcUpdated(peer_id) => {
                             self.sync_manager.update_peer_cgc(peer_id);
                         }
-                        P2pToSync::RequestCustodyGroupBackfill(column_indices, previous_earliest_available_slot) => {
-                            if let Err(error) = self.request_custody_group_backfill(
-                                column_indices,
-                                previous_earliest_available_slot,
-                            ) {
+                        P2pToSync::RequestCustodyGroupBackfill(column_indices) => {
+                            if let Err(error) = self.request_custody_group_backfill(column_indices) {
                                 warn!("failed to start data column backfill: {error}");
                             }
+                        }
+                        P2pToSync::GossipExecutionPayload(execution_payload_envelope, peer_id, gossip_id) => {
+                            let payload_slot = execution_payload_envelope.message.slot;
+                            let beacon_block_root = execution_payload_envelope.message.beacon_block_root;
+
+                            // Early validation: deduplication check
+                            if self.register_new_received_execution_payload(beacon_block_root, payload_slot) {
+                                // Early validation: timing check (3/4 into slot)
+                                let slot_start = misc::compute_timestamp_at_slot(
+                                    self.config.as_ref(),
+                                    &self.controller.head_state().value(),
+                                    payload_slot,
+                                );
+                                let slot_start_time = SystemTime::UNIX_EPOCH + Duration::from_secs(slot_start);
+                                let three_fourths_slot = slot_start_time + Duration::from_millis(
+                                    3 * self.config.seconds_per_slot.get() * 1000 / 4
+                                );
+
+                                if SystemTime::now() >= three_fourths_slot {
+                                    // Check if beacon block has been seen
+                                    let beacon_block_seen = self.received_block_roots.contains_key(&beacon_block_root);
+
+                                    debug!(
+                                        "received execution payload as gossip (slot: {payload_slot}, \
+                                        beacon_block_root: {beacon_block_root:?}, peer_id: {peer_id}, \
+                                        beacon_block_seen: {beacon_block_seen})"
+                                    );
+
+                                    self.controller.on_execution_payload(
+                                        execution_payload_envelope,
+                                        gossip_id,
+                                        beacon_block_seen,
+                                    );
+                                } else {
+                                    debug!(
+                                        "execution payload too early (slot: {payload_slot}, \
+                                        beacon_block_root: {beacon_block_root:?})"
+                                    );
+                                }
+                            }
+                        }
+                        P2pToSync::GossipPayloadAttestation(payload_attestation, gossip_id) => {
+                            debug!("received payload attestation as gossip");
+                            self.controller.on_gossip_payload_attestation(
+                                payload_attestation,
+                                gossip_id,
+                            );
                         }
                         P2pToSync::Stop => {
                             SyncToApi::Stop.send(&self.sync_to_api_tx);
@@ -594,17 +634,7 @@ impl<P: Preset> BlockSyncService<P> {
                             break;
                         }
                     }
-                },
-
-                message = self.self_rx.select_next_some() => {
-                    match message {
-                        BlockSyncServiceMessage::RequestData => {
-                            if let Err(error) = self.request_data() {
-                                warn!("unable to request new data from the network: {error:?}");
-                            }
-                        }
-                    }
-                },
+                }
             }
         }
 
@@ -648,33 +678,14 @@ impl<P: Preset> BlockSyncService<P> {
 
             debug!("finishing back-sync: {:?}", back_sync.data());
 
-            match back_sync.sync_mode() {
-                BackSyncMode::Default => {
-                    SyncToP2p::UpdateEarliestAvailableSlot(back_sync.current_slot())
-                        .send(&self.sync_to_p2p_tx);
-                }
-                BackSyncMode::DataColumnsOnly {
-                    previous_earliest_available_slot,
-                    ..
-                } => {
-                    SyncToP2p::UpdateEarliestAvailableSlot(*previous_earliest_available_slot)
-                        .send(&self.sync_to_p2p_tx);
-
-                    if let Some(metrics) = self.metrics.as_ref() {
-                        let custody_groups_count = self
-                            .controller
-                            .chain_config()
-                            .custody_size::<P>(self.controller.sampling_columns_count() as u64);
-                        metrics.set_beacon_custody_groups_backfilled(custody_groups_count);
-                    }
-                }
-            }
-
             if let Some(sync) = BackSync::load(&self.database)? {
                 self.back_sync = Some(sync);
                 self.try_to_spawn_back_sync_states_archiver()?;
-                self.request_blobs_and_blocks_if_ready();
+                self.request_blobs_and_blocks_if_ready()?;
             } else {
+                SyncToP2p::UpdateEarliestAvailableSlot(back_sync.current_slot())
+                    .send(&self.sync_to_p2p_tx);
+
                 self.set_back_synced(true);
             }
         }
@@ -817,8 +828,9 @@ impl<P: Preset> BlockSyncService<P> {
                         };
 
                         debug!(
-                            "retrying batch {batch:?}, request_id: {request_id:?}, mappings: {:?}, \
+                            "retrying batch {batch:?}, request_ids: {:?}, mappings: {:?}, \
                             new peers: [{peer_custody_columns_mapping:?}]",
+                            request_id..request_id,
                             peer_custody_columns_mapping.len(),
                         );
 
@@ -886,11 +898,7 @@ impl<P: Preset> BlockSyncService<P> {
         self.retry_sync_batches(expired_batches)
     }
 
-    fn request_blobs_and_blocks_if_ready(&self) {
-        BlockSyncServiceMessage::RequestData.send(&self.self_tx);
-    }
-
-    fn request_data(&mut self) -> Result<()> {
+    fn request_blobs_and_blocks_if_ready(&mut self) -> Result<()> {
         self.request_expired_blob_range_requests()?;
         self.request_expired_block_range_requests()?;
         self.request_expired_data_column_range_requests()?;
@@ -916,7 +924,7 @@ impl<P: Preset> BlockSyncService<P> {
             misc::compute_start_slot_at_epoch::<P>(snapshot.finalized_epoch());
         let sampling_columns = self.controller.sampling_columns();
 
-        self.set_forward_synced(snapshot.is_forward_synced());
+        self.set_forward_synced(snapshot.is_forward_synced())?;
 
         let batches = match self.sync_direction {
             SyncDirection::Forward => {
@@ -1008,11 +1016,7 @@ impl<P: Preset> BlockSyncService<P> {
         Ok(())
     }
 
-    fn request_custody_group_backfill(
-        &mut self,
-        column_indices: HashSet<u64>,
-        previous_earliest_available_slot: Slot,
-    ) -> Result<()> {
+    fn request_custody_group_backfill(&mut self, column_indices: HashSet<u64>) -> Result<()> {
         let current: SyncCheckpoint = self.controller.head().value.block.as_ref().into();
 
         if current.slot == GENESIS_SLOT {
@@ -1031,9 +1035,7 @@ impl<P: Preset> BlockSyncService<P> {
             Some(back_sync) => back_sync.data().current,
             // If back sync does not exist, that means all the back sync is completed
             None => {
-                let terminus_epoch = self
-                    .controller
-                    .min_checked_data_availability_epoch(current.slot);
+                let terminus_epoch = self.controller.min_checked_block_availability_epoch();
                 SyncCheckpoint {
                     slot: misc::compute_start_slot_at_epoch::<P>(terminus_epoch),
                     block_root: H256::zero(),
@@ -1044,10 +1046,7 @@ impl<P: Preset> BlockSyncService<P> {
 
         let back_sync_process = BackSync::<P>::new(
             BackSyncData { current, high, low },
-            BackSyncMode::DataColumnsOnly {
-                column_indices,
-                previous_earliest_available_slot,
-            },
+            BackSyncMode::DataColumnsOnly { column_indices },
         );
 
         if !back_sync_process.is_finished() {
@@ -1061,7 +1060,7 @@ impl<P: Preset> BlockSyncService<P> {
             self.set_back_synced(false);
         }
 
-        self.request_blobs_and_blocks_if_ready();
+        self.request_blobs_and_blocks_if_ready()?;
 
         Ok(())
     }
@@ -1359,7 +1358,7 @@ impl<P: Preset> BlockSyncService<P> {
         }
     }
 
-    fn set_forward_synced(&mut self, is_forward_synced: bool) {
+    fn set_forward_synced(&mut self, is_forward_synced: bool) -> Result<()> {
         debug!("set forward synced: {is_forward_synced}");
 
         let was_forward_synced = self.is_forward_synced;
@@ -1370,7 +1369,7 @@ impl<P: Preset> BlockSyncService<P> {
             if self.sync_direction == SyncDirection::Back {
                 self.sync_direction = SyncDirection::Forward;
                 self.sync_manager.cache_clear();
-                self.request_blobs_and_blocks_if_ready();
+                self.request_blobs_and_blocks_if_ready()?;
             }
         }
 
@@ -1379,11 +1378,12 @@ impl<P: Preset> BlockSyncService<P> {
 
             if self.back_sync.is_some() {
                 self.received_block_roots = HashMap::new();
+                self.received_execution_payloads = HashMap::new();
                 self.received_blob_sidecars.clear();
                 self.received_data_column_sidecars.clear();
                 self.sync_direction = SyncDirection::Back;
                 self.sync_manager.cache_clear();
-                self.request_blobs_and_blocks_if_ready();
+                self.request_blobs_and_blocks_if_ready()?;
             }
 
             if let Some(validator_statistics) = self.validator_statistics.as_ref() {
@@ -1399,6 +1399,8 @@ impl<P: Preset> BlockSyncService<P> {
                 SyncToMetrics::SyncStatus(is_forward_synced).send(sync_to_metrics_tx);
             }
         }
+
+        Ok(())
     }
 
     fn register_new_received_block(&mut self, block_root: H256, slot: Slot) -> bool {
@@ -1423,6 +1425,10 @@ impl<P: Preset> BlockSyncService<P> {
         self.received_data_column_sidecars
             .insert(data_column_identifier, slot)
             .is_none()
+    }
+
+    fn register_new_received_execution_payload(&mut self, beacon_block_root: H256, slot: Slot) -> bool {
+        self.received_execution_payloads.insert(beacon_block_root, slot).is_none()
     }
 
     fn track_collection_metrics(&self) {
