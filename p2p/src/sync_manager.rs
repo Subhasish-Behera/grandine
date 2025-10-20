@@ -189,6 +189,7 @@ impl<P: Preset> SyncManager<P> {
             .request_direction(app_request_id)
             .or_else(|| self.blob_requests.request_direction(app_request_id))
             .or_else(|| self.data_column_requests.request_direction(app_request_id))
+            .or_else(|| self.execution_payload_envelope_requests.request_direction(app_request_id))
     }
 
     pub fn add_peer(&mut self, peer_id: PeerId, status: StatusMessage) {

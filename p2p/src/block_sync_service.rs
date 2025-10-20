@@ -602,8 +602,10 @@ impl<P: Preset> BlockSyncService<P> {
                             }
                         }
                         P2pToSync::ExecutionPayloadEnvelopesByRangeRequestFinished(_peer_id, request_id) => {
+                            let request_direction = self.sync_manager.request_direction(request_id);
+
                             self.sync_manager
-                                .execution_payload_envelopes_by_range_request_finished(request_id, None);
+                                .execution_payload_envelopes_by_range_request_finished(request_id, request_direction);
                         }
                         P2pToSync::ExecutionPayloadEnvelopesByRootRequestFinished(_peer_id, request_id) => {
                             self.sync_manager
