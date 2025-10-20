@@ -55,7 +55,6 @@ use types::{
         containers::{DataColumnIdentifier, DataColumnSidecar, DataColumnsByRootIdentifier},
         primitives::ColumnIndex,
     },
-    gloas::containers::SignedExecutionPayloadEnvelope,
     nonstandard::{Phase, RelativeEpoch, WithStatus},
     phase0::{
         consts::{FAR_FUTURE_EPOCH, GENESIS_EPOCH},
