@@ -12,7 +12,7 @@ use fork_choice_store::{
     AggregateAndProofOrigin, AttestationItem, AttestationOrigin, AttesterSlashingOrigin,
     BlobSidecarOrigin, BlockAction, BlockOrigin, DataColumnSidecarAction, DataColumnSidecarOrigin,
     ExecutionPayloadEnvelopeAction, ExecutionPayloadEnvelopeOrigin, PayloadAttestationAction,
-    PayloadAttestationOrigin, StateCacheProcessor, Store,
+    PayloadAttestationItem, PayloadAttestationOrigin, StateCacheProcessor, Store,
 };
 use futures::channel::mpsc::Sender as MultiSender;
 use helper_functions::{
@@ -295,6 +295,54 @@ impl<P: Preset, W> Run for BlockAttestationsTask<P, W> {
             .collect();
 
         MutatorMessage::BlockAttestations {
+            wait_group,
+            results,
+        }
+        .send(&mutator_tx);
+    }
+}
+
+pub struct BlockPayloadAttestationsTask<P: Preset, W> {
+    pub store_snapshot: Arc<Store<P, Storage<P>>>,
+    pub mutator_tx: Sender<MutatorMessage<P, W>>,
+    pub wait_group: W,
+    pub block_root: H256,
+    pub block: Arc<SignedBeaconBlock<P>>,
+    pub metrics: Option<Arc<Metrics>>,
+}
+
+impl<P: Preset, W> Run for BlockPayloadAttestationsTask<P, W> {
+    fn run(self) {
+        let Self {
+            store_snapshot,
+            mutator_tx,
+            wait_group,
+            block_root,
+            block,
+            metrics,
+        } = self;
+
+        let _timer = metrics
+            .as_ref()
+            .map(|metrics| metrics.fc_block_payload_attestation_task_times.start_timer());
+
+        // TODO(Grandine Team): Consider turning the pipeline into a new method in `Store`.
+        // Similar to BlockAttestationsTask, but for payload attestations from blocks.
+        // This will call store.notify_ptc_messages or equivalent when implemented (TASK 2.6).
+        let results = block
+            .message()
+            .body()
+            .payload_attestations()
+            .iter()
+            .map(|_payload_attestation| {
+                // TODO: Implement processing when store method is ready (TASK 2.6)
+                // Will de-aggregate and process each PayloadAttestation
+                // Does NOT use validate_payload_attestation (that's for gossip only)
+                Ok(())
+            })
+            .collect();
+
+        MutatorMessage::BlockPayloadAttestations {
             wait_group,
             results,
         }
@@ -755,8 +803,7 @@ pub struct PayloadAttestationTask<P: Preset, W> {
     pub store_snapshot: Arc<Store<P, Storage<P>>>,
     pub mutator_tx: Sender<MutatorMessage<P, W>>,
     pub wait_group: W,
-    pub payload_attestation: Arc<PayloadAttestationMessage>,
-    pub origin: PayloadAttestationOrigin,
+    pub payload_attestation: PayloadAttestationItem<P, GossipId>,
     pub submission_time: Instant,
 }
 
@@ -767,51 +814,16 @@ impl<P: Preset, W> Run for PayloadAttestationTask<P, W> {
             mutator_tx,
             wait_group,
             payload_attestation,
-            origin,
             submission_time,
         } = self;
 
-        let _slot = payload_attestation.data.slot;
-        let _beacon_block_root = payload_attestation.data.beacon_block_root;
-
-        let _ = store_snapshot;
-
-        // TODO: Add full validation
-        // For now, just accept and send to mutator
-        let result = Ok(PayloadAttestationAction::Accept(payload_attestation));
+        let result = store_snapshot.validate_payload_attestation(payload_attestation);
 
         MutatorMessage::PayloadAttestation {
             wait_group,
             result,
-            origin,
             submission_time,
         }
         .send(&mutator_tx);
     }
-}
-
-fn validate_execution_payload_envelope<P: Preset>(
-    _store: &Store<P, Storage<P>>,
-    _envelope: &SignedExecutionPayloadEnvelope<P>,
-) -> Result<()> {
-    // TODO: Add full validation including:
-    // - State lookup at the correct slot
-    // - Proposer index verification
-    // - Signature verification
-    // https://github.com/grandinetech/grandine/issues/TBD
-
-    Ok(())
-}
-
-fn validate_payload_attestation<P: Preset>(
-    _store: &Store<P, Storage<P>>,
-    _attestation: &PayloadAttestationMessage,
-) -> Result<()> {
-    // TODO: Add full validation including:
-    // - State lookup at the correct slot
-    // - Validator index bounds checking
-    // - Signature verification
-    // https://github.com/grandinetech/grandine/issues/TBD
-
-    Ok(())
 }

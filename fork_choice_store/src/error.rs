@@ -168,16 +168,28 @@ pub enum Error<P: Preset> {
     },
     #[error("blob KZG commitments mismatch between envelope and beacon block")]
     BlobKzgCommitmentsMismatch,
-    #[error("payload attestation from future slot (slot: {slot}, current: {current_slot})")]
-    PayloadAttestationFromFutureSlot {
-        slot: Slot,
-        current_slot: Slot,
+    #[error("execution payload envelope slot mismatch: expected {expected}, actual {actual}")]
+    ExecutionPayloadEnvelopeSlotMismatch { expected: Slot, actual: Slot },
+    #[error("missing execution payload bid in beacon block (beacon_block_root: {beacon_block_root:?})")]
+    MissingExecutionPayloadBid { beacon_block_root: H256 },
+    #[error("builder index mismatch: expected {expected}, actual {actual}")]
+    BuilderIndexMismatch {
+        expected: ValidatorIndex,
+        actual: ValidatorIndex,
     },
-    #[error("payload attestation is too old (slot: {slot}, finalized: {finalized_slot})")]
-    PayloadAttestationTooOld {
+    #[error("execution payload block hash mismatch: expected {expected:?}, actual {actual:?}")]
+    ExecutionPayloadBlockHashMismatch { expected: H256, actual: H256 },
+    #[error("payload attestation has no attesting indices")]
+    PayloadAttestationHasNoAttestingIndices,
+    #[error("payload attestation attesting indices not sorted and unique")]
+    PayloadAttestationAttestingIndicesNotSortedAndUnique,
+    #[error("payload attestation validator not in PTC (validator_index: {validator_index}, slot: {slot})")]
+    PayloadAttestationValidatorNotInPtc {
+        validator_index: ValidatorIndex,
         slot: Slot,
-        finalized_slot: Slot,
     },
+    #[error("payload attestation invalid signature")]
+    PayloadAttestationInvalidSignature,
 }
 
 assert_eq_size!(Error<Mainnet>, [usize; 4]);

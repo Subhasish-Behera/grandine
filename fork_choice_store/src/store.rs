@@ -26,7 +26,7 @@ use helper_functions::{
 };
 use im::{hashmap, hashmap::HashMap, ordmap, vector, HashSet, OrdMap, Vector};
 use itertools::{izip, Either, EitherOrBoth, Itertools as _};
-use log::{error, warn};
+use log::{debug, error, warn};
 use prometheus_metrics::Metrics;
 use pubkey_cache::PubkeyCache;
 use ssz::{ContiguousList, SszHash as _};
@@ -2296,6 +2296,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         beacon_block_seen: bool,
         origin: &ExecutionPayloadEnvelopeOrigin,
     ) -> Result<ExecutionPayloadEnvelopeAction<P>> {
+        let _ = origin;
         let slot = envelope.message.slot;
         let beacon_block_root = envelope.message.beacon_block_root;
         let builder_index = envelope.message.builder_index;
@@ -2333,6 +2334,15 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         let block = &chain_link.block;
         let state = chain_link.state(self);
 
+        // [REJECT] block.slot equals envelope.slot
+        ensure!(
+            block.message().slot() == slot,
+            Error::ExecutionPayloadEnvelopeSlotMismatch {
+                expected: block.message().slot(),
+                actual: slot,
+            },
+        );
+
         // [REJECT] The builder_index must be a valid and active validator
         ensure!(
             (builder_index as usize) < state.validators().len_usize(),
@@ -2348,18 +2358,38 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
             Error::ValidatorNotActive { builder_index },
         );
 
-        // [REJECT] The builder signature envelope.signature is valid with respect to the builder_index pubkey
-        // TODO: Implement signature validation when signing domain is available
-        // For now, we skip signature validation as it requires:
-        // - get_domain(state, DOMAIN_BEACON_BUILDER, compute_epoch_at_slot(envelope.slot))
-        // - signing_root = compute_signing_root(envelope.message, domain)
-        // - verify_signature(pubkey, signing_root, envelope.signature)
+        // [REJECT] The builder signature envelope.signature is valid
+        transition_functions::gloas::execution_payload_processing::verify_execution_payload_envelope_signature(
+            &self.chain_config,
+            &self.pubkey_cache,
+            &state,
+            &envelope,
+            helper_functions::verifier::SingleVerifier,
+        )?;
 
-        // [REJECT] The execution payload header in the beacon block matches the payload
-        // TODO: Implement when ExecutionPayloadHeader comparison is available
-        // This requires comparing:
-        // - block.body.execution_payload_header.block_hash == hash_tree_root(envelope.payload)
-        // - All other header fields match
+        // Get the bid from the block
+        let Some(signed_bid) = block.message().body().signed_execution_payload_bid() else {
+            return Err(Error::MissingExecutionPayloadBid { beacon_block_root });
+        };
+        let bid = &signed_bid.message;
+
+        // [REJECT] envelope.builder_index == bid.builder_index
+        ensure!(
+            builder_index == bid.builder_index,
+            Error::BuilderIndexMismatch {
+                expected: bid.builder_index,
+                actual: builder_index,
+            },
+        );
+
+        // [REJECT] payload.block_hash == bid.block_hash
+        ensure!(
+            envelope.message.payload.block_hash == bid.block_hash,
+            Error::ExecutionPayloadBlockHashMismatch {
+                expected: bid.block_hash,
+                actual: envelope.message.payload.block_hash,
+            },
+        );
 
         // [REJECT] Blob KZG commitments in envelope match those in the beacon block
         let block_commitments = &block.message().body().blob_kzg_commitments;
@@ -2369,13 +2399,17 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
             Error::BlobKzgCommitmentsMismatch,
         );
 
-        // [REJECT] KZG proof validation (if the envelope has kzg_aggregated_proof field)
-        // TODO: Implement when KZG proof verification is available for envelopes
-        // This would verify the aggregated KZG proof over all blob commitments
-
-        // [IGNORE] This is the first payload envelope for this parent_block_hash
-        // TODO: Track seen execution parent hashes to implement first-per-parent rule
-        // For now, we accept duplicate envelopes (they will be ignored in store application)
+        // [IGNORE] This is the first payload envelope for this block root from this builder
+        // TODO: Implement deduplication tracking
+        // Spec: gossib_sub_gloas.md line 228-229
+        // "The node has not seen another valid SignedExecutionPayloadEnvelope for this
+        // block root from this builder."
+        //
+        // Implementation requires:
+        // 1. Add field to Store: seen_envelopes: HashMap<(H256, ValidatorIndex), ()>
+        // 2. Check: if seen_envelopes.contains_key(&(beacon_block_root, builder_index)) { return Ignore }
+        // 3. On Accept: seen_envelopes.insert((beacon_block_root, builder_index), ())
+        // 4. Prune old entries when finalized
 
         // All validations passed
         Ok(ExecutionPayloadEnvelopeAction::Accept(envelope))
@@ -2383,65 +2417,56 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
 
     /// Validates PayloadAttestation received via gossip
     ///
+    /// Note: We do NOT validate whether payload_present or blob_data_available
+    /// match actual payload status. These are validator votes/claims that get
+    /// recorded in fork choice (ptc_vote map). Validation of the vote's
+    /// "correctness" happens implicitly in fork choice weight calculation.
+    ///
     /// Spec: https://github.com/ethereum/consensus-specs/blob/master/specs/gloas/p2p-interface.md#payload_attestation_message
     pub fn validate_payload_attestation<I>(
         &self,
-        attestation: Arc<PayloadAttestation<P>>,
-        origin: PayloadAttestationOrigin<I>,
-    ) -> Result<PayloadAttestationAction<P, I>> {
+        payload_attestation: PayloadAttestationItem<P, I>,
+    ) -> Result<PayloadAttestationAction<P, I>, PayloadAttestationValidationError<P, I>> {
+        let attestation = &payload_attestation.item;
         let slot = attestation.data.slot;
         let beacon_block_root = attestation.data.beacon_block_root;
 
         // [IGNORE] The attestation is not from a future slot
         if self.slot() < slot {
-            ensure!(
-                false,
-                Error::PayloadAttestationFromFutureSlot {
-                    slot,
-                    current_slot: self.slot(),
-                },
-            );
+            return Ok(PayloadAttestationAction::DelayUntilSlot(payload_attestation));
         }
 
         // [IGNORE] The attestation is from a slot greater than the latest finalized slot
         if slot <= self.finalized_slot() {
-            ensure!(
-                false,
-                Error::PayloadAttestationTooOld {
-                    slot,
-                    finalized_slot: self.finalized_slot(),
-                },
-            );
+            return Ok(PayloadAttestationAction::Ignore(payload_attestation));
         }
 
         // [IGNORE] The attestation's beacon_block_root has been seen
         // (a client MAY queue attestation for processing once the block is retrieved)
         if !self.contains_block(beacon_block_root) {
-            let item = PayloadAttestationItem::unverified(attestation, origin);
             return Ok(PayloadAttestationAction::DelayUntilBeaconBlock(
-                item,
+                payload_attestation,
                 beacon_block_root,
             ));
         }
 
         // Get the beacon block and state for validation
         let Some(chain_link) = self.chain_link(beacon_block_root) else {
-            let item = PayloadAttestationItem::unverified(attestation, origin);
             return Ok(PayloadAttestationAction::DelayUntilBeaconBlock(
-                item,
+                payload_attestation,
                 beacon_block_root,
             ));
         };
 
         let state = chain_link.state(self);
 
-        // Convert PayloadAttestation to IndexedPayloadAttestation
-        // Get attesting indices from aggregation bits
-        let attesting_indices = attestation
-            .aggregation_bits
-            .iter_one_indices()
-            .map(|index| index as ValidatorIndex)
-            .collect::<ContiguousList<_, P::PtcSize>>();
+        // Convert PayloadAttestationMessage to IndexedPayloadAttestation
+        // For individual message, validator_index is the single attesting index
+        let attesting_indices = ContiguousList::try_from_iter([attestation.validator_index])
+            .map_err(|source| PayloadAttestationValidationError::Other {
+                source: source.into(),
+                payload_attestation: Box::new(payload_attestation.clone()),
+            })?;
 
         let indexed_attestation = IndexedPayloadAttestation {
             attesting_indices,
@@ -2456,11 +2481,14 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
             &state,
             &indexed_attestation,
             SingleVerifier,
-        )?;
+        )
+        .map_err(|source| PayloadAttestationValidationError::Other {
+            source: source.into(),
+            payload_attestation: Box::new(payload_attestation.clone()),
+        })?;
 
         // All validations passed
-        let item = PayloadAttestationItem::verified(attestation, origin);
-        Ok(PayloadAttestationAction::Accept(item))
+        Ok(PayloadAttestationAction::Accept(payload_attestation.into_verified()))
     }
 
     /// [`on_tick`](https://github.com/ethereum/consensus-specs/blob/v1.3.0/specs/phase0/fork-choice.md#on_tick)
@@ -2814,6 +2842,46 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         commitments.insert(block_root, data_sidecar.kzg_commitments.clone());
 
         self.data_column_cache.insert(data_sidecar);
+    }
+
+    /// Implements `on_execution_payload` from fork choice spec
+    ///
+    /// Spec: https://github.com/ethereum/consensus-specs/blob/master/specs/gloas/fork-choice.md#on_execution_payload
+    pub fn apply_execution_payload_envelope(
+        &mut self,
+        signed_envelope: Arc<SignedExecutionPayloadEnvelope<P>>,
+        execution_engine: &impl ExecutionEngine<P>,
+    ) -> Result<()> {
+        let _ = execution_engine;
+        let envelope = &signed_envelope.message;
+        let beacon_block_root = envelope.beacon_block_root;
+
+        // TODO Phase 2: Implement full state transition
+        //
+        // Spec requirements (fc_gloas.md lines 573-593):
+        // 1. Get chain_link state for beacon_block_root
+        // 2. Check blob data availability: assert is_data_available(beacon_block_root)
+        // 3. Clone state to avoid mutability issues
+        // 4. Call gloas::process_execution_payload() for full validation + processing
+        // 5. Store updated state in execution_payload_states map
+        //
+        // This will call:
+        // - validate_execution_payload() (state consistency checks)
+        // - process_execution_payload_for_gossip() (timestamp, blob count)
+        // - execution_engine.notify_new_payload() (send to execution layer)
+        // - Update state with builder payments, etc.
+
+        debug!(
+            "apply_execution_payload_envelope stub called for beacon_block_root: {beacon_block_root:?}, \
+             slot: {}, builder_index: {}",
+            envelope.slot,
+            envelope.builder_index
+        );
+
+        // For Phase 1, just acknowledge receipt without full processing
+        // Phase 2 will implement the actual state transition
+
+        Ok(())
     }
 
     pub fn accepted_data_column_sidecars_count(&self, block_header: BeaconBlockHeader) -> usize {

@@ -9,7 +9,8 @@ use execution_engine::PayloadStatusV1;
 use fork_choice_store::{
     AggregateAndProofAction, AggregateAndProofOrigin, AttestationAction, AttestationItem,
     AttestationValidationError, BlobSidecarOrigin, BlockOrigin, ChainLink, DataColumnSidecarOrigin,
-    ExecutionPayloadEnvelopeOrigin, PayloadAttestationOrigin,
+    ExecutionPayloadEnvelopeOrigin, PayloadAttestationItem, PayloadAttestationOrigin,
+    PayloadAttestationValidationError,
 };
 use serde::Serialize;
 use strum::IntoStaticStr;
@@ -184,8 +185,7 @@ pub struct PendingExecutionPayloadEnvelope<P: Preset> {
 
 #[derive(Debug)]
 pub struct PendingPayloadAttestation<P: Preset, I> {
-    pub attestation: Arc<PayloadAttestation<P>>,
-    pub origin: PayloadAttestationOrigin<I>,
+    pub payload_attestation: PayloadAttestationItem<P, I>,
     pub submission_time: Instant,
 }
 
@@ -196,6 +196,9 @@ pub struct VerifyAggregateAndProofResult<P: Preset> {
 
 pub type VerifyAttestationResult<P> =
     Result<AttestationAction<P, GossipId>, AttestationValidationError<P, GossipId>>;
+
+pub type VerifyPayloadAttestationResult<P> =
+    Result<PayloadAttestationAction<P, GossipId>, PayloadAttestationValidationError<P, GossipId>>;
 
 #[expect(clippy::enum_variant_names)]
 #[derive(IntoStaticStr, Serialize)]
@@ -213,6 +216,7 @@ pub enum MutatorRejectionReason {
     InvalidDataColumnSidecar {
         data_column_identifier: DataColumnIdentifier,
     },
+    InvalidPayloadAttestation,
 }
 
 #[derive(Clone, Copy, Debug)]

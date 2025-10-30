@@ -79,7 +79,7 @@ use crate::{
         PendingAggregateAndProof, PendingAttestation, PendingBlobSidecar, PendingBlock,
         PendingChainLink, PendingDataColumnSidecar, PendingExecutionPayloadEnvelope,
         ProcessingTimings, ReorgSource, VerifyAggregateAndProofResult, VerifyAttestationResult,
-        WaitingForCheckpointState,
+        VerifyPayloadAttestationResult, WaitingForCheckpointState,
     },
     storage::Storage,
     tasks::{
@@ -298,9 +298,8 @@ where
                 MutatorMessage::PayloadAttestation {
                     wait_group,
                     result,
-                    origin,
                     submission_time,
-                } => self.handle_payload_attestation(wait_group, result, origin, submission_time),
+                } => self.handle_payload_attestation(wait_group, result, submission_time),
                 MutatorMessage::FinishedPersistingBlobSidecars {
                     wait_group,
                     persisted_blob_ids,
@@ -2120,8 +2119,7 @@ where
     fn handle_payload_attestation(
         &mut self,
         wait_group: W,
-        result: Result<PayloadAttestationAction>,
-        origin: PayloadAttestationOrigin,
+        result: VerifyPayloadAttestationResult<P>,
         submission_time: Instant,
     ) {
         let _ = submission_time;
@@ -2129,8 +2127,8 @@ where
         match result {
             Ok(action) => match action {
                 PayloadAttestationAction::Accept(payload_attestation) => {
-                    let slot = payload_attestation.data.slot;
-                    let beacon_block_root = payload_attestation.data.beacon_block_root;
+                    let slot = payload_attestation.slot();
+                    let beacon_block_root = payload_attestation.item.data.beacon_block_root;
 
                     debug!(
                         "handling payload attestation for slot {slot}, beacon_block_root {beacon_block_root:?}"
@@ -2140,34 +2138,46 @@ where
                     // TODO: Implement proper storage and processing logic based on fork_choice_store
                     // For now, just accept the gossip message
 
-                    if let Some(gossip_id) = origin.gossip_id() {
+                    if let Some(gossip_id) = payload_attestation.origin.gossip_id() {
                         self.send_to_p2p(P2pMessage::Accept(gossip_id));
                     }
 
                     drop(wait_group);
                 }
-                PayloadAttestationAction::Ignore => {
-                    if let Some(gossip_id) = origin.gossip_id() {
+                PayloadAttestationAction::Ignore(payload_attestation) => {
+                    if let Some(gossip_id) = payload_attestation.origin.gossip_id() {
                         self.send_to_p2p(P2pMessage::Ignore(gossip_id));
                     }
 
                     drop(wait_group);
                 }
-                PayloadAttestationAction::DelayUntilBeaconBlock(attestation, _block_root) => {
-                    warn!("payload attestation delayed until beacon block - treating as Ignore");
+                PayloadAttestationAction::DelayUntilBeaconBlock(payload_attestation, block_root) => {
+                    debug!("payload attestation delayed until beacon block {block_root:?}");
 
-                    if let Some(gossip_id) = origin.gossip_id() {
-                        self.send_to_p2p(P2pMessage::Ignore(gossip_id));
-                    }
+                    self.delayed_until_block
+                        .entry(block_root)
+                        .or_default()
+                        .payload_attestations
+                        .push(PendingPayloadAttestation {
+                            payload_attestation,
+                            submission_time,
+                        });
 
                     drop(wait_group);
                 }
-                PayloadAttestationAction::DelayUntilSlot(attestation) => {
-                    warn!("payload attestation delayed until slot - treating as Ignore");
+                PayloadAttestationAction::DelayUntilSlot(payload_attestation) => {
+                    let slot = payload_attestation.slot();
 
-                    if let Some(gossip_id) = origin.gossip_id() {
-                        self.send_to_p2p(P2pMessage::Ignore(gossip_id));
-                    }
+                    debug!("payload attestation delayed until slot {slot}");
+
+                    self.delayed_until_slot
+                        .entry(slot)
+                        .or_default()
+                        .payload_attestations
+                        .push(PendingPayloadAttestation {
+                            payload_attestation,
+                            submission_time,
+                        });
 
                     drop(wait_group);
                 }
@@ -2175,8 +2185,14 @@ where
             Err(error) => {
                 warn!("payload attestation validation failed: {error:?}");
 
-                if let Some(gossip_id) = origin.gossip_id() {
-                    self.send_to_p2p(P2pMessage::Ignore(gossip_id));
+                let payload_attestation = error.payload_attestation();
+                let (gossip_id, _sender) = payload_attestation.origin.split();
+
+                if let Some(gossip_id) = gossip_id {
+                    self.send_to_p2p(P2pMessage::Reject(
+                        Some(gossip_id),
+                        MutatorRejectionReason::InvalidPayloadAttestation,
+                    ));
                 }
 
                 drop(wait_group);
@@ -2629,22 +2645,48 @@ where
         envelope: &Arc<SignedExecutionPayloadEnvelope<P>>,
     ) {
         let beacon_block_root = envelope.message.beacon_block_root;
+        let slot = envelope.message.slot;
 
-        // TODO: Apply envelope to store (when store method is implemented)
-        // self.store_mut().apply_execution_payload_envelope(envelope.clone_arc());
+        debug!(
+            "accepted execution payload envelope for beacon_block_root: {beacon_block_root:?}, \
+             slot: {slot}, builder_index: {}",
+            envelope.message.builder_index
+        );
 
-        // TODO: Track seen execution parents to detect first-per-parent
-        // let parent_hash = envelope.message.payload.parent_hash();
-        // self.seen_execution_parents.insert(parent_hash);
+        // Apply to store (Phase 2: will call process_execution_payload internally)
+        // For now, this is a stub that does minimal bookkeeping
+        if let Err(error) = self.store_mut().apply_execution_payload_envelope(
+            envelope.clone_arc(),
+            &self.execution_engine,
+        ) {
+            warn!(
+                "failed to apply execution payload envelope for beacon_block_root: {beacon_block_root:?}, \
+                 slot: {slot}: {error:?}"
+            );
+            return;
+        }
 
         self.update_store_snapshot();
 
-        // TODO: Send event to event channels
-        // self.event_channels.send_execution_payload_envelope_event(beacon_block_root, envelope);
+        // Send event to event channels
+        self.event_channels.send_execution_payload_envelope_event(envelope);
 
-        // TODO: Persist envelope if not in prune mode
+        // TODO Phase 2: Track seen execution parents to detect first-per-parent
+        // Spec: gossib_sub_gloas.md line 228-229
+        // Need to add: seen_execution_parents: HashSet<ExecutionBlockHash> to Store
+        // let parent_hash = envelope.message.payload.parent_hash;
+        // self.seen_execution_parents.insert(parent_hash);
+
+        // TODO Phase 3: Persist envelope if not in prune mode
+        // Requires implementing PersistExecutionPayloadEnvelopeTask
         // if !self.storage.prune_storage_enabled() {
-        //     self.spawn(PersistExecutionPayloadEnvelopeTask { ... });
+        //     self.spawn(PersistExecutionPayloadEnvelopeTask {
+        //         store_snapshot: self.owned_store(),
+        //         storage: self.storage.clone_arc(),
+        //         mutator_tx: self.owned_mutator_tx(),
+        //         wait_group: wait_group.clone(),
+        //         metrics: self.metrics.clone(),
+        //     });
         // }
     }
 
@@ -3298,8 +3340,7 @@ where
         trace!("retrying delayed payload attestation: {pending_payload_attestation:?}");
 
         let PendingPayloadAttestation {
-            attestation,
-            origin,
+            payload_attestation,
             submission_time,
         } = pending_payload_attestation;
 
@@ -3307,8 +3348,7 @@ where
             store_snapshot: self.owned_store(),
             mutator_tx: self.owned_mutator_tx(),
             wait_group,
-            payload_attestation: attestation,
-            origin,
+            payload_attestation,
             submission_time,
             metrics: self.metrics.clone(),
         });
