@@ -25,7 +25,7 @@ use execution_engine::{ExecutionEngine, PayloadStatusV1};
 use fork_choice_store::{
     AggregateAndProofOrigin, AttestationItem, AttestationOrigin, AttesterSlashingOrigin,
     BlobSidecarOrigin, BlockOrigin, DataColumnSidecarOrigin, ExecutionPayloadEnvelopeOrigin,
-    PayloadAttestationOrigin, StateCacheProcessor, Store, StoreConfig,
+    PayloadAttestationItem, PayloadAttestationOrigin, StateCacheProcessor, Store, StoreConfig,
 };
 use futures::channel::{mpsc::Sender as MultiSender, oneshot::Sender as OneshotSender};
 use genesis::AnchorCheckpointProvider;
@@ -377,12 +377,16 @@ where
         payload_attestation: Arc<PayloadAttestationMessage>,
         gossip_id: GossipId,
     ) {
+        let payload_attestation_item = PayloadAttestationItem::unverified(
+            payload_attestation,
+            PayloadAttestationOrigin::Gossip(gossip_id),
+        );
+
         self.spawn(PayloadAttestationTask {
             store_snapshot: self.owned_store_snapshot(),
             mutator_tx: self.owned_mutator_tx(),
             wait_group: self.owned_wait_group(),
-            payload_attestation,
-            origin: PayloadAttestationOrigin::Gossip(gossip_id),
+            payload_attestation: payload_attestation_item,
             submission_time: Instant::now(),
         })
     }

@@ -35,7 +35,7 @@ use types::{
 use crate::{
     misc::{
         MutatorRejectionReason, ProcessingTimings, VerifyAggregateAndProofResult,
-        VerifyAttestationResult,
+        VerifyAttestationResult, VerifyPayloadAttestationResult,
     },
     unbounded_sink::UnboundedSink,
 };
@@ -110,6 +110,16 @@ pub enum MutatorMessage<P: Preset, W> {
         results:
             Vec<Result<AttestationAction<P, GossipId>, AttestationValidationError<P, GossipId>>>,
     },
+    /// Process payload attestations from block body.
+    /// Each PayloadAttestation is de-aggregated and processed via notify_ptc_messages.
+    /// Results is Vec<Result<()>> because:
+    /// - Each PayloadAttestation can succeed/fail independently (e.g., validator not in PTC)
+    /// - No Actions returned (Accept/Ignore/Delay) - directly updates store.ptc_vote
+    /// - Handler logs failures and updates store snapshot on success
+    BlockPayloadAttestations {
+        wait_group: W,
+        results: Vec<Result<()>>,
+    },
     AttesterSlashing {
         wait_group: W,
         result: Result<Vec<ValidatorIndex>>,
@@ -148,8 +158,7 @@ pub enum MutatorMessage<P: Preset, W> {
     },
     PayloadAttestation {
         wait_group: W,
-        result: Result<PayloadAttestationAction<P, GossipId>>,
-        origin: PayloadAttestationOrigin<GossipId>,
+        result: VerifyPayloadAttestationResult<P>,
         submission_time: Instant,
     },
     FinishedPersistingBlobSidecars {
