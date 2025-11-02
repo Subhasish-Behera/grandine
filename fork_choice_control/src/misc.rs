@@ -9,8 +9,8 @@ use execution_engine::PayloadStatusV1;
 use fork_choice_store::{
     AggregateAndProofAction, AggregateAndProofOrigin, AttestationAction, AttestationItem,
     AttestationValidationError, BlobSidecarOrigin, BlockOrigin, ChainLink, DataColumnSidecarOrigin,
-    ExecutionPayloadEnvelopeOrigin, PayloadAttestationItem, PayloadAttestationOrigin,
-    PayloadAttestationValidationError,
+    ExecutionPayloadEnvelopeOrigin, PayloadAttestationAction, PayloadAttestationItem,
+    PayloadAttestationOrigin, PayloadAttestationValidationError,
 };
 use serde::Serialize;
 use strum::IntoStaticStr;
@@ -100,6 +100,8 @@ impl<P: Preset> Delayed<P> {
             attestations,
             blob_sidecars,
             data_column_sidecars,
+            execution_payload_envelopes,
+            payload_attestations,
         } = self;
 
         blocks.is_empty()
@@ -108,6 +110,8 @@ impl<P: Preset> Delayed<P> {
             && attestations.is_empty()
             && blob_sidecars.is_empty()
             && data_column_sidecars.is_empty()
+            && execution_payload_envelopes.is_empty()
+            && payload_attestations.is_empty()
     }
 }
 
@@ -184,9 +188,10 @@ pub struct PendingExecutionPayloadEnvelope<P: Preset> {
 }
 
 #[derive(Debug)]
-pub struct PendingPayloadAttestation<P: Preset, I> {
-    pub payload_attestation: PayloadAttestationItem<P, I>,
+pub struct PendingPayloadAttestation<P: Preset, I: Clone> {
+    pub payload_attestation: PayloadAttestationItem<I>,
     pub submission_time: Instant,
+    pub _phantom: std::marker::PhantomData<P>,
 }
 
 pub struct VerifyAggregateAndProofResult<P: Preset> {
@@ -197,8 +202,8 @@ pub struct VerifyAggregateAndProofResult<P: Preset> {
 pub type VerifyAttestationResult<P> =
     Result<AttestationAction<P, GossipId>, AttestationValidationError<P, GossipId>>;
 
-pub type VerifyPayloadAttestationResult<P> =
-    Result<PayloadAttestationAction<P, GossipId>, PayloadAttestationValidationError<P, GossipId>>;
+pub type VerifyPayloadAttestationResult =
+    Result<PayloadAttestationAction<GossipId>, PayloadAttestationValidationError<GossipId>>;
 
 #[expect(clippy::enum_variant_names)]
 #[derive(IntoStaticStr, Serialize)]

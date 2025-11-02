@@ -337,7 +337,7 @@ impl<P: Preset, I> AttestationItem<P, I> {
     }
 }
 
-#[derive(Debug, AsRefStr)]
+#[derive(Debug, Clone, Copy, AsRefStr)]
 pub enum SignatureStatus {
     Verified,
     Unverified,
@@ -754,13 +754,21 @@ impl<P: Preset> ExecutionPayloadEnvelopeAction<P> {
 }
 
 // ePBS: Payload Attestation processing
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum PayloadAttestationOrigin<I> {
     Gossip(I),
     Own,
 }
 
 impl<I> PayloadAttestationOrigin<I> {
+    #[must_use]
+    pub fn split(self) -> (Option<I>, Option<()>) {
+        match self {
+            Self::Gossip(gossip_id) => (Some(gossip_id), None),
+            Self::Own => (None, None),
+        }
+    }
+
     #[must_use]
     pub fn gossip_id(self) -> Option<I> {
         match self {
@@ -776,14 +784,14 @@ impl<I> PayloadAttestationOrigin<I> {
     }
 }
 
-#[derive(Debug)]
-pub struct PayloadAttestationItem<P: Preset, I> {
+#[derive(Debug, Clone)]
+pub struct PayloadAttestationItem<I: Clone> {
     pub item: Arc<PayloadAttestationMessage>,
     pub origin: PayloadAttestationOrigin<I>,
     pub signature_status: SignatureStatus,
 }
 
-impl<P: Preset, I> PayloadAttestationItem<P, I> {
+impl<I: Clone> PayloadAttestationItem<I> {
     #[must_use]
     pub const fn unverified(
         item: Arc<PayloadAttestationMessage>,
@@ -840,14 +848,14 @@ impl<P: Preset, I> PayloadAttestationItem<P, I> {
 // Note: Does NOT validate correctness of payload_present/blob_data_available fields at gossip time.
 // These fields are validator votes recorded in fork choice (ptc_vote), not validated against actual payload status.
 #[derive(Debug)]
-pub enum PayloadAttestationAction<P: Preset, I> {
-    Accept(PayloadAttestationItem<P, I>),
-    Ignore(PayloadAttestationItem<P, I>),
-    DelayUntilBeaconBlock(PayloadAttestationItem<P, I>, H256),
-    DelayUntilSlot(PayloadAttestationItem<P, I>),
+pub enum PayloadAttestationAction<I: Clone> {
+    Accept(PayloadAttestationItem<I>),
+    Ignore(PayloadAttestationItem<I>),
+    DelayUntilBeaconBlock(PayloadAttestationItem<I>, H256),
+    DelayUntilSlot(PayloadAttestationItem<I>),
 }
 
-impl<P: Preset, I> PayloadAttestationAction<P, I> {
+impl<I: Clone> PayloadAttestationAction<I> {
     #[must_use]
     pub fn into_verified(self) -> Self {
         match self {
@@ -1081,37 +1089,37 @@ impl<P: Preset, I> AttestationValidationError<P, I> {
 }
 
 #[derive(Error, Debug)]
-pub enum PayloadAttestationValidationError<P: Preset, I> {
+pub enum PayloadAttestationValidationError<I: Clone> {
     #[error("payload attestation has no attesting indices: {payload_attestation:?}")]
     PayloadAttestationHasNoAttestingIndices {
-        payload_attestation: Box<PayloadAttestationItem<P, I>>,
+        payload_attestation: Box<PayloadAttestationItem<I>>,
     },
     #[error(
         "payload attestation attesting indices not sorted and unique: {payload_attestation:?}"
     )]
     PayloadAttestationAttestingIndicesNotSortedAndUnique {
-        payload_attestation: Box<PayloadAttestationItem<P, I>>,
+        payload_attestation: Box<PayloadAttestationItem<I>>,
     },
     #[error("validator {validator_index} not in PTC for slot {slot}: {payload_attestation:?}")]
     PayloadAttestationValidatorNotInPtc {
         validator_index: ValidatorIndex,
         slot: Slot,
-        payload_attestation: Box<PayloadAttestationItem<P, I>>,
+        payload_attestation: Box<PayloadAttestationItem<I>>,
     },
     #[error("payload attestation invalid signature: {payload_attestation:?}")]
     PayloadAttestationInvalidSignature {
-        payload_attestation: Box<PayloadAttestationItem<P, I>>,
+        payload_attestation: Box<PayloadAttestationItem<I>>,
     },
     #[error("payload attestation validation error: {payload_attestation:?} {source:}")]
     Other {
         source: AnyhowError,
-        payload_attestation: Box<PayloadAttestationItem<P, I>>,
+        payload_attestation: Box<PayloadAttestationItem<I>>,
     },
 }
 
-impl<P: Preset, I> PayloadAttestationValidationError<P, I> {
+impl<I: Clone> PayloadAttestationValidationError<I> {
     #[must_use]
-    pub fn payload_attestation(self) -> PayloadAttestationItem<P, I> {
+    pub fn payload_attestation(self) -> PayloadAttestationItem<I> {
         match self {
             Self::PayloadAttestationHasNoAttestingIndices {
                 payload_attestation,

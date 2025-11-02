@@ -249,7 +249,7 @@ pub mod gloas {
     mod block_processing;
     mod epoch_intermediates;
     mod epoch_processing;
-    mod execution_payload_processing;
+    pub mod execution_payload_processing;
     mod slot_processing;
     mod state_transition;
 }

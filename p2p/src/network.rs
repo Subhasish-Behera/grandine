@@ -2012,6 +2012,9 @@ impl<P: Preset> Network<P> {
                 )
                 .send(&self.channels.p2p_to_sync_tx);
             }
+            eth2_libp2p::PubsubMessage::ExecutionPayloadBid(_) => {
+                // TODO: Implement ExecutionPayloadBid gossip handling
+            }
         }
     }
 

@@ -76,7 +76,7 @@ pub enum P2pToSync<P: Preset> {
     GossipExecutionPayload(Arc<SignedExecutionPayloadEnvelope<P>>, PeerId, GossipId),
     GossipPayloadAttestation(Arc<PayloadAttestationMessage>, GossipId),
     PeerCgcUpdated(PeerId),
-    RequestCustodyGroupBackfill(HashSet<u64>),
+    RequestCustodyGroupBackfill(HashSet<u64>, Slot),
     Stop,
 }
 

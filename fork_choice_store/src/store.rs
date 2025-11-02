@@ -52,7 +52,7 @@ use types::{
         containers::{DataColumnIdentifier, DataColumnSidecar},
         primitives::ColumnIndex,
     },
-    gloas::containers::{IndexedPayloadAttestation, PayloadAttestation, SignedExecutionPayloadEnvelope},
+    gloas::containers::{IndexedPayloadAttestation, SignedExecutionPayloadEnvelope},
     nonstandard::{BlobSidecarWithId, DataColumnSidecarWithId, PayloadStatus, Phase, WithStatus},
     phase0::{
         consts::{ATTESTATION_PROPAGATION_SLOT_RANGE, GENESIS_EPOCH, GENESIS_SLOT},
@@ -76,7 +76,8 @@ use crate::{
         DifferenceAtLocation, DissolvedDifference, ExecutionPayloadEnvelopeAction,
         ExecutionPayloadEnvelopeOrigin, LatestMessage, Location, PartialAttestationAction,
         PartialBlockAction, PayloadAction, PayloadAttestationAction, PayloadAttestationItem,
-        PayloadAttestationOrigin, Score, SegmentId, Storage, UnfinalizedBlock, ValidAttestation,
+        PayloadAttestationValidationError, Score, SegmentId, Storage,
+        UnfinalizedBlock, ValidAttestation,
     },
     segment::{Position, Segment},
     state_cache_processor::StateCacheProcessor,
@@ -2337,46 +2338,49 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         // [REJECT] block.slot equals envelope.slot
         ensure!(
             block.message().slot() == slot,
-            Error::ExecutionPayloadEnvelopeSlotMismatch {
+            Error::<P>::ExecutionPayloadEnvelopeSlotMismatch {
                 expected: block.message().slot(),
                 actual: slot,
             },
         );
 
         // [REJECT] The builder_index must be a valid and active validator
-        ensure!(
-            (builder_index as usize) < state.validators().len_usize(),
-            Error::ValidatorIndexOutOfBounds {
-                validator_index: builder_index,
-                validator_count: state.validators().len_usize(),
-            },
-        );
+        let validator = state
+            .validators()
+            .get(builder_index)
+            .map_err(|_| Error::<P>::ValidatorNotActive { builder_index })?;
 
-        let validator = &state.validators()[builder_index as usize];
         ensure!(
             predicates::is_active_validator(validator, accessors::get_current_epoch(&state)),
-            Error::ValidatorNotActive { builder_index },
+            Error::<P>::ValidatorNotActive { builder_index },
         );
 
         // [REJECT] The builder signature envelope.signature is valid
+        // ExecutionPayloadEnvelope is Gloas-only, so state must be Gloas
+        let BeaconState::Gloas(gloas_state) = state.as_ref() else {
+            bail!("ExecutionPayloadEnvelope validation requires Gloas state");
+        };
         transition_functions::gloas::execution_payload_processing::verify_execution_payload_envelope_signature(
             &self.chain_config,
             &self.pubkey_cache,
-            &state,
+            gloas_state,
             &envelope,
-            helper_functions::verifier::SingleVerifier,
+            SingleVerifier,
         )?;
 
-        // Get the bid from the block
-        let Some(signed_bid) = block.message().body().signed_execution_payload_bid() else {
-            return Err(Error::MissingExecutionPayloadBid { beacon_block_root });
+        // [REJECT] Get the bid from the block
+        // ExecutionPayloadEnvelope is Gloas-only, so block must be Gloas
+        let SignedBeaconBlock::Gloas(gloas_block) = block.as_ref() else {
+            bail!("ExecutionPayloadEnvelope validation requires Gloas block");
         };
+
+        let signed_bid = &gloas_block.message.body.signed_execution_payload_bid;
         let bid = &signed_bid.message;
 
         // [REJECT] envelope.builder_index == bid.builder_index
         ensure!(
             builder_index == bid.builder_index,
-            Error::BuilderIndexMismatch {
+            Error::<P>::BuilderIndexMismatch {
                 expected: bid.builder_index,
                 actual: builder_index,
             },
@@ -2385,18 +2389,10 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         // [REJECT] payload.block_hash == bid.block_hash
         ensure!(
             envelope.message.payload.block_hash == bid.block_hash,
-            Error::ExecutionPayloadBlockHashMismatch {
+            Error::<P>::ExecutionPayloadBlockHashMismatch {
                 expected: bid.block_hash,
                 actual: envelope.message.payload.block_hash,
             },
-        );
-
-        // [REJECT] Blob KZG commitments in envelope match those in the beacon block
-        let block_commitments = &block.message().body().blob_kzg_commitments;
-        let envelope_commitments = &envelope.message.blob_kzg_commitments;
-        ensure!(
-            block_commitments.as_ref() == envelope_commitments.as_ref(),
-            Error::BlobKzgCommitmentsMismatch,
         );
 
         // [IGNORE] This is the first payload envelope for this block root from this builder
@@ -2423,10 +2419,10 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
     /// "correctness" happens implicitly in fork choice weight calculation.
     ///
     /// Spec: https://github.com/ethereum/consensus-specs/blob/master/specs/gloas/p2p-interface.md#payload_attestation_message
-    pub fn validate_payload_attestation<I>(
+    pub fn validate_payload_attestation<I: Clone>(
         &self,
-        payload_attestation: PayloadAttestationItem<P, I>,
-    ) -> Result<PayloadAttestationAction<P, I>, PayloadAttestationValidationError<P, I>> {
+        payload_attestation: PayloadAttestationItem<I>,
+    ) -> Result<PayloadAttestationAction<I>, PayloadAttestationValidationError<I>> {
         let attestation = &payload_attestation.item;
         let slot = attestation.data.slot;
         let beacon_block_root = attestation.data.beacon_block_root;
@@ -2462,7 +2458,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
 
         // Convert PayloadAttestationMessage to IndexedPayloadAttestation
         // For individual message, validator_index is the single attesting index
-        let attesting_indices = ContiguousList::try_from_iter([attestation.validator_index])
+        let attesting_indices = ContiguousList::try_from([attestation.validator_index])
             .map_err(|source| PayloadAttestationValidationError::Other {
                 source: source.into(),
                 payload_attestation: Box::new(payload_attestation.clone()),
@@ -2850,9 +2846,8 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
     pub fn apply_execution_payload_envelope(
         &mut self,
         signed_envelope: Arc<SignedExecutionPayloadEnvelope<P>>,
-        execution_engine: &impl ExecutionEngine<P>,
     ) -> Result<()> {
-        let _ = execution_engine;
+        // TODO Phase 2: Add execution_engine parameter when implementing full state transition
         let envelope = &signed_envelope.message;
         let beacon_block_root = envelope.beacon_block_root;
 
