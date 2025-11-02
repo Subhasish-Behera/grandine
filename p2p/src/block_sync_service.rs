@@ -615,7 +615,7 @@ impl<P: Preset> BlockSyncService<P> {
                                         beacon_block_seen: {beacon_block_seen})"
                                     );
 
-                                    self.controller.on_execution_payload(
+                                    self.controller.on_gossip_execution_payload(
                                         execution_payload_envelope,
                                         gossip_id,
                                         beacon_block_seen,

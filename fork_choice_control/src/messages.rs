@@ -158,7 +158,7 @@ pub enum MutatorMessage<P: Preset, W> {
     },
     PayloadAttestation {
         wait_group: W,
-        result: VerifyPayloadAttestationResult<P>,
+        result: VerifyPayloadAttestationResult,
         submission_time: Instant,
     },
     FinishedPersistingBlobSidecars {

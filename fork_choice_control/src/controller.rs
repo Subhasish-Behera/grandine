@@ -388,6 +388,7 @@ where
             wait_group: self.owned_wait_group(),
             payload_attestation: payload_attestation_item,
             submission_time: Instant::now(),
+            metrics: self.metrics.clone(),
         })
     }
 

@@ -322,25 +322,14 @@ impl<P: Preset, W> Run for BlockPayloadAttestationsTask<P, W> {
             metrics,
         } = self;
 
-        let _timer = metrics
-            .as_ref()
-            .map(|metrics| metrics.fc_block_payload_attestation_task_times.start_timer());
+        // TODO: Add metrics field fc_block_payload_attestation_task_times to prometheus_metrics::Metrics
+        let _timer = metrics.as_ref().map(|_metrics| ());
 
-        // TODO(Grandine Team): Consider turning the pipeline into a new method in `Store`.
+        // TODO(Grandine Team): payload_attestations() method not available on BeaconBlockBody trait
+        // Need to add this method or access payload_attestations differently for Gloas blocks
         // Similar to BlockAttestationsTask, but for payload attestations from blocks.
         // This will call store.notify_ptc_messages or equivalent when implemented (TASK 2.6).
-        let results = block
-            .message()
-            .body()
-            .payload_attestations()
-            .iter()
-            .map(|_payload_attestation| {
-                // TODO: Implement processing when store method is ready (TASK 2.6)
-                // Will de-aggregate and process each PayloadAttestation
-                // Does NOT use validate_payload_attestation (that's for gossip only)
-                Ok(())
-            })
-            .collect();
+        let results: Vec<Result<()>> = vec![]; // Stub until payload_attestations() method exists
 
         MutatorMessage::BlockPayloadAttestations {
             wait_group,
@@ -777,9 +766,8 @@ impl<P: Preset, W> Run for ExecutionPayloadEnvelopeTask<P, W> {
             metrics,
         } = self;
 
-        let _timer = metrics
-            .as_ref()
-            .map(|metrics| metrics.fc_execution_payload_envelope_task_times.start_timer());
+        // TODO: Add metrics field fc_execution_payload_envelope_task_times to prometheus_metrics::Metrics
+        let _timer = metrics.as_ref().map(|_metrics| ());
 
         // Call validation stub (will be implemented later with full validation)
         let result = store_snapshot.validate_execution_payload_envelope(
@@ -803,8 +791,9 @@ pub struct PayloadAttestationTask<P: Preset, W> {
     pub store_snapshot: Arc<Store<P, Storage<P>>>,
     pub mutator_tx: Sender<MutatorMessage<P, W>>,
     pub wait_group: W,
-    pub payload_attestation: PayloadAttestationItem<P, GossipId>,
+    pub payload_attestation: PayloadAttestationItem<GossipId>,
     pub submission_time: Instant,
+    pub metrics: Option<Arc<Metrics>>,
 }
 
 impl<P: Preset, W> Run for PayloadAttestationTask<P, W> {
@@ -815,7 +804,11 @@ impl<P: Preset, W> Run for PayloadAttestationTask<P, W> {
             wait_group,
             payload_attestation,
             submission_time,
+            metrics,
         } = self;
+
+        // TODO: Add metrics field fc_payload_attestation_task_times to prometheus_metrics::Metrics
+        let _timer = metrics.as_ref().map(|_metrics| ());
 
         let result = store_snapshot.validate_payload_attestation(payload_attestation);
 

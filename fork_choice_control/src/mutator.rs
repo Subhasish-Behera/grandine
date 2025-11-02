@@ -58,6 +58,7 @@ use types::{
         containers::{DataColumnIdentifier, DataColumnSidecar, MatrixEntry},
         primitives::ColumnIndex,
     },
+    gloas::containers::SignedExecutionPayloadEnvelope,
     nonstandard::{PayloadStatus, RelativeEpoch, ValidationOutcome},
     phase0::{
         containers::Checkpoint,
@@ -78,13 +79,15 @@ use crate::{
         BlockBlobAvailability, BlockDataColumnAvailability, Delayed, MutatorRejectionReason,
         PendingAggregateAndProof, PendingAttestation, PendingBlobSidecar, PendingBlock,
         PendingChainLink, PendingDataColumnSidecar, PendingExecutionPayloadEnvelope,
-        ProcessingTimings, ReorgSource, VerifyAggregateAndProofResult, VerifyAttestationResult,
+        PendingPayloadAttestation, ProcessingTimings, ReorgSource,
+        VerifyAggregateAndProofResult, VerifyAttestationResult,
         VerifyPayloadAttestationResult, WaitingForCheckpointState,
     },
     storage::Storage,
     tasks::{
         AttestationTask, BlobSidecarTask, BlockAttestationsTask, BlockTask, CheckpointStateTask,
-        DataColumnSidecarTask, PersistBlobSidecarsTask, PersistDataColumnSidecarsTask,
+        DataColumnSidecarTask, ExecutionPayloadEnvelopeTask, PayloadAttestationTask,
+        PersistBlobSidecarsTask, PersistDataColumnSidecarsTask,
         PersistPubkeyCacheTask, PreprocessStateTask, RetryDataColumnSidecarTask,
     },
     thread_pool::{Spawn, ThreadPool},
@@ -242,6 +245,14 @@ where
                     wait_group,
                     results,
                 } => self.handle_block_attestations(&wait_group, results)?,
+                MutatorMessage::BlockPayloadAttestations {
+                    wait_group,
+                    results,
+                } => {
+                    // TODO: Implement handle_block_payload_attestations when store method is ready
+                    drop(wait_group);
+                    drop(results);
+                }
                 MutatorMessage::AttesterSlashing {
                     wait_group,
                     result,
@@ -2119,7 +2130,7 @@ where
     fn handle_payload_attestation(
         &mut self,
         wait_group: W,
-        result: VerifyPayloadAttestationResult<P>,
+        result: VerifyPayloadAttestationResult,
         submission_time: Instant,
     ) {
         let _ = submission_time;
@@ -2161,6 +2172,7 @@ where
                         .push(PendingPayloadAttestation {
                             payload_attestation,
                             submission_time,
+                            _phantom: std::marker::PhantomData,
                         });
 
                     drop(wait_group);
@@ -2177,6 +2189,7 @@ where
                         .push(PendingPayloadAttestation {
                             payload_attestation,
                             submission_time,
+                            _phantom: std::marker::PhantomData,
                         });
 
                     drop(wait_group);
@@ -2657,7 +2670,6 @@ where
         // For now, this is a stub that does minimal bookkeeping
         if let Err(error) = self.store_mut().apply_execution_payload_envelope(
             envelope.clone_arc(),
-            &self.execution_engine,
         ) {
             warn!(
                 "failed to apply execution payload envelope for beacon_block_root: {beacon_block_root:?}, \
@@ -3342,6 +3354,7 @@ where
         let PendingPayloadAttestation {
             payload_attestation,
             submission_time,
+            _phantom,
         } = pending_payload_attestation;
 
         self.spawn(PayloadAttestationTask {
@@ -3395,6 +3408,8 @@ where
                 attestations,
                 blob_sidecars,
                 data_column_sidecars,
+                execution_payload_envelopes,
+                payload_attestations,
             } = delayed;
 
             gossip_ids.extend(
