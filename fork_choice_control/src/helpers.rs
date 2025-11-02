@@ -662,7 +662,9 @@ impl<P: Preset> Context<P> {
         self.controller()
             .on_gossip_block(block.clone_arc(), GossipId::default());
         self.controller().wait_for_tasks();
-        self.next_p2p_message()
+        let msg = self.next_p2p_message();
+        eprintln!("DEBUG: slot={}, P2pMessage={:?}", block.message().slot(), msg);
+        msg
     }
 
     fn on_singular_attestation(

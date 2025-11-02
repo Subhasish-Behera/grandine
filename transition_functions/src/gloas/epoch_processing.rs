@@ -38,6 +38,8 @@ pub fn process_epoch(
     pubkey_cache: &PubkeyCache,
     state: &mut BeaconState<impl Preset>,
 ) -> Result<()> {
+    eprintln!("DEBUG: GLOAS process_epoch called at slot={}", state.slot());
+
     #[cfg(feature = "metrics")]
     let _timer = METRICS
         .get()

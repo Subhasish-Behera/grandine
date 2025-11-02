@@ -619,6 +619,7 @@ where
     ) -> Result<()> {
         match *result {
             Ok(BlockAction::Accept(mut chain_link, attester_slashing_results)) => {
+                eprintln!("DEBUG: BlockAction::Accept for root={:?}", block_root);
                 let block_root = chain_link.block_root;
                 let parent_root = chain_link.block.message().parent_root();
 
@@ -668,6 +669,7 @@ where
                 self.accept_block(&wait_group, pending_chain_link)?;
             }
             Ok(BlockAction::Ignore(publishable)) => {
+                eprintln!("DEBUG: BlockAction::Ignore for root={:?}", block_root);
                 let (gossip_id, sender) = origin.split();
 
                 if let Some(gossip_id) = gossip_id {
@@ -680,6 +682,7 @@ where
                 );
             }
             Ok(BlockAction::DelayUntilBlobs(block, state)) => {
+                eprintln!("DEBUG: BlockAction::DelayUntilBlobs for root={:?}", block_root);
                 let processing_timings = processing_timings.delayed();
 
                 let pending_block = PendingBlock {
@@ -863,6 +866,7 @@ where
                 }
             }
             Ok(BlockAction::DelayUntilParent(block)) => {
+                eprintln!("DEBUG: BlockAction::DelayUntilParent for root={:?}", block_root);
                 let processing_timings = processing_timings.delayed();
                 let parent_root = block.message().parent_root();
 
@@ -891,6 +895,7 @@ where
                 }
             }
             Ok(BlockAction::DelayUntilSlot(block)) => {
+                eprintln!("DEBUG: BlockAction::DelayUntilSlot for root={:?}", block_root);
                 let processing_timings = processing_timings.delayed();
                 let slot = block.message().slot();
 
@@ -919,6 +924,7 @@ where
                 attester_slashing_results,
                 checkpoint,
             )) => {
+                eprintln!("DEBUG: BlockAction::WaitForJustifiedState for root={:?}", block_root);
                 let processing_timings = processing_timings.delayed();
                 let pending_chain_link = PendingChainLink {
                     chain_link,
@@ -957,7 +963,10 @@ where
                     }
                 }
             }
-            Err(error) => self.reject_block(error, block_root, origin),
+            Err(error) => {
+                eprintln!("DEBUG: BlockAction::Err for root={:?}, error={:?}", block_root, error);
+                self.reject_block(error, block_root, origin)
+            }
         }
 
         Ok(())
@@ -2666,10 +2675,11 @@ where
             envelope.message.builder_index
         );
 
-        // Apply to store (Phase 2: will call process_execution_payload internally)
-        // For now, this is a stub that does minimal bookkeeping
+        // Apply to store (calls process_execution_payload internally)
+        let execution_engine = self.execution_engine.clone();
         if let Err(error) = self.store_mut().apply_execution_payload_envelope(
             envelope.clone_arc(),
+            execution_engine,
         ) {
             warn!(
                 "failed to apply execution payload envelope for beacon_block_root: {beacon_block_root:?}, \

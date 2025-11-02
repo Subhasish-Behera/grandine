@@ -685,9 +685,15 @@ impl<P: Preset> SignedBeaconBlock<P> {
     }
 
     pub fn execution_block_hash(&self) -> Option<ExecutionBlockHash> {
-        self.message()
-            .body()
-            .post_bellatrix()
+        let body = self.message().body();
+
+        // Gloas: Get block_hash from signed_execution_payload_bid
+        if let Some(gloas_body) = body.post_gloas() {
+            return Some(gloas_body.signed_execution_payload_bid().message.block_hash);
+        }
+
+        // Pre-Gloas: Get block_hash from execution_payload
+        body.post_bellatrix()
             .map(|body| body.execution_payload().block_hash())
     }
 
