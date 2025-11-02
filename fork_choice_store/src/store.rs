@@ -276,7 +276,8 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         let anchor = ChainLink {
             block_root,
             block: anchor_block,
-            state: Some(anchor_state.clone_arc()),
+            block_state: Some(anchor_state.clone_arc()),
+            execution_payload_state: None,
             current_justified_checkpoint: checkpoint,
             finalized_checkpoint: checkpoint,
             unrealized_justified_checkpoint: checkpoint,
@@ -1221,7 +1222,8 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         let chain_link = ChainLink {
             block_root,
             block: block.clone_arc(),
-            state: Some(state),
+            block_state: Some(state),
+            execution_payload_state: None,
             current_justified_checkpoint: justified_checkpoint,
             finalized_checkpoint,
             unrealized_justified_checkpoint,
@@ -3163,10 +3165,12 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
                 // (as long as the justified block is not orphaned, which is possible according to
                 // the Fork Choice specification). It is not sufficient because it does not prevent
                 // `ChainLink`s with unloaded states from becoming justified or finalized later.
-                if let Some(state) = chain_link.state.take() {
+                if let Some(block_state) = chain_link.block_state.take() {
                     if misc::is_epoch_start::<P>(chain_link.slot()) {
+                        let execution_payload_state = chain_link.execution_payload_state.take();
                         to_persist.push(ChainLink {
-                            state: Some(state),
+                            block_state: Some(block_state),
+                            execution_payload_state,
                             ..chain_link.clone()
                         });
                     }

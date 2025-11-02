@@ -42,8 +42,19 @@ pub struct ChainLink<P: Preset> {
     pub block_root: H256,
     #[derivative(Debug(format_with = "fmt_block_concisely"))]
     pub block: Arc<SignedBeaconBlock<P>>,
+
+    // ePBS: Renamed from `state` to clarify semantics.
+    // This is the pre-execution state (after beacon block processing, before execution payload).
     #[derivative(Debug(format_with = "fmt_as_wildcard"))]
-    pub state: Option<Arc<BeaconState<P>>>,
+    pub block_state: Option<Arc<BeaconState<P>>>,
+
+    // ePBS: Post-execution state (after execution payload processing).
+    // - Pre-Gloas blocks: Always None
+    // - Gloas empty variant: None (no execution payload yet)
+    // - Gloas full variant: Some (execution payload processed)
+    #[derivative(Debug(format_with = "fmt_as_wildcard"))]
+    pub execution_payload_state: Option<Arc<BeaconState<P>>>,
+
     pub current_justified_checkpoint: Checkpoint,
     pub finalized_checkpoint: Checkpoint,
     pub unrealized_justified_checkpoint: Checkpoint,
@@ -84,7 +95,26 @@ impl<P: Preset> ChainLink<P> {
 
     #[must_use]
     pub fn state<S: Storage<P>>(&self, store: &Store<P, S>) -> Arc<BeaconState<P>> {
-        store.load_beacon_state(self.block_root, self.slot(), self.state.as_ref())
+        store.load_beacon_state(self.block_root, self.slot(), self.block_state.as_ref())
+    }
+
+    /// Get execution payload state (post-execution).
+    ///
+    /// ePBS: Returns the state after execution payload processing.
+    /// - Pre-Gloas blocks: Returns None
+    /// - Gloas empty variant: Returns None (no execution payload)
+    /// - Gloas full variant: Returns Some(state) (execution payload processed)
+    ///
+    /// For fork choice and validation that needs post-execution state,
+    /// use this method instead of state().
+    #[must_use]
+    pub fn execution_state<S: Storage<P>>(
+        &self,
+        store: &Store<P, S>,
+    ) -> Option<Arc<BeaconState<P>>> {
+        self.execution_payload_state.as_ref().map(|state_ref| {
+            store.load_beacon_state(self.block_root, self.slot(), Some(state_ref))
+        })
     }
 
     // TODO(feature/deneb): Confirm that post-Deneb states are always post-Merge. See:
