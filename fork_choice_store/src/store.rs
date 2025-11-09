@@ -2684,7 +2684,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         let (differences_empty, differences_full) = self.attestation_balance_differences(current_slot_attestations)?;
 
         self.apply_balance_differences(differences_empty)?;
-        self.apply_balance_differences(differences_full)?;
+        self.apply_balance_differences_full(differences_full)?;
         self.update_head_segment_id();
 
         // Pruning the state cache requires the head slot, which depends on head_segment_id
@@ -2904,7 +2904,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         let old_head = self.head().clone();
 
         self.apply_balance_differences(differences_empty)?;
-        self.apply_balance_differences(differences_full)?;
+        self.apply_balance_differences_full(differences_full)?;
         self.update_head_segment_id();
 
         self.reorganized(old_head_segment_id)
@@ -3688,6 +3688,27 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         }
 
         Ok((differences_empty, differences_full))
+    }
+
+    /// ePBS: Apply balance differences for full variants (keyed by ExecutionBlockHash).
+    /// Converts payload_hash → beacon_block_root before delegating to apply_balance_differences.
+    fn apply_balance_differences_full(
+        &mut self,
+        differences: impl IntoIterator<Item = (ExecutionBlockHash, Difference)>,
+    ) -> Result<()> {
+        // Convert ExecutionBlockHash → H256 (beacon_block_root) for apply_balance_differences
+        let converted_differences = differences
+            .into_iter()
+            .filter_map(|(payload_hash, difference)| {
+                // Look up beacon_block_root from payload_hash
+                let location = self.unfinalized_locations_full.get(&payload_hash)?;
+                let block_root = self.unfinalized[&location.segment_id][location.position]
+                    .chain_link
+                    .block_root;
+                Some((block_root, difference))
+            });
+
+        self.apply_balance_differences(converted_differences)
     }
 
     fn apply_balance_differences(
