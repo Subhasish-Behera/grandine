@@ -218,6 +218,13 @@ pub struct Store<P: Preset, S: Storage<P>> {
     // Attestations cannot affect fork choice until their slots have passed.
     // This field is used to store them in the meantime.
     current_slot_attestations: Vector<ValidAttestation<P>>,
+
+    // ePBS: Dual location maps for empty and full variants
+    // - Empty variants (beacon block only): keyed by beacon_block_root
+    // - Full variants (beacon block + execution payload): keyed by payload_hash
+    unfinalized_locations_empty: HashMap<H256, Location>,
+    unfinalized_locations_full: HashMap<ExecutionBlockHash, Location>,
+
     execution_payload_locations: HashMap<ExecutionBlockHash, Location>,
     aggregate_and_proof_supersets: Arc<AggregateAndProofSupersets<P>>,
     accepted_blob_sidecars:
@@ -311,6 +318,8 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
             latest_messages,
             checkpoint_states: HashMap::unit(checkpoint, anchor_state),
             current_slot_attestations: vector![],
+            unfinalized_locations_empty: hashmap! {},
+            unfinalized_locations_full: hashmap! {},
             execution_payload_locations: hashmap! {},
             aggregate_and_proof_supersets: Arc::new(AggregateAndProofSupersets::new()),
             accepted_blob_sidecars: HashMap::default(),
@@ -467,6 +476,29 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         Some(&self.finalized[*index])
     }
 
+    /// ePBS: Get ChainLink for block_root, preferring full variant if both exist.
+    ///
+    /// Used in validation flow to select parent state:
+    /// - Full variant has execution_payload_state (post-execution) → preferred
+    /// - Empty variant has only block_state (pre-execution) → fallback
+    ///
+    /// This uses get_location() which prefers full variant when both exist.
+    #[must_use]
+    pub fn chain_link_prefer_full(&self, block_root: H256) -> Option<&ChainLink<P>> {
+        if let Some(location) = self.get_location(block_root) {
+            let Location {
+                segment_id,
+                position,
+            } = location;
+
+            return Some(&self.unfinalized[&segment_id][position].chain_link);
+        }
+
+        // Check finalized
+        let index = self.finalized_indices.get(&block_root)?;
+        Some(&self.finalized[*index])
+    }
+
     #[must_use]
     pub fn block(&self, block_root: H256) -> Option<WithStatus<&Arc<SignedBeaconBlock<P>>>> {
         let chain_link = self.chain_link(block_root)?;
@@ -486,6 +518,50 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
 
     fn contains_unfinalized_block(&self, block_root: H256) -> bool {
         self.unfinalized_locations.contains_key(&block_root)
+    }
+
+    /// ePBS: Get location for block_root, preferring full variant if both exist.
+    ///
+    /// This canonicalization ensures:
+    /// - Structural operations use same location (consistency)
+    /// - Fork choice operations prefer complete variant (full has execution_state)
+    /// - Children of block consistently extend from same variant
+    ///
+    /// Lookup strategy:
+    /// 1. Check unfinalized_locations_empty by block_root
+    /// 2. If found, convert block_root → payload_hash and check unfinalized_locations_full
+    /// 3. If full variant exists, prefer it (return full location)
+    /// 4. Otherwise return empty location
+    #[must_use]
+    fn get_location(&self, block_root: H256) -> Option<Location> {
+        // Check empty variant first
+        if let Some(empty_loc) = self.unfinalized_locations_empty.get(&block_root) {
+            // Convert block_root → payload_hash to check full variant
+            // Get ChainLink to extract payload hash
+            let chain_link = &self.unfinalized[&empty_loc.segment_id][empty_loc.position].chain_link;
+            let block_body = chain_link.block.message().body();
+
+            // Extract payload hash (Gloas uses bid, pre-Gloas uses execution_payload)
+            let payload_hash = if let Some(gloas_body) = block_body.post_gloas() {
+                Some(gloas_body.signed_execution_payload_bid().message.block_hash)
+            } else {
+                chain_link.execution_block_hash()
+            };
+
+            // Check if full variant exists
+            if let Some(payload_hash) = payload_hash {
+                if let Some(full_loc) = self.unfinalized_locations_full.get(&payload_hash) {
+                    // Both exist → prefer full (canonicalization)
+                    return Some(*full_loc);
+                }
+            }
+
+            // Only empty exists (or conversion failed)
+            return Some(*empty_loc);
+        }
+
+        // Neither exists
+        None
     }
 
     #[must_use]
@@ -2985,6 +3061,89 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         Ok(())
     }
 
+    /// ePBS: Insert full variant (with execution payload) for existing empty variant.
+    ///
+    /// Flow:
+    /// 1. Empty variant already inserted via insert_block()
+    /// 2. Full variant arrives later with execution payload envelope
+    /// 3. This method creates sibling segment for full variant
+    ///
+    /// Segment structure (siblings):
+    /// ```
+    /// Segment N:   [..., Parent X, Empty A]
+    /// Segment N+1: [Full A]  ← Forks from Parent X (sibling of Empty A)
+    /// ```
+    fn insert_payload(&mut self, chain_link: ChainLink<P>) -> Result<()> {
+        let block_root = chain_link.block_root;
+        let block = &chain_link.block;
+        let parent_root = block.message().parent_root();
+
+        // Extract payload hash from the execution payload
+        // The ChainLink was created after processing ExecutionPayloadEnvelope
+        // which contains the actual ExecutionPayload with block_hash
+        let payload_hash = chain_link.execution_block_hash().expect(
+            "insert_payload called with ChainLink missing execution_block_hash - \
+             this should never happen as full variant requires execution payload"
+        );
+
+        // Check if parent exists
+        ensure!(
+            self.get_location(parent_root).is_some(),
+            "Parent not found for parent_root: {parent_root:?}"
+        );
+
+        // Use same logic as insert_block()
+        let new_block_location;
+
+        if let Some(parent) = self.get_location(parent_root) {
+            let parent_is_invalid = self.unfinalized[&parent.segment_id][parent.position].is_invalid();
+
+            let payload_status = if parent_is_invalid {
+                PayloadStatus::Invalid
+            } else {
+                chain_link.payload_status
+            };
+
+            let chain_link = ChainLink {
+                payload_status,
+                ..chain_link
+            };
+
+            if parent.position == self.unfinalized[&parent.segment_id].last_position() {
+                // EXTEND parent's segment (rare - empty already extended it)
+                new_block_location = Location {
+                    segment_id: parent.segment_id,
+                    position: parent.position.next()?,
+                };
+
+                self.unfinalized[&parent.segment_id].push(UnfinalizedBlock::new(chain_link));
+            } else {
+                // FORK from parent (expected - creates sibling segment)
+                new_block_location = Location {
+                    segment_id: self.lowest_unused_segment_id()?,
+                    position: Position::default(),
+                };
+
+                self.unfinalized
+                    .insert(new_block_location.segment_id, Segment::new(chain_link))
+                    .unwrap_none();
+            }
+        } else {
+            unreachable!("Parent existence already checked above");
+        }
+
+        // Register full variant location (keyed by payload_hash)
+        self.unfinalized_locations_full
+            .insert(payload_hash, new_block_location)
+            .unwrap_none();
+
+        // Also register in execution_payload_locations (same hash)
+        self.execution_payload_locations
+            .insert(payload_hash, new_block_location);
+
+        Ok(())
+    }
+
     fn finalize_blocks(&mut self) -> Option<Location> {
         let locations_from_newest_to_root = core::iter::successors(
             self.unfinalized_locations
@@ -3726,7 +3885,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         let mut state = self
             .chain_ending_with(block_root)
             .find_map(|chain_link| {
-                let state = chain_link.state.clone().or_else(|| {
+                let state = chain_link.block_state.clone().or_else(|| {
                     match self.stored_state_by_block_root(chain_link.block_root) {
                         Ok(state_opt) => state_opt,
                         Err(error) => {
