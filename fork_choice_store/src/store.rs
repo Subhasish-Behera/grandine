@@ -462,13 +462,13 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
 
     #[must_use]
     pub fn chain_link(&self, block_root: H256) -> Option<&ChainLink<P>> {
-        if let Some(location) = self.unfinalized_locations.get(&block_root) {
+        if let Some(location) = self.get_location(block_root) {
             let Location {
                 segment_id,
                 position,
             } = location;
 
-            return Some(&self.unfinalized[segment_id][*position].chain_link);
+            return Some(&self.unfinalized[&segment_id][position].chain_link);
         }
 
         let index = self.finalized_indices.get(&block_root)?;
@@ -562,6 +562,46 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
 
         // Neither exists
         None
+    }
+
+    /// ePBS: Get parent payload status (EMPTY or FULL).
+    ///
+    /// From spec (fork-choice.md:219-224):
+    /// ```python
+    /// def get_parent_payload_status(store: Store, block: BeaconBlock) -> PayloadStatus:
+    ///     parent = store.blocks[block.parent_root]
+    ///     parent_block_hash = block.body.signed_execution_payload_bid.message.parent_block_hash
+    ///     message_block_hash = parent.body.signed_execution_payload_bid.message.block_hash
+    ///     return PAYLOAD_STATUS_FULL if parent_block_hash == message_block_hash else PAYLOAD_STATUS_EMPTY
+    /// ```
+    ///
+    /// Returns None if either block is pre-Gloas or doesn't exist.
+    #[must_use]
+    fn get_parent_payload_status(&self, block_root: H256) -> Option<bool> {
+        let current = self.chain_link(block_root)?;
+        let parent_root = current.block.message().parent_root();
+        let parent = self.chain_link(parent_root)?;
+
+        let parent_gloas_body = parent.block.message().body().post_gloas()?;
+        let parent_bid = &parent_gloas_body.signed_execution_payload_bid().message;
+
+        let current_gloas_body = current.block.message().body().post_gloas()?;
+        let current_bid = &current_gloas_body.signed_execution_payload_bid().message;
+
+        // Return true (FULL) if parent_block_hash matches parent bid's block_hash
+        Some(current_bid.parent_block_hash == parent_bid.block_hash)
+    }
+
+    /// ePBS: Check if parent node has execution payload processed (is full variant).
+    ///
+    /// From spec (fork-choice.md:229-231):
+    /// ```python
+    /// def is_parent_node_full(store: Store, block: BeaconBlock) -> bool:
+    ///     return get_parent_payload_status(store, block) == PAYLOAD_STATUS_FULL
+    /// ```
+    #[must_use]
+    fn is_parent_node_full(&self, block_root: H256) -> bool {
+        self.get_parent_payload_status(block_root).unwrap_or(false)
     }
 
     #[must_use]
@@ -685,9 +725,9 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         let Location {
             segment_id,
             position,
-        } = self.unfinalized_locations.get(&block_root)?;
+        } = self.get_location(block_root)?;
 
-        Some(&mut self.unfinalized[segment_id][*position].chain_link)
+        Some(&mut self.unfinalized[&segment_id][position].chain_link)
     }
 
     pub fn unfinalized_fork_tips(&self) -> impl Iterator<Item = &ChainLink<P>> {
@@ -800,7 +840,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
     }
 
     pub fn chain_ending_with(&self, block_root: H256) -> impl Iterator<Item = &ChainLink<P>> {
-        if let Some(location) = self.unfinalized_locations.get(&block_root).copied() {
+        if let Some(location) = self.get_location(block_root) {
             let segment = &self.unfinalized[&location.segment_id];
 
             return self
@@ -856,7 +896,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
             .block
             .message()
             .parent_root();
-        self.unfinalized_locations.get(&parent_root).copied()
+        self.get_location(parent_root)
     }
 
     // Finality of a block or state can be determined by comparing its slot with the finalized slot.
@@ -1001,7 +1041,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
     /// different at each call site, so we call `Option::expect` every time we use this instead of
     /// changing the type.
     fn ancestor(&self, descendant_root: H256, ancestor_slot: Slot) -> Option<H256> {
-        if let Some(location) = self.unfinalized_locations.get(&descendant_root).copied() {
+        if let Some(location) = self.get_location(descendant_root) {
             let descendant_segment = &self.unfinalized[&location.segment_id];
 
             let chain_link = self
@@ -1106,7 +1146,18 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
                         );
                     }
 
-                    parent.state(self)
+                    // ePBS: For Gloas, choose state based on parent variant
+                    // Spec (fork-choice.md:509-514):
+                    // if is_parent_node_full(store, block):
+                    //     state = copy(store.execution_payload_states[block.parent_root])
+                    // else:
+                    //     state = copy(store.block_states[block.parent_root])
+                    if block.phase().is_gloas() && self.is_parent_node_full(block_root) {
+                        parent.execution_state(self)
+                            .expect("parent is full variant but has no execution_payload_state")
+                    } else {
+                        parent.state(self)
+                    }
                 });
 
             // This validation was removed from Capella in `consensus-specs` v1.4.0-alpha.0.
@@ -3004,7 +3055,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
 
         let new_block_location;
 
-        if let Some(parent) = self.unfinalized_locations.get(&parent_root).copied() {
+        if let Some(parent) = self.get_location(parent_root) {
             let parent_is_invalid =
                 self.unfinalized[&parent.segment_id][parent.position].is_invalid();
 
@@ -3635,7 +3686,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
             .filter_map(|(block_root, difference)| {
                 // `block_root` may refer to a finalized block.
                 // Changes to balances of finalized blocks are irrelevant.
-                let location = *self.unfinalized_locations.get(&block_root)?;
+                let location = self.get_location(block_root)?;
 
                 Some(DifferenceAtLocation {
                     difference,
