@@ -517,7 +517,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
     }
 
     fn contains_unfinalized_block(&self, block_root: H256) -> bool {
-        self.unfinalized_locations.contains_key(&block_root)
+        self.get_location(block_root).is_some()
     }
 
     /// ePBS: Get location for block_root, preferring full variant if both exist.
@@ -564,44 +564,47 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         None
     }
 
-    /// ePBS: Get parent payload status (EMPTY or FULL).
+    /// ePBS: Check if parent node has execution payload processed (is full variant).
     ///
-    /// From spec (fork-choice.md:219-224):
+    /// Spec pattern (fork-choice.md:219-224, 229-231):
     /// ```python
     /// def get_parent_payload_status(store: Store, block: BeaconBlock) -> PayloadStatus:
     ///     parent = store.blocks[block.parent_root]
     ///     parent_block_hash = block.body.signed_execution_payload_bid.message.parent_block_hash
     ///     message_block_hash = parent.body.signed_execution_payload_bid.message.block_hash
     ///     return PAYLOAD_STATUS_FULL if parent_block_hash == message_block_hash else PAYLOAD_STATUS_EMPTY
-    /// ```
     ///
-    /// Returns None if either block is pre-Gloas or doesn't exist.
-    #[must_use]
-    fn get_parent_payload_status(&self, block_root: H256) -> Option<bool> {
-        let current = self.chain_link(block_root)?;
-        let parent_root = current.block.message().parent_root();
-        let parent = self.chain_link(parent_root)?;
-
-        let parent_gloas_body = parent.block.message().body().post_gloas()?;
-        let parent_bid = &parent_gloas_body.signed_execution_payload_bid().message;
-
-        let current_gloas_body = current.block.message().body().post_gloas()?;
-        let current_bid = &current_gloas_body.signed_execution_payload_bid().message;
-
-        // Return true (FULL) if parent_block_hash matches parent bid's block_hash
-        Some(current_bid.parent_block_hash == parent_bid.block_hash)
-    }
-
-    /// ePBS: Check if parent node has execution payload processed (is full variant).
-    ///
-    /// From spec (fork-choice.md:229-231):
-    /// ```python
     /// def is_parent_node_full(store: Store, block: BeaconBlock) -> bool:
     ///     return get_parent_payload_status(store, block) == PAYLOAD_STATUS_FULL
     /// ```
+    ///
+    /// Note: Spec's PayloadStatus (PENDING/EMPTY/FULL) is different from our existing
+    /// PayloadStatus enum (Valid/Invalid/Optimistic). We use direct comparison.
+    ///
+    /// Returns false if either block is pre-Gloas or doesn't exist.
     #[must_use]
     fn is_parent_node_full(&self, block_root: H256) -> bool {
-        self.get_parent_payload_status(block_root).unwrap_or(false)
+        let Some(current) = self.chain_link(block_root) else {
+            return false;
+        };
+
+        let parent_root = current.block.message().parent_root();
+        let Some(parent) = self.chain_link(parent_root) else {
+            return false;
+        };
+
+        let Some(parent_gloas_body) = parent.block.message().body().post_gloas() else {
+            return false; // Pre-Gloas parent
+        };
+        let parent_bid = &parent_gloas_body.signed_execution_payload_bid().message;
+
+        let Some(current_gloas_body) = current.block.message().body().post_gloas() else {
+            return false; // Pre-Gloas current block
+        };
+        let current_bid = &current_gloas_body.signed_execution_payload_bid().message;
+
+        // Parent is full if current bid's parent_block_hash matches parent bid's block_hash
+        current_bid.parent_block_hash == parent_bid.block_hash
     }
 
     #[must_use]
@@ -631,7 +634,8 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         proposer_index: ValidatorIndex,
         block_root: H256,
     ) -> bool {
-        self.unfinalized_locations.values().any(|location| {
+        // ePBS: Check empty variant map (blocks always start as empty)
+        self.unfinalized_locations_empty.values().any(|location| {
             let Location {
                 segment_id,
                 position,
@@ -1152,7 +1156,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
                     //     state = copy(store.execution_payload_states[block.parent_root])
                     // else:
                     //     state = copy(store.block_states[block.parent_root])
-                    if block.phase().is_gloas() && self.is_parent_node_full(block_root) {
+                    if self.is_parent_node_full(block_root) {
                         parent.execution_state(self)
                             .expect("parent is full variant but has no execution_payload_state")
                     } else {
@@ -3100,7 +3104,8 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
                 .unwrap_none();
         }
 
-        self.unfinalized_locations
+        // ePBS: Insert into unfinalized_locations_empty (empty variant)
+        self.unfinalized_locations_empty
             .insert(block_root, new_block_location)
             .unwrap_none();
 
@@ -3197,9 +3202,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
 
     fn finalize_blocks(&mut self) -> Option<Location> {
         let locations_from_newest_to_root = core::iter::successors(
-            self.unfinalized_locations
-                .get(&self.finalized_checkpoint.root)
-                .copied(),
+            self.get_location(self.finalized_checkpoint.root),
             |location| self.parent_location(&self.unfinalized[&location.segment_id]),
         )
         .collect_vec();
@@ -3213,7 +3216,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
                 .unfinalized
                 .remove(&completely_finalized_location.segment_id)
                 .expect(
-                    "self.unfinalized_locations and Segment.parent \
+                    "self.unfinalized_locations_empty and Segment.parent \
                      should only refer to segments in self.unfinalized",
                 );
 
@@ -3238,7 +3241,8 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         let Self {
             finalized,
             finalized_indices,
-            unfinalized_locations,
+            unfinalized_locations_empty,
+            unfinalized_locations_full,
             execution_payload_locations,
             ..
         } = self;
@@ -3253,12 +3257,15 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
                     .insert(block_root, old_len + offset)
                     .unwrap_none();
 
-                unfinalized_locations.remove(&block_root).expect(
-                    "roots of unfinalized blocks should be present in self.unfinalized_locations",
+                // ePBS: Remove from empty variant map
+                unfinalized_locations_empty.remove(&block_root).expect(
+                    "roots of unfinalized blocks should be present in self.unfinalized_locations_empty",
                 );
 
                 if let Some(block_hash) = unfinalized_block.chain_link.execution_block_hash() {
                     execution_payload_locations.remove(&block_hash);
+                    // ePBS: Also remove from full variant map if exists
+                    unfinalized_locations_full.remove(&block_hash);
                 }
 
                 unfinalized_block.chain_link
@@ -3325,11 +3332,19 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
 
     fn remove_orphaned(&mut self, orphaned_blocks: Vector<UnfinalizedBlock<P>>) {
         for block in orphaned_blocks {
-            self.unfinalized_locations
-                .remove(&block.chain_link.block_root)
+            let block_root = block.chain_link.block_root;
+
+            // ePBS: Remove from empty variant map
+            self.unfinalized_locations_empty
+                .remove(&block_root)
                 .expect(
-                    "roots of unfinalized blocks should be present in self.unfinalized_locations",
+                    "roots of unfinalized blocks should be present in self.unfinalized_locations_empty",
                 );
+
+            // ePBS: Remove from full variant map if exists
+            if let Some(block_hash) = block.chain_link.execution_block_hash() {
+                self.unfinalized_locations_full.remove(&block_hash);
+            }
         }
     }
 
@@ -4383,11 +4398,19 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
             self.finalized_indices.len(),
         );
 
+        // ePBS: Report both location maps
         metrics.set_collection_length(
             module_path!(),
             &type_name,
-            "unfinalized_locations",
-            self.unfinalized_locations.len(),
+            "unfinalized_locations_empty",
+            self.unfinalized_locations_empty.len(),
+        );
+
+        metrics.set_collection_length(
+            module_path!(),
+            &type_name,
+            "unfinalized_locations_full",
+            self.unfinalized_locations_full.len(),
         );
 
         metrics.set_collection_length(
