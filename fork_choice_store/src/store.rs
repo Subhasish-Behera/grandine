@@ -3189,6 +3189,14 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         }
 
         // Register full variant location (keyed by payload_hash)
+        // Gracefully handle duplicate envelope (same payload_hash)
+        if self.unfinalized_locations_full.contains_key(&payload_hash) {
+            debug!(
+                "Duplicate execution payload envelope for payload_hash: {payload_hash:?}, ignoring"
+            );
+            return Ok(());
+        }
+
         self.unfinalized_locations_full
             .insert(payload_hash, new_block_location)
             .unwrap_none();
@@ -3257,15 +3265,20 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
                     .insert(block_root, old_len + offset)
                     .unwrap_none();
 
-                // ePBS: Remove from empty variant map
-                unfinalized_locations_empty.remove(&block_root).expect(
-                    "roots of unfinalized blocks should be present in self.unfinalized_locations_empty",
-                );
+                // ePBS: Need to clean up ALL possible entries for this block:
+                // 1. Empty variant (if exists) - keyed by block_root
+                // 2. Full variant (if exists) - keyed by payload_hash
+                // 3. Both could exist for the same beacon block
+                //
+                // Use remove() without expect - gracefully handle missing entries
 
+                // Always try to remove from empty variant map (keyed by block_root)
+                unfinalized_locations_empty.remove(&block_root);
+
+                // Remove from full variant map and execution_payload_locations if has execution payload
                 if let Some(block_hash) = unfinalized_block.chain_link.execution_block_hash() {
-                    execution_payload_locations.remove(&block_hash);
-                    // ePBS: Also remove from full variant map if exists
                     unfinalized_locations_full.remove(&block_hash);
+                    execution_payload_locations.remove(&block_hash);
                 }
 
                 unfinalized_block.chain_link
@@ -3334,14 +3347,18 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         for block in orphaned_blocks {
             let block_root = block.chain_link.block_root;
 
-            // ePBS: Remove from empty variant map
-            self.unfinalized_locations_empty
-                .remove(&block_root)
-                .expect(
-                    "roots of unfinalized blocks should be present in self.unfinalized_locations_empty",
-                );
+            // ePBS: For each orphaned block, need to clean up ALL possible entries:
+            // 1. Empty variant (if exists) - keyed by block_root
+            // 2. Full variant (if exists) - keyed by payload_hash
+            // 3. Both could exist for the same beacon block
+            //
+            // Use remove() without expect - it's okay if entry doesn't exist
+            // (could have been removed already, or variant never created)
 
-            // ePBS: Remove from full variant map if exists
+            // Remove from empty variant map (keyed by block_root)
+            self.unfinalized_locations_empty.remove(&block_root);
+
+            // Remove from full variant map (keyed by payload_hash) if block has execution payload
             if let Some(block_hash) = block.chain_link.execution_block_hash() {
                 self.unfinalized_locations_full.remove(&block_hash);
             }
@@ -3583,9 +3600,12 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
                 continue;
             }
 
+            let payload_present = data.index == 1;
+
             let latest_message = Arc::new(LatestMessage {
-                epoch,
+                slot,
                 beacon_block_root,
+                payload_present,
             });
 
             // The indices must be filtered here rather than in a task to avoid race conditions.
@@ -3601,11 +3621,12 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
 
                 if let Some(Some(old_message)) = &self.latest_messages.get(index) {
                     let LatestMessage {
-                        epoch: old_epoch,
+                        slot: old_slot,
                         beacon_block_root: old_beacon_block_root,
+                        payload_present: _,
                     } = **old_message;
 
-                    if epoch <= old_epoch {
+                    if slot <= old_slot {
                         continue;
                     }
 

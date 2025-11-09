@@ -1,4 +1,5 @@
 use core::{
+    cell::Cell,
     fmt::{Formatter, Result as FmtResult},
     num::NonZeroUsize,
 };
@@ -97,7 +98,41 @@ impl<P: Preset> ChainLink<P> {
     pub fn state<S: Storage<P>>(&self, store: &Store<P, S>) -> Arc<BeaconState<P>> {
         store.load_beacon_state(self.block_root, self.slot(), self.block_state.as_ref())
     }
+}
 
+/// Shared data between empty and full variants of same beacon block (ePBS).
+#[derive(Clone, Debug)]
+pub struct SharedBlockData {
+    pub payload_hash: Option<ExecutionBlockHash>,
+    pub total_weight: Cell<Gwei>,
+}
+
+impl SharedBlockData {
+    #[must_use]
+    pub const fn new(payload_hash: Option<ExecutionBlockHash>) -> Self {
+        Self {
+            payload_hash,
+            total_weight: Cell::new(0),
+        }
+    }
+
+    #[must_use]
+    pub fn weight(&self) -> Gwei {
+        self.total_weight.get()
+    }
+
+    pub fn add_weight(&self, delta: Gwei) {
+        let current = self.total_weight.get();
+        self.total_weight.set(current.saturating_add(delta));
+    }
+
+    pub fn sub_weight(&self, delta: Gwei) {
+        let current = self.total_weight.get();
+        self.total_weight.set(current.saturating_sub(delta));
+    }
+}
+
+impl<P: Preset> ChainLink<P> {
     /// Get execution payload state (post-execution).
     ///
     /// ePBS: Returns the state after execution payload processing.
@@ -134,6 +169,7 @@ pub enum PayloadAction {
 pub struct UnfinalizedBlock<P: Preset> {
     pub chain_link: ChainLink<P>,
     pub attesting_balance: Gwei,
+    pub shared_data: Option<Arc<SharedBlockData>>,
 }
 
 impl<P: Preset> UnfinalizedBlock<P> {
@@ -142,6 +178,7 @@ impl<P: Preset> UnfinalizedBlock<P> {
         Self {
             chain_link,
             attesting_balance: 0,
+            shared_data: None,
         }
     }
 
@@ -1066,11 +1103,12 @@ pub struct BranchPoint {
 }
 
 /// [`LatestMessage`](https://github.com/ethereum/consensus-specs/blob/v1.3.0/specs/phase0/fork-choice.md#latestmessage)
+///
+/// Modified for Gloas: slot instead of epoch, added payload_present.
 pub struct LatestMessage {
-    pub epoch: Epoch,
-    // This is named differently than in `consensus-specs` to avoid confusion with FFG vote roots.
-    // This is the LMD GHOST vote root and it corresponds to `AttestationData.beacon_block_root`.
+    pub slot: Slot,
     pub beacon_block_root: H256,
+    pub payload_present: bool,
 }
 
 #[derive(Error, Debug)]
