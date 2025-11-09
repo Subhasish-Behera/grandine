@@ -520,6 +520,15 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         self.get_location(block_root).is_some()
     }
 
+    /// ePBS: Convert beacon_block_root to payload_hash for full variant map lookups.
+    /// Gloas uses bid.message.block_hash, pre-Gloas uses execution_payload.block_hash().
+    #[must_use]
+    fn payload_hash_for_root(&self, block_root: H256) -> Option<ExecutionBlockHash> {
+        let location = self.unfinalized_locations_empty.get(&block_root)?;
+        let chain_link = &self.unfinalized[&location.segment_id][location.position].chain_link;
+        chain_link.execution_block_hash()
+    }
+
     /// ePBS: Get location for block_root, preferring full variant if both exist.
     ///
     /// This canonicalization ensures:
@@ -2672,9 +2681,10 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         }
 
         let current_slot_attestations = core::mem::take(&mut self.current_slot_attestations);
-        let differences = self.attestation_balance_differences(current_slot_attestations)?;
+        let (differences_empty, differences_full) = self.attestation_balance_differences(current_slot_attestations)?;
 
-        self.apply_balance_differences(differences)?;
+        self.apply_balance_differences(differences_empty)?;
+        self.apply_balance_differences(differences_full)?;
         self.update_head_segment_id();
 
         // Pruning the state cache requires the head slot, which depends on head_segment_id
@@ -2888,12 +2898,13 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         &mut self,
         valid_attestations: impl IntoIterator<Item = ValidAttestation<P>>,
     ) -> Result<Option<ChainLink<P>>> {
-        let differences = self.attestation_balance_differences(valid_attestations)?;
+        let (differences_empty, differences_full) = self.attestation_balance_differences(valid_attestations)?;
 
         let old_head_segment_id = self.head_segment_id;
         let old_head = self.head().clone();
 
-        self.apply_balance_differences(differences)?;
+        self.apply_balance_differences(differences_empty)?;
+        self.apply_balance_differences(differences_full)?;
         self.update_head_segment_id();
 
         self.reorganized(old_head_segment_id)
@@ -3567,8 +3578,9 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
     fn attestation_balance_differences(
         &mut self,
         valid_attestations: impl IntoIterator<Item = ValidAttestation<P>>,
-    ) -> Result<HashedMap<H256, Difference>> {
-        let mut differences = Self::difference_map();
+    ) -> Result<(HashedMap<H256, Difference>, HashedMap<ExecutionBlockHash, Difference>)> {
+        let mut differences_empty: HashedMap<H256, Difference> = Self::difference_map();
+        let mut differences_full: HashedMap<ExecutionBlockHash, Difference> = Self::difference_map();
 
         // > Update latest messages for attesting indices
         for valid_attestation in valid_attestations {
@@ -3623,7 +3635,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
                     let LatestMessage {
                         slot: old_slot,
                         beacon_block_root: old_beacon_block_root,
-                        payload_present: _,
+                        payload_present: old_payload_present,
                     } = **old_message;
 
                     if slot <= old_slot {
@@ -3634,16 +3646,38 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
                         continue;
                     }
 
-                    differences
-                        .entry(old_beacon_block_root)
-                        .or_default()
-                        .sub_assign(balance);
+                    if old_payload_present {
+                        // Full variant: convert beacon_block_root → payload_hash
+                        if let Some(payload_hash) = self.payload_hash_for_root(old_beacon_block_root) {
+                            differences_full
+                                .entry(payload_hash)
+                                .or_default()
+                                .sub_assign(balance);
+                        }
+                    } else {
+                        // Empty variant: use beacon_block_root directly
+                        differences_empty
+                            .entry(old_beacon_block_root)
+                            .or_default()
+                            .sub_assign(balance);
+                    }
                 }
 
-                differences
-                    .entry(beacon_block_root)
-                    .or_default()
-                    .add_assign(balance);
+                if payload_present {
+                    // Full variant: convert beacon_block_root → payload_hash
+                    if let Some(payload_hash) = self.payload_hash_for_root(beacon_block_root) {
+                        differences_full
+                            .entry(payload_hash)
+                            .or_default()
+                            .add_assign(balance);
+                    }
+                } else {
+                    // Empty variant: use beacon_block_root directly
+                    differences_empty
+                        .entry(beacon_block_root)
+                        .or_default()
+                        .add_assign(balance);
+                }
 
                 // Note that we mutate `Store.latest_messages` as we go along.
                 // This prevents duplicate attestations from being counted more than once.
@@ -3653,7 +3687,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
             }
         }
 
-        Ok(differences)
+        Ok((differences_empty, differences_full))
     }
 
     fn apply_balance_differences(
