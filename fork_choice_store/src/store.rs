@@ -577,19 +577,8 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
     }
 
     /// ePBS: Get parent payload status for fork choice (fc_gloas.md:219-224).
-    ///
-    /// Returns the fork choice payload status of the parent block:
-    /// - FULL: Current block builds on parent's full variant (payload present)
-    /// - EMPTY: Current block builds on parent's empty variant (no payload)
-    ///
-    /// Spec:
-    /// ```python
-    /// def get_parent_payload_status(store: Store, block: BeaconBlock) -> PayloadStatus:
-    ///     parent = store.blocks[block.parent_root]
-    ///     parent_block_hash = block.body.signed_execution_payload_bid.message.parent_block_hash
-    ///     message_block_hash = parent.body.signed_execution_payload_bid.message.block_hash
-    ///     return PAYLOAD_STATUS_FULL if parent_block_hash == message_block_hash else PAYLOAD_STATUS_EMPTY
-    /// ```
+    /// FULL if current bid's parent_block_hash matches parent bid's block_hash.
+    /// EMPTY otherwise (child builds on parent's empty variant).
     #[must_use]
     fn get_parent_payload_status(&self, block_root: H256) -> ForkChoicePayloadStatus {
         let Some(current) = self.chain_link(block_root) else {
@@ -632,22 +621,9 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         self.get_parent_payload_status(block_root).is_full()
     }
 
-    /// ePBS: Check if execution payload for beacon block was timely (fc_gloas.md:200-213).
-    ///
-    /// Returns true if:
-    /// 1. Payload is locally available (in execution_payload_states)
-    /// 2. PTC voted it as present (> PAYLOAD_TIMELY_THRESHOLD votes)
-    ///
-    /// Spec:
-    /// ```python
-    /// def is_payload_timely(store: Store, root: Root) -> bool:
-    ///     assert root in store.ptc_vote
-    ///     if root not in store.execution_payload_states:
-    ///         return False
-    ///     return sum(store.ptc_vote[root]) > PAYLOAD_TIMELY_THRESHOLD
-    /// ```
-    ///
-    /// PAYLOAD_TIMELY_THRESHOLD = PTC_SIZE // 2 = 512 // 2 = 256
+    /// ePBS: Check if payload was timely (fc_gloas.md:200-213).
+    /// True if locally available AND PTC votes > THRESHOLD (256).
+    /// PAYLOAD_TIMELY_THRESHOLD = PTC_SIZE // 2 = 512 // 2 = 256.
     #[must_use]
     fn is_payload_timely(&self, block_root: H256) -> bool {
         // Check if we have PTC votes for this block
@@ -677,31 +653,9 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         vote_count > threshold
     }
 
-    /// ePBS: Check if attestation vote supports a specific fork choice node variant (fc_gloas.md:275-296).
-    ///
-    /// Returns true if the vote for `message.root` (with `message.payload_present`) supports
-    /// the chain containing `node_root` with `node_payload_status`.
-    ///
-    /// Spec:
-    /// ```python
-    /// def is_supporting_vote(store: Store, node: ForkChoiceNode, message: LatestMessage) -> bool:
-    ///     block = store.blocks[node.root]
-    ///     if node.root == message.root:
-    ///         if node.payload_status == PAYLOAD_STATUS_PENDING:
-    ///             return True
-    ///         if message.slot <= block.slot:
-    ///             return False
-    ///         if message.payload_present:
-    ///             return node.payload_status == PAYLOAD_STATUS_FULL
-    ///         else:
-    ///             return node.payload_status == PAYLOAD_STATUS_EMPTY
-    ///     else:
-    ///         ancestor = get_ancestor(store, message.root, block.slot)
-    ///         return node.root == ancestor.root and (
-    ///             node.payload_status == PAYLOAD_STATUS_PENDING
-    ///             or node.payload_status == ancestor.payload_status
-    ///         )
-    /// ```
+    /// ePBS: Check if vote supports node variant (fc_gloas.md:275-296).
+    /// Direct vote: payload_present must match node status (FULL/EMPTY).
+    /// Ancestor vote: node status must match ancestor status (or PENDING).
     #[must_use]
     fn is_supporting_vote(
         &self,
@@ -749,6 +703,114 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
             ancestor_root == node_root
                 && (node_payload_status.is_pending()
                     || node_payload_status == ancestor_status)
+        }
+    }
+
+    /// ePBS: Decides if payload from previous slot should be extended (fc_gloas.md:308-316).
+    /// Used as tiebreaker between EMPTY/FULL variants from previous slot.
+    /// TRUE if timely, no boost, boost conflicts, or boost extends payload.
+    #[must_use]
+    fn should_extend_payload(&self, block_root: H256) -> bool {
+        // Condition 1: Payload was timely (PTC voted for it)
+        if self.is_payload_timely(block_root) {
+            return true;
+        }
+
+        let proposer_root = self.proposer_boost_root;
+
+        // Condition 2: No proposer boost set
+        if proposer_root == H256::zero() {
+            return true;
+        }
+
+        // Get proposer boost block
+        let Some(proposer_block) = self.chain_link(proposer_root) else {
+            return true; // Can't verify, default to extend
+        };
+
+        let proposer_parent = proposer_block.block.message().parent_root();
+
+        // Condition 3: Proposer boost does not build on this block
+        if proposer_parent != block_root {
+            return true;
+        }
+
+        // Condition 4: Proposer boost builds on FULL variant
+        self.is_parent_node_full(proposer_root)
+    }
+
+    /// ePBS: Tiebreaker for head selection between variants (fc_gloas.md:321-333).
+    /// Only applies to previous slot blocks. Priority: FULL (timely) > EMPTY > FULL (late).
+    /// Returns: 0 (lowest), 1 (middle), 2 (highest).
+    #[must_use]
+    fn get_payload_status_tiebreaker(
+        &self,
+        block_root: H256,
+        payload_status: ForkChoicePayloadStatus,
+    ) -> u8 {
+        // Not from previous slot or PENDING: return status as-is
+        let Some(block) = self.chain_link(block_root) else {
+            return payload_status as u8;
+        };
+
+        let block_slot = block.block.message().slot();
+        let current_slot = self.slot();
+
+        // Only apply tiebreaker to blocks from previous slot
+        if payload_status.is_pending() || block_slot + 1 != current_slot {
+            return payload_status as u8;
+        }
+
+        // Deciding on previous slot payload: EMPTY vs FULL
+        match payload_status {
+            ForkChoicePayloadStatus::Empty => 1, // Middle priority
+            ForkChoicePayloadStatus::Full => {
+                // High priority if timely, low priority if late
+                if self.should_extend_payload(block_root) {
+                    2 // Highest priority
+                } else {
+                    0 // Lowest priority
+                }
+            }
+            ForkChoicePayloadStatus::Pending => unreachable!(), // Already checked above
+        }
+    }
+
+    /// ePBS: Extract PTC votes from block's payload_attestations (fc_gloas.md:139-197).
+    /// Populates ptc_vote map used by is_payload_timely().
+    /// Called during on_block().
+    fn notify_ptc_messages(&mut self, block: &SignedBeaconBlock<P>) {
+        let block_root = block.message().hash_tree_root();
+
+        // Initialize empty BitVector for current block
+        self.ptc_vote
+            .entry(block_root)
+            .or_insert_with(BitVector::default);
+
+        // Only process Gloas blocks (pre-Gloas has no payload_attestations)
+        let Some(gloas_body) = block.message().body().post_gloas() else {
+            return;
+        };
+
+        // Process each payload attestation
+        for payload_attestation in gloas_body.payload_attestations() {
+            let attested_root = payload_attestation.data.beacon_block_root;
+
+            // Get or create BitVector for attested block
+            let ptc_votes = self
+                .ptc_vote
+                .entry(attested_root)
+                .or_insert_with(BitVector::default);
+
+            // Aggregate votes: OR the aggregation_bits
+            let aggregation_bits = &payload_attestation.aggregation_bits;
+
+            // Iterate and set bits
+            for (index, bit) in aggregation_bits.into_iter().enumerate() {
+                if bit {
+                    ptc_votes.set(index, true);
+                }
+            }
         }
     }
 
@@ -1215,17 +1277,9 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
     /// This should never return `None` in normal operation, but the reasons for that are slightly
     /// different at each call site, so we call `Option::expect` every time we use this instead of
     /// changing the type.
-    /// ePBS: Modified to return (root, payload_status) tuple (fc_gloas.md:239-257).
-    ///
-    /// Spec:
-    /// ```python
-    /// def get_ancestor(store: Store, root: Root, slot: Slot) -> ForkChoiceNode:
-    ///     block = store.blocks[root]
-    ///     if block.slot <= slot:
-    ///         return ForkChoiceNode(root=root, payload_status=PAYLOAD_STATUS_PENDING)
-    ///     # ... find parent at slot ...
-    ///     return ForkChoiceNode(root=parent_root, payload_status=get_parent_payload_status(...))
-    /// ```
+    /// ePBS: Returns (root, payload_status) tuple (fc_gloas.md:239-257).
+    /// If descendant.slot <= ancestor_slot: PENDING.
+    /// Otherwise: get_parent_payload_status(descendant) for ancestor status.
     fn ancestor(&self, descendant_root: H256, ancestor_slot: Slot) -> Option<(H256, ForkChoicePayloadStatus)> {
         // Get descendant block to check its slot
         let descendant_chain_link = self.chain_link(descendant_root)?;
@@ -2984,6 +3038,9 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         };
 
         log_imported_block_info();
+
+        // ePBS: Extract PTC votes from payload_attestations
+        self.notify_ptc_messages(chain_link.block.as_ref());
 
         self.insert_block(chain_link)?;
 
