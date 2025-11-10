@@ -3,7 +3,7 @@ use core::{
     fmt::{Formatter, Result as FmtResult},
     num::NonZeroUsize,
 };
-use std::sync::Arc;
+use std::sync::{atomic::AtomicU64, Arc};
 
 use anyhow::{Error as AnyhowError, Result};
 use derivative::Derivative;
@@ -101,10 +101,10 @@ impl<P: Preset> ChainLink<P> {
 }
 
 /// Shared data between empty and full variants of same beacon block (ePBS).
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct SharedBlockData {
     pub payload_hash: Option<ExecutionBlockHash>,
-    pub total_weight: Cell<Gwei>,
+    pub total_weight: AtomicU64,
 }
 
 impl SharedBlockData {
@@ -112,23 +112,21 @@ impl SharedBlockData {
     pub const fn new(payload_hash: Option<ExecutionBlockHash>) -> Self {
         Self {
             payload_hash,
-            total_weight: Cell::new(0),
+            total_weight: AtomicU64::new(0),
         }
     }
 
     #[must_use]
     pub fn weight(&self) -> Gwei {
-        self.total_weight.get()
+        self.total_weight.load(std::sync::atomic::Ordering::Relaxed)
     }
 
     pub fn add_weight(&self, delta: Gwei) {
-        let current = self.total_weight.get();
-        self.total_weight.set(current.saturating_add(delta));
+        self.total_weight.fetch_add(delta, std::sync::atomic::Ordering::Relaxed);
     }
 
     pub fn sub_weight(&self, delta: Gwei) {
-        let current = self.total_weight.get();
-        self.total_weight.set(current.saturating_sub(delta));
+        self.total_weight.fetch_sub(delta, std::sync::atomic::Ordering::Relaxed);
     }
 }
 

@@ -2683,8 +2683,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         let current_slot_attestations = core::mem::take(&mut self.current_slot_attestations);
         let (differences_empty, differences_full) = self.attestation_balance_differences(current_slot_attestations)?;
 
-        self.apply_balance_differences(differences_empty)?;
-        self.apply_balance_differences_full(differences_full)?;
+        self.apply_balance_differences(differences_empty, differences_full)?;
         self.update_head_segment_id();
 
         // Pruning the state cache requires the head slot, which depends on head_segment_id
@@ -2903,8 +2902,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         let old_head_segment_id = self.head_segment_id;
         let old_head = self.head().clone();
 
-        self.apply_balance_differences(differences_empty)?;
-        self.apply_balance_differences_full(differences_full)?;
+        self.apply_balance_differences(differences_empty, differences_full)?;
         self.update_head_segment_id();
 
         self.reorganized(old_head_segment_id)
@@ -2940,7 +2938,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         let old_head_segment_id = self.head_segment_id;
         let old_head = self.head().clone();
 
-        self.apply_balance_differences(differences)?;
+        self.apply_balance_differences(differences, std::iter::empty())?;
         self.update_head_segment_id();
 
         self.reorganized(old_head_segment_id)
@@ -3479,7 +3477,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
                 .expect("the combined balances of the planned validators fit in i64");
         }
 
-        self.apply_balance_differences(differences)
+        self.apply_balance_differences(differences, std::iter::empty())
     }
 
     // `Vector` has no `resize` method as of `im` version 15.1.0.
@@ -3690,36 +3688,13 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         Ok((differences_empty, differences_full))
     }
 
-    /// ePBS: Apply balance differences for full variants (keyed by ExecutionBlockHash).
-    /// Converts payload_hash → beacon_block_root before delegating to apply_balance_differences.
-    fn apply_balance_differences_full(
-        &mut self,
-        differences: impl IntoIterator<Item = (ExecutionBlockHash, Difference)>,
-    ) -> Result<()> {
-        // Convert ExecutionBlockHash → H256 (beacon_block_root) for apply_balance_differences
-        let converted_differences = differences
-            .into_iter()
-            .filter_map(|(payload_hash, difference)| {
-                // Look up beacon_block_root from payload_hash
-                let location = self.unfinalized_locations_full.get(&payload_hash)?;
-                let block_root = self.unfinalized[&location.segment_id][location.position]
-                    .chain_link
-                    .block_root;
-                Some((block_root, difference))
-            });
-
-        self.apply_balance_differences(converted_differences)
-    }
-
     fn apply_balance_differences(
         &mut self,
-        differences: impl IntoIterator<Item = (H256, Difference)>,
+        differences_empty: impl IntoIterator<Item = (H256, Difference)>,
+        differences_full: impl IntoIterator<Item = (ExecutionBlockHash, Difference)>,
     ) -> Result<()> {
-        // This could be parallelized by making `Store::propagate_and_dissolve_differences` return
-        // an `Ordmap<SegmentId, DissolvedDifference>`, but it would almost certainly not be worth
-        // the overhead.
         for (segment_id, group) in &self
-            .propagate_and_dissolve_differences(differences)?
+            .propagate_and_dissolve_differences(differences_empty, differences_full)?
             .into_iter()
             .chunk_by(|dissolved_difference| dissolved_difference.segment_id)
         {
@@ -3765,26 +3740,42 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         Ok(())
     }
 
-    // This could be rewritten to return an `Iterator` instead of a `Vec`,
-    // but the cost of using a `Vec` is probably negligible.
+    // ePBS: Propagate balance differences for both empty and full variants.
+    // Converts map keys to Locations using direct lookups, then processes segment tree.
     fn propagate_and_dissolve_differences(
         &self,
-        differences: impl IntoIterator<Item = (H256, Difference)>,
+        differences_empty: impl IntoIterator<Item = (H256, Difference)>,
+        differences_full: impl IntoIterator<Item = (ExecutionBlockHash, Difference)>,
     ) -> Result<Vec<DissolvedDifference>> {
-        let mut difference_queue = differences
-            .into_iter()
-            .filter(|(_, difference)| *difference != 0)
-            .filter_map(|(block_root, difference)| {
-                // `block_root` may refer to a finalized block.
-                // Changes to balances of finalized blocks are irrelevant.
-                let location = self.get_location(block_root)?;
+        let mut difference_queue = BinaryHeap::new();
 
-                Some(DifferenceAtLocation {
+        // Convert empty map: H256 → Location (direct lookup in unfinalized_locations_empty)
+        for (block_root, difference) in differences_empty {
+            if difference == 0 {
+                continue;
+            }
+            // Direct lookup - no preference like get_location()
+            if let Some(&location) = self.unfinalized_locations_empty.get(&block_root) {
+                difference_queue.push(DifferenceAtLocation {
                     difference,
                     location,
-                })
-            })
-            .collect::<BinaryHeap<_>>();
+                });
+            }
+        }
+
+        // Convert full map: ExecutionBlockHash → Location (direct lookup in unfinalized_locations_full)
+        for (payload_hash, difference) in differences_full {
+            if difference == 0 {
+                continue;
+            }
+            // Direct lookup - no preference like get_location()
+            if let Some(&location) = self.unfinalized_locations_full.get(&payload_hash) {
+                difference_queue.push(DifferenceAtLocation {
+                    difference,
+                    location,
+                });
+            }
+        }
 
         let mut propagated_and_dissolved_differences = vec![];
 
