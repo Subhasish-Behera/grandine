@@ -3,7 +3,7 @@ use core::{
     fmt::{Formatter, Result as FmtResult},
     num::NonZeroUsize,
 };
-use std::sync::{atomic::AtomicU64, Arc};
+use std::sync::Arc;
 
 use anyhow::{Error as AnyhowError, Result};
 use derivative::Derivative;
@@ -100,36 +100,6 @@ impl<P: Preset> ChainLink<P> {
     }
 }
 
-/// Shared data between empty and full variants of same beacon block (ePBS).
-#[derive(Debug)]
-pub struct SharedBlockData {
-    pub payload_hash: Option<ExecutionBlockHash>,
-    pub total_weight: AtomicU64,
-}
-
-impl SharedBlockData {
-    #[must_use]
-    pub const fn new(payload_hash: Option<ExecutionBlockHash>) -> Self {
-        Self {
-            payload_hash,
-            total_weight: AtomicU64::new(0),
-        }
-    }
-
-    #[must_use]
-    pub fn weight(&self) -> Gwei {
-        self.total_weight.load(std::sync::atomic::Ordering::Relaxed)
-    }
-
-    pub fn add_weight(&self, delta: Gwei) {
-        self.total_weight.fetch_add(delta, std::sync::atomic::Ordering::Relaxed);
-    }
-
-    pub fn sub_weight(&self, delta: Gwei) {
-        self.total_weight.fetch_sub(delta, std::sync::atomic::Ordering::Relaxed);
-    }
-}
-
 impl<P: Preset> ChainLink<P> {
     /// Get execution payload state (post-execution).
     ///
@@ -167,7 +137,6 @@ pub enum PayloadAction {
 pub struct UnfinalizedBlock<P: Preset> {
     pub chain_link: ChainLink<P>,
     pub attesting_balance: Gwei,
-    pub shared_data: Option<Arc<SharedBlockData>>,
 }
 
 impl<P: Preset> UnfinalizedBlock<P> {
@@ -176,7 +145,6 @@ impl<P: Preset> UnfinalizedBlock<P> {
         Self {
             chain_link,
             attesting_balance: 0,
-            shared_data: None,
         }
     }
 
