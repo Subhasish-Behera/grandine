@@ -29,7 +29,7 @@ use itertools::{izip, Either, EitherOrBoth, Itertools as _};
 use log::{debug, error, warn};
 use prometheus_metrics::Metrics;
 use pubkey_cache::PubkeyCache;
-use ssz::{ContiguousList, SszHash as _};
+use ssz::{BitVector, ContiguousList, SszHash as _};
 use std_ext::ArcExt as _;
 use tap::Pipe as _;
 use transition_functions::{
@@ -74,9 +74,9 @@ use crate::{
         BlobSidecarAction, BlobSidecarOrigin, BlockAction, BranchPoint, ChainLink,
         DataAvailabilityPolicy, DataColumnSidecarAction, DataColumnSidecarOrigin, Difference,
         DifferenceAtLocation, DissolvedDifference, ExecutionPayloadEnvelopeAction,
-        ExecutionPayloadEnvelopeOrigin, LatestMessage, Location, PartialAttestationAction,
-        PartialBlockAction, PayloadAction, PayloadAttestationAction, PayloadAttestationItem,
-        PayloadAttestationValidationError, Score, SegmentId, Storage,
+        ExecutionPayloadEnvelopeOrigin, ForkChoicePayloadStatus, LatestMessage, Location,
+        PartialAttestationAction, PartialBlockAction, PayloadAction, PayloadAttestationAction,
+        PayloadAttestationItem, PayloadAttestationValidationError, Score, SegmentId, Storage,
         UnfinalizedBlock, ValidAttestation,
     },
     segment::{Position, Segment},
@@ -224,7 +224,9 @@ pub struct Store<P: Preset, S: Storage<P>> {
     // - Full variants (beacon block + execution payload): keyed by payload_hash
     unfinalized_locations_empty: HashMap<H256, Location>,
     unfinalized_locations_full: HashMap<ExecutionBlockHash, Location>,
-
+    // ePBS: Tracks PTC (Payload Timeliness Committee) votes for each block root.
+    // Used to determine if payload arrived on time (fc_gloas.md:200-213).
+    ptc_vote: HashMap<H256, BitVector<P::PtcSize>>,
     execution_payload_locations: HashMap<ExecutionBlockHash, Location>,
     aggregate_and_proof_supersets: Arc<AggregateAndProofSupersets<P>>,
     accepted_blob_sidecars:
@@ -320,6 +322,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
             current_slot_attestations: vector![],
             unfinalized_locations_empty: hashmap! {},
             unfinalized_locations_full: hashmap! {},
+            ptc_vote: HashMap::default(),
             execution_payload_locations: hashmap! {},
             aggregate_and_proof_supersets: Arc::new(AggregateAndProofSupersets::new()),
             accepted_blob_sidecars: HashMap::default(),
@@ -573,47 +576,180 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         None
     }
 
-    /// ePBS: Check if parent node has execution payload processed (is full variant).
+    /// ePBS: Get parent payload status for fork choice (fc_gloas.md:219-224).
     ///
-    /// Spec pattern (fork-choice.md:219-224, 229-231):
+    /// Returns the fork choice payload status of the parent block:
+    /// - FULL: Current block builds on parent's full variant (payload present)
+    /// - EMPTY: Current block builds on parent's empty variant (no payload)
+    ///
+    /// Spec:
     /// ```python
     /// def get_parent_payload_status(store: Store, block: BeaconBlock) -> PayloadStatus:
     ///     parent = store.blocks[block.parent_root]
     ///     parent_block_hash = block.body.signed_execution_payload_bid.message.parent_block_hash
     ///     message_block_hash = parent.body.signed_execution_payload_bid.message.block_hash
     ///     return PAYLOAD_STATUS_FULL if parent_block_hash == message_block_hash else PAYLOAD_STATUS_EMPTY
-    ///
-    /// def is_parent_node_full(store: Store, block: BeaconBlock) -> bool:
-    ///     return get_parent_payload_status(store, block) == PAYLOAD_STATUS_FULL
     /// ```
-    ///
-    /// Note: Spec's PayloadStatus (PENDING/EMPTY/FULL) is different from our existing
-    /// PayloadStatus enum (Valid/Invalid/Optimistic). We use direct comparison.
-    ///
-    /// Returns false if either block is pre-Gloas or doesn't exist.
     #[must_use]
-    fn is_parent_node_full(&self, block_root: H256) -> bool {
+    fn get_parent_payload_status(&self, block_root: H256) -> ForkChoicePayloadStatus {
         let Some(current) = self.chain_link(block_root) else {
-            return false;
+            return ForkChoicePayloadStatus::Empty;
+        };
+
+        let Some(current_gloas_body) = current.block.message().body().post_gloas() else {
+            return ForkChoicePayloadStatus::Empty; // Pre-Gloas
         };
 
         let parent_root = current.block.message().parent_root();
         let Some(parent) = self.chain_link(parent_root) else {
-            return false;
+            return ForkChoicePayloadStatus::Empty;
         };
 
         let Some(parent_gloas_body) = parent.block.message().body().post_gloas() else {
-            return false; // Pre-Gloas parent
+            return ForkChoicePayloadStatus::Empty; // Pre-Gloas parent
         };
-        let parent_bid = &parent_gloas_body.signed_execution_payload_bid().message;
 
-        let Some(current_gloas_body) = current.block.message().body().post_gloas() else {
-            return false; // Pre-Gloas current block
-        };
+        let parent_bid = &parent_gloas_body.signed_execution_payload_bid().message;
         let current_bid = &current_gloas_body.signed_execution_payload_bid().message;
 
         // Parent is full if current bid's parent_block_hash matches parent bid's block_hash
-        current_bid.parent_block_hash == parent_bid.block_hash
+        if current_bid.parent_block_hash == parent_bid.block_hash {
+            ForkChoicePayloadStatus::Full
+        } else {
+            ForkChoicePayloadStatus::Empty
+        }
+    }
+
+    /// ePBS: Check if parent node has execution payload processed (is full variant).
+    ///
+    /// Spec (fc_gloas.md:229-231):
+    /// ```python
+    /// def is_parent_node_full(store: Store, block: BeaconBlock) -> bool:
+    ///     return get_parent_payload_status(store, block) == PAYLOAD_STATUS_FULL
+    /// ```
+    #[must_use]
+    fn is_parent_node_full(&self, block_root: H256) -> bool {
+        self.get_parent_payload_status(block_root).is_full()
+    }
+
+    /// ePBS: Check if execution payload for beacon block was timely (fc_gloas.md:200-213).
+    ///
+    /// Returns true if:
+    /// 1. Payload is locally available (in execution_payload_states)
+    /// 2. PTC voted it as present (> PAYLOAD_TIMELY_THRESHOLD votes)
+    ///
+    /// Spec:
+    /// ```python
+    /// def is_payload_timely(store: Store, root: Root) -> bool:
+    ///     assert root in store.ptc_vote
+    ///     if root not in store.execution_payload_states:
+    ///         return False
+    ///     return sum(store.ptc_vote[root]) > PAYLOAD_TIMELY_THRESHOLD
+    /// ```
+    ///
+    /// PAYLOAD_TIMELY_THRESHOLD = PTC_SIZE // 2 = 512 // 2 = 256
+    #[must_use]
+    fn is_payload_timely(&self, block_root: H256) -> bool {
+        // Check if we have PTC votes for this block
+        let Some(ptc_votes) = self.ptc_vote.get(&block_root) else {
+            return false;
+        };
+
+        // Check if payload is locally available (has full variant with execution state)
+        let has_execution_state = self
+            .get_location(block_root)
+            .and_then(|location| {
+                self.unfinalized
+                    .get(&location.segment_id)
+                    .map(|segment| &segment[location.position])
+            })
+            .and_then(|block| block.chain_link.execution_payload_state.as_ref())
+            .is_some();
+
+        if !has_execution_state {
+            return false;
+        }
+
+        // Count PTC votes (PAYLOAD_TIMELY_THRESHOLD = PTC_SIZE / 2 = 256)
+        let vote_count = ptc_votes.count_ones();
+        let threshold = P::PtcSize::USIZE / 2;
+
+        vote_count > threshold
+    }
+
+    /// ePBS: Check if attestation vote supports a specific fork choice node variant (fc_gloas.md:275-296).
+    ///
+    /// Returns true if the vote for `message.root` (with `message.payload_present`) supports
+    /// the chain containing `node_root` with `node_payload_status`.
+    ///
+    /// Spec:
+    /// ```python
+    /// def is_supporting_vote(store: Store, node: ForkChoiceNode, message: LatestMessage) -> bool:
+    ///     block = store.blocks[node.root]
+    ///     if node.root == message.root:
+    ///         if node.payload_status == PAYLOAD_STATUS_PENDING:
+    ///             return True
+    ///         if message.slot <= block.slot:
+    ///             return False
+    ///         if message.payload_present:
+    ///             return node.payload_status == PAYLOAD_STATUS_FULL
+    ///         else:
+    ///             return node.payload_status == PAYLOAD_STATUS_EMPTY
+    ///     else:
+    ///         ancestor = get_ancestor(store, message.root, block.slot)
+    ///         return node.root == ancestor.root and (
+    ///             node.payload_status == PAYLOAD_STATUS_PENDING
+    ///             or node.payload_status == ancestor.payload_status
+    ///         )
+    /// ```
+    #[must_use]
+    fn is_supporting_vote(
+        &self,
+        node_root: H256,
+        node_payload_status: ForkChoicePayloadStatus,
+        message: &LatestMessage,
+    ) -> bool {
+        // Direct vote: message votes for the node directly
+        if node_root == message.beacon_block_root {
+            // PENDING nodes accept all votes
+            if node_payload_status.is_pending() {
+                return true;
+            }
+
+            // Get node block to check slot
+            let Some(node_block) = self.chain_link(node_root) else {
+                return false;
+            };
+            let node_slot = node_block.block.message().slot();
+
+            // Votes from same slot or earlier don't count (must be from later slot)
+            if message.slot <= node_slot {
+                return false;
+            }
+
+            // Check if vote's payload_present matches node's status
+            if message.payload_present {
+                node_payload_status.is_full()
+            } else {
+                node_payload_status.is_empty()
+            }
+        } else {
+            // Ancestor vote: message votes for an ancestor of the node
+            let Some(node_block) = self.chain_link(node_root) else {
+                return false;
+            };
+            let node_slot = node_block.block.message().slot();
+
+            // Get ancestor at node's slot
+            let Some((ancestor_root, ancestor_status)) = self.ancestor(message.beacon_block_root, node_slot) else {
+                return false;
+            };
+
+            // Check if ancestor matches node root and payload status matches
+            ancestor_root == node_root
+                && (node_payload_status.is_pending()
+                    || node_payload_status == ancestor_status)
+        }
     }
 
     #[must_use]
@@ -912,6 +1048,31 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         self.get_location(parent_root)
     }
 
+    /// ePBS: Get parent location for variant-aware weight propagation.
+    /// Empty votes propagate through empty ancestors only.
+    /// Full votes propagate through full ancestors (preferred) or empty ancestors.
+    fn parent_location_for_variant(
+        &self,
+        segment: &Segment<P>,
+        is_full_variant: bool,
+    ) -> Option<Location> {
+        let parent_root = segment
+            .first_block()
+            .chain_link
+            .block
+            .message()
+            .parent_root();
+
+        if is_full_variant {
+            // Full votes: prefer full parent, fall back to empty
+            // (spec allows full vote to support empty ancestor when payload_status is PENDING)
+            self.get_location(parent_root)
+        } else {
+            // Empty votes: ONLY use empty parent (direct lookup, no preference)
+            self.unfinalized_locations_empty.get(&parent_root).copied()
+        }
+    }
+
     // Finality of a block or state can be determined by comparing its slot with the finalized slot.
     // That should be correct because our implementation prunes orphans as soon as possible.
     #[must_use]
@@ -965,7 +1126,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
                 break 'block true;
             }
 
-            let ancestor_at_finalized_slot = self
+            let (ancestor_root, _payload_status) = self
                 .ancestor(
                     unfinalized_block.chain_link.block_root,
                     self.finalized_slot(),
@@ -974,7 +1135,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
                     "every block in the store should have an ancestor at the last finalized slot",
                 );
 
-            ancestor_at_finalized_slot == self.finalized_checkpoint.root
+            ancestor_root == self.finalized_checkpoint.root
         };
 
         correct_justified && correct_finalized
@@ -1024,6 +1185,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
             && self
                 .ancestor(self.proposer_boost_root, unfinalized_block.slot())
                 .expect("every unfinalized block has an ancestor at every unfinalized slot")
+                .0  // Extract root from tuple
                 == unfinalized_block.chain_link.block_root;
 
         let proposer_score = if ancestor_of_boosted_block {
@@ -1053,7 +1215,28 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
     /// This should never return `None` in normal operation, but the reasons for that are slightly
     /// different at each call site, so we call `Option::expect` every time we use this instead of
     /// changing the type.
-    fn ancestor(&self, descendant_root: H256, ancestor_slot: Slot) -> Option<H256> {
+    /// ePBS: Modified to return (root, payload_status) tuple (fc_gloas.md:239-257).
+    ///
+    /// Spec:
+    /// ```python
+    /// def get_ancestor(store: Store, root: Root, slot: Slot) -> ForkChoiceNode:
+    ///     block = store.blocks[root]
+    ///     if block.slot <= slot:
+    ///         return ForkChoiceNode(root=root, payload_status=PAYLOAD_STATUS_PENDING)
+    ///     # ... find parent at slot ...
+    ///     return ForkChoiceNode(root=parent_root, payload_status=get_parent_payload_status(...))
+    /// ```
+    fn ancestor(&self, descendant_root: H256, ancestor_slot: Slot) -> Option<(H256, ForkChoicePayloadStatus)> {
+        // Get descendant block to check its slot
+        let descendant_chain_link = self.chain_link(descendant_root)?;
+        let descendant_slot = descendant_chain_link.block.message().slot();
+
+        // If requesting current block or future slot → PENDING
+        if descendant_slot <= ancestor_slot {
+            return Some((descendant_root, ForkChoicePayloadStatus::Pending));
+        }
+
+        // Find ancestor at the requested slot
         if let Some(location) = self.get_location(descendant_root) {
             let descendant_segment = &self.unfinalized[&location.segment_id];
 
@@ -1063,7 +1246,12 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
                 .map(|unfinalized_block| &unfinalized_block.chain_link)
                 .or_else(|| self.finalized_before_or_at(ancestor_slot))?;
 
-            return Some(chain_link.block_root);
+            let ancestor_root = chain_link.block_root;
+
+            // Determine payload status by checking if descendant builds on ancestor's full variant
+            let payload_status = self.get_parent_payload_status(descendant_root);
+
+            return Some((ancestor_root, payload_status));
         }
 
         assert!(
@@ -1071,8 +1259,13 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
             "Store::ancestor should only be called with roots of blocks known to be in the store",
         );
 
-        self.finalized_before_or_at(ancestor_slot)
-            .map(|chain_link| chain_link.block_root)
+        let chain_link = self.finalized_before_or_at(ancestor_slot)?;
+        let ancestor_root = chain_link.block_root;
+
+        // For finalized blocks, check payload status
+        let payload_status = self.get_parent_payload_status(descendant_root);
+
+        Some((ancestor_root, payload_status))
     }
 
     #[must_use]
@@ -1856,7 +2049,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
             },
         );
 
-        let ancestor_at_target_epoch_start = self
+        let (ancestor_root, _payload_status) = self
             .ancestor(beacon_block_root, Self::start_of_epoch(target.epoch))
             .expect(
                 "the validation for attestation.data.beacon_block_root above ensures \
@@ -1865,7 +2058,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
 
         // > LMD vote must be consistent with FFG vote target
         ensure!(
-            target.root == ancestor_at_target_epoch_start,
+            target.root == ancestor_root,
             Error::LmdGhostInconsistentWithFfgTarget {
                 attestation: attestation.clone_arc(),
             },
@@ -2105,14 +2298,14 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         if !origin.is_from_back_sync() {
             // [REJECT] The current finalized_checkpoint is an ancestor of the sidecar's block
             // -- i.e. get_checkpoint_block(store, block_header.parent_root, store.finalized_checkpoint.epoch) == store.finalized_checkpoint.root.
-            let ancestor_at_finalized_slot = self
+            let (ancestor_root, _payload_status) = self
                 .ancestor(block_header.parent_root, self.finalized_slot())
                 .expect(
                     "every block in the store should have an ancestor at the last finalized slot",
                 );
 
             ensure!(
-                ancestor_at_finalized_slot == self.finalized_checkpoint.root,
+                ancestor_root == self.finalized_checkpoint.root,
                 Error::BlobSidecarBlockNotADescendantOfFinalized { blob_sidecar },
             );
         }
@@ -2335,14 +2528,14 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         if !origin.is_from_back_sync() {
             // [REJECT] The current finalized_checkpoint is an ancestor of the sidecar's block
             // -- i.e. get_checkpoint_block(store, block_header.parent_root, store.finalized_checkpoint.epoch) == store.finalized_checkpoint.root.
-            let ancestor_at_finalized_slot = self
+            let (ancestor_root, _payload_status) = self
                 .ancestor(block_header.parent_root, self.finalized_slot())
                 .expect(
                     "every block in the store should have an ancestor at the last finalized slot",
                 );
 
             ensure!(
-                ancestor_at_finalized_slot == self.finalized_checkpoint.root,
+                ancestor_root == self.finalized_checkpoint.root,
                 Error::DataColumnSidecarBlockNotADescendantOfFinalized {
                     data_column_sidecar
                 },
@@ -3749,30 +3942,30 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
     ) -> Result<Vec<DissolvedDifference>> {
         let mut difference_queue = BinaryHeap::new();
 
-        // Convert empty map: H256 → Location (direct lookup in unfinalized_locations_empty)
+        // Convert empty map: H256 → Location (direct lookup, tag as empty variant)
         for (block_root, difference) in differences_empty {
             if difference == 0 {
                 continue;
             }
-            // Direct lookup - no preference like get_location()
             if let Some(&location) = self.unfinalized_locations_empty.get(&block_root) {
                 difference_queue.push(DifferenceAtLocation {
                     difference,
                     location,
+                    is_full_variant: false,
                 });
             }
         }
 
-        // Convert full map: ExecutionBlockHash → Location (direct lookup in unfinalized_locations_full)
+        // Convert full map: ExecutionBlockHash → Location (direct lookup, tag as full variant)
         for (payload_hash, difference) in differences_full {
             if difference == 0 {
                 continue;
             }
-            // Direct lookup - no preference like get_location()
             if let Some(&location) = self.unfinalized_locations_full.get(&payload_hash) {
                 difference_queue.push(DifferenceAtLocation {
                     difference,
                     location,
+                    is_full_variant: true,
                 });
             }
         }
@@ -3806,10 +3999,15 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
             if previous.difference != 0 {
                 propagated_and_dissolved_differences.push(previous.apply_from_start());
 
-                if let Some(parent) = self.parent_location(&self.unfinalized[&segment_id]) {
+                // Use variant-aware parent resolution
+                if let Some(parent) = self.parent_location_for_variant(
+                    &self.unfinalized[&segment_id],
+                    previous.is_full_variant,
+                ) {
                     difference_queue.push(DifferenceAtLocation {
                         difference: previous.difference,
                         location: parent,
+                        is_full_variant: previous.is_full_variant,
                     });
                 }
             }

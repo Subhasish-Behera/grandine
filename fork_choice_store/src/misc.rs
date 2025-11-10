@@ -1055,12 +1055,49 @@ pub type Difference = i64;
 /// [`consensus-specs` pull request #3250]: https://github.com/ethereum/consensus-specs/pull/3250
 pub type Score = (Gwei, H256);
 
+/// ePBS: Payload status for fork choice variant tracking (fc_gloas.md:60-62).
+/// Different from types::PayloadStatus which tracks EL validation (Valid/Invalid/Optimistic).
+///
+/// This enum represents the three fork choice states:
+/// - PENDING: Bid exists, payload envelope not yet arrived
+/// - EMPTY: No bid (empty block or pre-Gloas block)
+/// - FULL: Bid + payload envelope both present
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[repr(u8)]
+pub enum ForkChoicePayloadStatus {
+    /// Bid exists, payload not yet arrived (waiting for ExecutionPayloadEnvelope)
+    Pending = 0,
+    /// No bid (empty block or pre-Gloas block)
+    Empty = 1,
+    /// Bid + payload both present
+    Full = 2,
+}
+
+impl ForkChoicePayloadStatus {
+    #[must_use]
+    pub const fn is_pending(self) -> bool {
+        matches!(self, Self::Pending)
+    }
+
+    #[must_use]
+    pub const fn is_empty(self) -> bool {
+        matches!(self, Self::Empty)
+    }
+
+    #[must_use]
+    pub const fn is_full(self) -> bool {
+        matches!(self, Self::Full)
+    }
+}
+
 #[derive(Clone, Copy, Derivative)]
 #[derivative(PartialEq, Eq, PartialOrd, Ord)]
 pub struct DifferenceAtLocation {
     #[derivative(PartialEq = "ignore", PartialOrd = "ignore", Ord = "ignore")]
     pub difference: Difference,
     pub location: Location,
+    #[derivative(PartialEq = "ignore", PartialOrd = "ignore", Ord = "ignore")]
+    pub is_full_variant: bool,
 }
 
 impl DifferenceAtLocation {
