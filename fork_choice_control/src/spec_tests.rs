@@ -149,6 +149,9 @@ struct HeadCheck {
     ["consensus-spec-tests/tests/minimal/fulu/fork_choice/withholding/*/*"]           [fulu_minimal_withholding]           [Minimal] [Fulu];
     ["consensus-spec-tests/tests/mainnet/fulu/sync/*/*/*"]                            [fulu_sync_mainnet]                  [Mainnet] [Fulu];
     ["consensus-spec-tests/tests/minimal/fulu/sync/*/*/*"]                            [fulu_sync_minimal]                  [Minimal] [Fulu];
+    ["consensus-spec-tests/tests/mainnet/gloas/fork_choice/ex_ante/*/*"]              [gloas_mainnet_ex_ante]              [Mainnet] [Gloas];
+    ["consensus-spec-tests/tests/mainnet/gloas/fork_choice/get_head/*/*"]             [gloas_mainnet_get_head]             [Mainnet] [Gloas];
+    ["consensus-spec-tests/tests/mainnet/gloas/fork_choice/on_block/*/*"]             [gloas_mainnet_on_block]             [Mainnet] [Gloas];
 )]
 #[test_resources(glob)]
 fn function_name(case: Case) {

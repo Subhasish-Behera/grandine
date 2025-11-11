@@ -1103,6 +1103,8 @@ pub struct BranchPoint {
     pub best_descendant: SegmentId,
     #[derivative(PartialEq = "ignore", PartialOrd = "ignore", Ord = "ignore")]
     pub score: Score,
+    #[derivative(PartialEq = "ignore", PartialOrd = "ignore", Ord = "ignore")]
+    pub root: H256,  // ePBS: Block root for tiebreaker computation
 }
 
 /// [`LatestMessage`](https://github.com/ethereum/consensus-specs/blob/v1.3.0/specs/phase0/fork-choice.md#latestmessage)

@@ -3235,38 +3235,80 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
     /// Implements `on_execution_payload` from fork choice spec
     ///
     /// Spec: https://github.com/ethereum/consensus-specs/blob/master/specs/gloas/fork-choice.md#on_execution_payload
+    /// ePBS: Apply execution payload envelope to create full variant.
+    /// Called after validation passes. Processes execution payload and inserts via insert_payload().
     pub fn apply_execution_payload_envelope(
         &mut self,
         signed_envelope: Arc<SignedExecutionPayloadEnvelope<P>>,
+        execution_engine: impl ExecutionEngine<P>,
     ) -> Result<()> {
-        // TODO Phase 2: Add execution_engine parameter when implementing full state transition
         let envelope = &signed_envelope.message;
         let beacon_block_root = envelope.beacon_block_root;
+        let payload = &envelope.payload;
 
-        // TODO Phase 2: Implement full state transition
-        //
-        // Spec requirements (fc_gloas.md lines 573-593):
-        // 1. Get chain_link state for beacon_block_root
-        // 2. Check blob data availability: assert is_data_available(beacon_block_root)
-        // 3. Clone state to avoid mutability issues
-        // 4. Call gloas::process_execution_payload() for full validation + processing
-        // 5. Store updated state in execution_payload_states map
-        //
-        // This will call:
-        // - validate_execution_payload() (state consistency checks)
-        // - process_execution_payload_for_gossip() (timestamp, blob count)
-        // - execution_engine.notify_new_payload() (send to execution layer)
-        // - Update state with builder payments, etc.
+        // Get empty variant ChainLink (must already exist from block processing)
+        let empty_chain_link = self.chain_link(beacon_block_root)
+            .ok_or_else(|| anyhow::anyhow!(
+                "Empty variant not found for beacon_block_root {beacon_block_root:?}"
+            ))?;
+
+        // Verify this is actually an empty variant (no execution_payload_state yet)
+        if empty_chain_link.execution_payload_state.is_some() {
+            debug!(
+                "Full variant already exists for beacon_block_root {beacon_block_root:?}, ignoring duplicate"
+            );
+            return Ok(());
+        }
+
+        // Get block_state from empty variant
+        let block_state = empty_chain_link.state(self);
+
+        // TODO: Add data availability check when implemented
+        // Spec (fc_gloas.md:573-593): assert is_data_available(beacon_block_root)
+        // For now, we assume data is available if we got here
+
+        // Clone state for execution payload processing
+        let mut execution_state = block_state.clone_arc();
+
+        // Process execution payload (state transition)
+        // Spec (fc_gloas.md:573-593): process_execution_payload()
+        // This validates payload consistency, processes for gossip, notifies EL, updates state
+        if let BeaconState::Gloas(gloas_state) = execution_state.make_mut() {
+            transition_functions::gloas::execution_payload_processing::process_execution_payload(
+                &self.chain_config,
+                &self.pubkey_cache,
+                gloas_state,
+                beacon_block_root,
+                &signed_envelope,
+                execution_engine,
+                NullVerifier, // Signature already verified in validate_execution_payload_envelope
+            )?;
+        } else {
+            bail!("Execution payload envelope requires Gloas state");
+        }
+
+        // Create full variant ChainLink with execution_payload_state
+        let full_chain_link = ChainLink {
+            block_root: empty_chain_link.block_root,
+            block: empty_chain_link.block.clone_arc(),
+            block_state: empty_chain_link.block_state.clone(),
+            execution_payload_state: Some(execution_state),
+            current_justified_checkpoint: empty_chain_link.current_justified_checkpoint,
+            finalized_checkpoint: empty_chain_link.finalized_checkpoint,
+            unrealized_justified_checkpoint: empty_chain_link.unrealized_justified_checkpoint,
+            unrealized_finalized_checkpoint: empty_chain_link.unrealized_finalized_checkpoint,
+            payload_status: PayloadStatus::Valid,
+        };
+
+        // Insert full variant into fork choice tree
+        self.insert_payload(full_chain_link)?;
 
         debug!(
-            "apply_execution_payload_envelope stub called for beacon_block_root: {beacon_block_root:?}, \
-             slot: {}, builder_index: {}",
+            "Applied execution payload envelope for beacon_block_root: {beacon_block_root:?}, \
+             slot: {}, payload_hash: {:?}",
             envelope.slot,
-            envelope.builder_index
+            payload.block_hash
         );
-
-        // For Phase 1, just acknowledge receipt without full processing
-        // Phase 2 will implement the actual state transition
 
         Ok(())
     }
@@ -4101,19 +4143,40 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
 
                 let sibling = &segment[next_position_in_segment];
 
-                if self.score(sibling) < branch_point.score || sibling.is_invalid() {
+                // ePBS: Compare (score, tiebreaker, root) for proper variant selection
+                let sibling_score = self.score(sibling);
+
+                if sibling_score < branch_point.score || sibling.is_invalid() {
                     best_descendant_of_segment = Some(branch_point.best_descendant);
+                } else if sibling_score == branch_point.score {
+                    // Tie on score: use payload status tiebreaker
+                    // Priority: FULL (timely) > EMPTY > FULL (late)
+                    let sibling_root = sibling.chain_link.block_root;
+                    let sibling_status = self.get_parent_payload_status(sibling_root);
+                    let sibling_tiebreaker = self.get_payload_status_tiebreaker(sibling_root, sibling_status);
+
+                    let branch_status = self.get_parent_payload_status(branch_point.root);
+                    let branch_tiebreaker = self.get_payload_status_tiebreaker(branch_point.root, branch_status);
+
+                    // Compare (tiebreaker, root) - lower values lose
+                    if (sibling_tiebreaker, sibling_root) < (branch_tiebreaker, branch_point.root) {
+                        best_descendant_of_segment = Some(branch_point.best_descendant);
+                    }
+                    // else: sibling wins or equal (prefer sibling on exact tie)
                 }
             }
 
             if let Some(best_descendant) = best_descendant_of_segment {
-                let score = self.score(segment.first_block());
+                let first_block = segment.first_block();
+                let score = self.score(first_block);
+                let root = first_block.chain_link.block_root;
 
                 if let Some(parent) = self.parent_location(segment) {
                     branch_points.push(BranchPoint {
                         parent,
                         best_descendant,
                         score,
+                        root,
                     });
                     continue;
                 }
