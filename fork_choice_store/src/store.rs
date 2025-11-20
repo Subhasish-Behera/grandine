@@ -3943,6 +3943,15 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
                         continue;
                     }
 
+                    // [Gloas] Slot check per is_supporting_vote (fc_gloas.md:656)
+                    if payload_present {
+                        if let Some(voted_block) = self.chain_link(beacon_block_root) {
+                            if slot <= voted_block.block.message().slot() {
+                                continue; // Same-slot FULL votes invalid
+                            }
+                        }
+                    }
+
                     if old_payload_present {
                         // Full variant: use beacon_block_root directly (no conversion needed!)
                         differences_full
