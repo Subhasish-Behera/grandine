@@ -75,10 +75,11 @@ pub fn process_epoch(
     process_registry_updates(config, state, summaries.as_mut_slice())?;
     bellatrix::process_slashings::<_, ()>(state, summaries);
     unphased::process_eth1_data_reset(state);
-    // TODO(gloas): update `state` param to be compatible with GloasBeaconState
-    // electra::process_pending_deposits(config, pubkey_cache, state)?;
-    // electra::process_pending_consolidations(state)?;
-    // electra::process_effective_balance_updates(state);
+    process_pending_deposits(config, pubkey_cache, state)?;
+    process_pending_consolidations(state)?;
+    // [New in Gloas:EIP7732] - must come before process_effective_balance_updates
+    process_builder_pending_payments(config, state)?;
+    process_effective_balance_updates(state);
     unphased::process_slashings_reset(state);
     unphased::process_randao_mixes_reset(state);
 
@@ -88,12 +89,294 @@ pub fn process_epoch(
     altair::process_participation_flag_updates(state);
     altair::process_sync_committee_updates(pubkey_cache, state)?;
 
-    // TODO(gloas): update `state` param to be compatible with GloasBeaconState
-    // fulu::process_proposer_lookahead(config, state)?;
-
-    process_builder_pending_payments(config, state)?;
+    // Per spec line 696: Gloas calls process_proposer_lookahead from Fulu
+    process_proposer_lookahead(config, state)?;
 
     state.cache.advance_epoch();
+
+    Ok(())
+}
+
+// Gloas-specific implementations that work with PostGloasBeaconState
+// Per spec line 686: Gloas calls process_pending_deposits from Electra
+fn process_pending_deposits<P: Preset>(
+    config: &Config,
+    pubkey_cache: &PubkeyCache,
+    state: &mut impl PostGloasBeaconState<P>,
+) -> Result<()> {
+    use helper_functions::{
+        accessors::{self, get_activation_exit_churn_limit, get_current_epoch},
+        misc::compute_start_slot_at_epoch,
+    };
+    use types::phase0::consts::{FAR_FUTURE_EPOCH, GENESIS_SLOT};
+    use ssz::PersistentList;
+
+    let next_epoch = get_current_epoch(state) + 1;
+    let available_for_processing =
+        state.deposit_balance_to_consume() + get_activation_exit_churn_limit(config, state);
+
+    let mut processed_amount = 0;
+    let mut next_deposit_index: u64 = 0;
+    let mut deposits_to_postpone = vec![];
+    let mut is_churn_limit_reached = false;
+    let finalized_slot = compute_start_slot_at_epoch::<P>(state.finalized_checkpoint().epoch);
+
+    for deposit in &state.pending_deposits().clone() {
+        if deposit.slot > GENESIS_SLOT
+            && state.eth1_deposit_index() < state.deposit_requests_start_index()
+        {
+            break;
+        }
+
+        if deposit.slot > finalized_slot {
+            break;
+        }
+
+        if next_deposit_index >= P::MAX_PENDING_DEPOSITS_PER_EPOCH {
+            break;
+        }
+
+        let mut is_validator_exited = false;
+        let mut is_validator_withdrawn = false;
+
+        if let Some(validator_index) = accessors::index_of_public_key(state, &deposit.pubkey) {
+            let validator = state.validators().get(validator_index)?;
+            is_validator_exited = validator.exit_epoch < FAR_FUTURE_EPOCH;
+            is_validator_withdrawn = validator.withdrawable_epoch < next_epoch;
+        }
+
+        if is_validator_withdrawn {
+            apply_pending_deposit(config, pubkey_cache, state, deposit)?;
+        } else if is_validator_exited {
+            deposits_to_postpone.push(*deposit);
+        } else {
+            is_churn_limit_reached = processed_amount + deposit.amount > available_for_processing;
+
+            if is_churn_limit_reached {
+                break;
+            }
+
+            processed_amount += deposit.amount;
+            apply_pending_deposit(config, pubkey_cache, state, deposit)?;
+        }
+
+        next_deposit_index += 1;
+    }
+
+    *state.pending_deposits_mut() = PersistentList::try_from_iter(
+        state
+            .pending_deposits()
+            .into_iter()
+            .copied()
+            .skip(next_deposit_index.try_into()?)
+            .chain(deposits_to_postpone.into_iter()),
+    )?;
+
+    if is_churn_limit_reached {
+        *state.deposit_balance_to_consume_mut() = available_for_processing - processed_amount;
+    } else {
+        *state.deposit_balance_to_consume_mut() = 0;
+    }
+
+    Ok(())
+}
+
+fn apply_pending_deposit<P: Preset>(
+    config: &Config,
+    pubkey_cache: &PubkeyCache,
+    state: &mut impl PostGloasBeaconState<P>,
+    deposit: &types::electra::containers::PendingDeposit,
+) -> Result<()> {
+    use helper_functions::{accessors, mutators::increase_balance};
+
+    let types::electra::containers::PendingDeposit {
+        pubkey,
+        withdrawal_credentials,
+        amount,
+        ..
+    } = *deposit;
+
+    if let Some(validator_index) = accessors::index_of_public_key(state, &deposit.pubkey) {
+        increase_balance(helper_functions::mutators::balance(state, validator_index)?, amount);
+    } else if is_valid_deposit_signature(config, pubkey_cache, deposit) {
+        add_validator_to_registry::<P>(state, pubkey, withdrawal_credentials, amount)?;
+    }
+
+    Ok(())
+}
+
+fn is_valid_deposit_signature(
+    config: &Config,
+    pubkey_cache: &PubkeyCache,
+    deposit: &types::electra::containers::PendingDeposit,
+) -> bool {
+    use types::phase0::containers::DepositMessage;
+    use helper_functions::signing::SignForAllForks as _;
+
+    let types::electra::containers::PendingDeposit {
+        pubkey,
+        withdrawal_credentials,
+        amount,
+        signature,
+        ..
+    } = *deposit;
+
+    let deposit_message = DepositMessage {
+        pubkey,
+        withdrawal_credentials,
+        amount,
+    };
+
+    pubkey_cache
+        .get_or_insert(pubkey)
+        .and_then(|decompressed| deposit_message.verify(config, signature, decompressed))
+        .is_ok()
+}
+
+fn add_validator_to_registry<P: Preset>(
+    state: &mut impl PostGloasBeaconState<P>,
+    pubkey: bls::PublicKeyBytes,
+    withdrawal_credentials: types::phase0::primitives::H256,
+    amount: types::phase0::primitives::Gwei,
+) -> Result<()> {
+    use arithmetic::NonZeroExt as _;
+    use types::phase0::{
+        consts::{FAR_FUTURE_EPOCH, GENESIS_EPOCH},
+        containers::Validator,
+    };
+
+    let mut validator = Validator {
+        pubkey,
+        withdrawal_credentials,
+        activation_eligibility_epoch: GENESIS_EPOCH,
+        activation_epoch: FAR_FUTURE_EPOCH,
+        exit_epoch: FAR_FUTURE_EPOCH,
+        withdrawable_epoch: FAR_FUTURE_EPOCH,
+        effective_balance: 0,
+        slashed: false,
+    };
+
+    let effective_balance = core::cmp::min(
+        amount - amount.checked_rem(P::EFFECTIVE_BALANCE_INCREMENT.get()).unwrap_or(0),
+        helper_functions::misc::get_max_effective_balance::<P>(&validator),
+    );
+
+    validator.effective_balance = effective_balance;
+
+    state.validators_mut().push(validator)?;
+    state.balances_mut().push(amount)?;
+    state.previous_epoch_participation_mut().push(0)?;
+    state.current_epoch_participation_mut().push(0)?;
+    state.inactivity_scores_mut().push(0)?;
+
+    Ok(())
+}
+
+// Per spec line 687: Gloas calls process_pending_consolidations from Electra
+fn process_pending_consolidations<P: Preset>(
+    state: &mut impl PostGloasBeaconState<P>,
+) -> Result<()> {
+    use helper_functions::{accessors::get_current_epoch, mutators::{balance, decrease_balance, increase_balance}};
+    use ssz::PersistentList;
+
+    let next_epoch = get_current_epoch(state) + 1;
+    let mut next_pending_consolidation = 0;
+
+    for pending_consolidation in &state.pending_consolidations().clone() {
+        let source_validator = state.validators().get(pending_consolidation.source_index)?;
+
+        if source_validator.slashed {
+            next_pending_consolidation += 1;
+            continue;
+        }
+
+        if source_validator.withdrawable_epoch > next_epoch {
+            break;
+        }
+
+        let source_effective_balance = core::cmp::min(
+            state
+                .balances()
+                .get(pending_consolidation.source_index)
+                .copied()?,
+            source_validator.effective_balance,
+        );
+
+        decrease_balance(
+            balance(state, pending_consolidation.source_index)?,
+            source_effective_balance,
+        );
+        increase_balance(
+            balance(state, pending_consolidation.target_index)?,
+            source_effective_balance,
+        );
+
+        next_pending_consolidation += 1;
+    }
+
+    *state.pending_consolidations_mut() = PersistentList::try_from_iter(
+        state
+            .pending_consolidations()
+            .into_iter()
+            .copied()
+            .skip(next_pending_consolidation),
+    )?;
+
+    Ok(())
+}
+
+// Per spec line 690: Gloas calls process_effective_balance_updates from Electra
+fn process_effective_balance_updates<P: Preset>(state: &mut impl PostGloasBeaconState<P>) {
+    use arithmetic::NonZeroExt as _;
+
+    let hysteresis_increment = P::EFFECTIVE_BALANCE_INCREMENT.get() / P::HYSTERESIS_QUOTIENT;
+    let downward_threshold = hysteresis_increment * P::HYSTERESIS_DOWNWARD_MULTIPLIER;
+    let upward_threshold = hysteresis_increment * P::HYSTERESIS_UPWARD_MULTIPLIER;
+
+    let (validators, balances) = state.validators_mut_with_balances();
+
+    let mut balances = balances.into_iter().copied();
+
+    for mut validator in validators {
+        let balance = balances
+            .next()
+            .expect("validators and balances should have the same length");
+
+        if balance + downward_threshold < validator.effective_balance
+            || validator.effective_balance + upward_threshold < balance
+        {
+            validator.effective_balance = core::cmp::min(
+                balance - balance.checked_rem(P::EFFECTIVE_BALANCE_INCREMENT.get()).unwrap_or(0),
+                helper_functions::misc::get_max_effective_balance::<P>(&validator),
+            );
+        }
+    }
+}
+
+// Per spec line 696: Gloas calls process_proposer_lookahead from Fulu
+fn process_proposer_lookahead<P: Preset>(
+    config: &Config,
+    state: &mut impl PostGloasBeaconState<P>,
+) -> Result<()> {
+    use helper_functions::{
+        accessors::{get_beacon_proposer_indices, get_current_epoch},
+    };
+    use ssz::PersistentVector;
+
+    let mut proposer_lookahead = state.proposer_lookahead().into_iter().collect::<Vec<_>>();
+
+    let last_epoch_start = proposer_lookahead
+        .len()
+        .saturating_sub(P::SlotsPerEpoch::USIZE);
+    proposer_lookahead.copy_within(P::SlotsPerEpoch::USIZE.., 0);
+
+    let target_epoch = get_current_epoch(state).saturating_add(P::MinSeedLookahead::U64 + 1);
+    let last_proposers_indices = get_beacon_proposer_indices(config, state, target_epoch)?;
+    let refs = last_proposers_indices.iter().collect::<Vec<&_>>();
+    proposer_lookahead[last_epoch_start..].copy_from_slice(&refs);
+
+    *state.proposer_lookahead_mut() =
+        PersistentVector::try_from_iter(proposer_lookahead.into_iter().copied())?;
 
     Ok(())
 }
@@ -259,8 +542,7 @@ fn process_registry_updates<P: Preset>(
     for validator_index in ejections {
         let index = usize::try_from(validator_index)?;
 
-        // TODO(gloas): update `state` param to be compatible with GloasBeaconState
-        // initiate_validator_exit(config, state, validator_index)?;
+        helper_functions::gloas::initiate_validator_exit(config, state, validator_index)?;
 
         // `process_slashings` depends on `Validator.withdrawable_epoch`,
         // which may have been modified by `initiate_validator_exit`.
