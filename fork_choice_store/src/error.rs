@@ -154,8 +154,6 @@ pub enum Error<P: Preset> {
     MergeBlockBeforeActivationEpoch { block: Arc<SignedBeaconBlock<P>> },
     #[error("execution payload envelope slot mismatch: expected {expected}, actual {actual}")]
     ExecutionPayloadEnvelopeSlotMismatch { expected: Slot, actual: Slot },
-    #[error("missing execution payload bid in beacon block (beacon_block_root: {beacon_block_root:?})")]
-    MissingExecutionPayloadBid { beacon_block_root: H256 },
     #[error("builder index mismatch: expected {expected}, actual {actual}")]
     BuilderIndexMismatch {
         expected: ValidatorIndex,
@@ -200,6 +198,4 @@ pub enum Error<P: Preset> {
     },
 }
 
-// Size increased due to new ExecutionPayloadEnvelope error variants
-// TODO: Update size after verifying actual Error<Mainnet> size
-// assert_eq_size!(Error<Mainnet>, [usize; 4]);
+assert_eq_size!(Error<Mainnet>, [usize; 9]);
