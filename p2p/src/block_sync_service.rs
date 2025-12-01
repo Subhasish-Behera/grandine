@@ -6,7 +6,6 @@ use core::{
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
-    time::SystemTime,
 };
 
 use anyhow::Result;
@@ -664,38 +663,20 @@ impl<P: Preset> BlockSyncService<P> {
 
                             // Early validation: deduplication check (per block_root and builder_index)
                             if self.register_new_received_envelope(beacon_block_root, builder_index, payload_slot) {
-                                // Early validation: timing check (3/4 into slot)
-                                let slot_start = misc::compute_timestamp_at_slot(
-                                    self.config.as_ref(),
-                                    &self.controller.head_state().value(),
-                                    payload_slot,
-                                );
-                                let slot_start_time = SystemTime::UNIX_EPOCH + Duration::from_secs(slot_start);
-                                let three_fourths_slot = slot_start_time + Duration::from_millis(
-                                    3 * self.config.seconds_per_slot.get() * 1000 / 4
+                                // Check if beacon block has been seen
+                                let beacon_block_seen = self.received_block_roots.contains_key(&beacon_block_root);
+
+                                debug!(
+                                    "received execution payload as gossip (slot: {payload_slot}, \
+                                    beacon_block_root: {beacon_block_root:?}, peer_id: {peer_id}, \
+                                    beacon_block_seen: {beacon_block_seen})"
                                 );
 
-                                if SystemTime::now() >= three_fourths_slot {
-                                    // Check if beacon block has been seen
-                                    let beacon_block_seen = self.received_block_roots.contains_key(&beacon_block_root);
-
-                                    debug!(
-                                        "received execution payload as gossip (slot: {payload_slot}, \
-                                        beacon_block_root: {beacon_block_root:?}, peer_id: {peer_id}, \
-                                        beacon_block_seen: {beacon_block_seen})"
-                                    );
-
-                                    self.controller.on_gossip_execution_payload(
-                                        execution_payload_envelope,
-                                        gossip_id,
-                                        beacon_block_seen,
-                                    );
-                                } else {
-                                    debug!(
-                                        "execution payload too early (slot: {payload_slot}, \
-                                        beacon_block_root: {beacon_block_root:?})"
-                                    );
-                                }
+                                self.controller.on_gossip_execution_payload(
+                                    execution_payload_envelope,
+                                    gossip_id,
+                                    beacon_block_seen,
+                                );
                             }
                         }
                         P2pToSync::GossipPayloadAttestation(payload_attestation, gossip_id) => {
