@@ -866,6 +866,7 @@ pub enum ExecutionPayloadEnvelopeAction<P: Preset> {
     Accept(Arc<SignedExecutionPayloadEnvelope<P>>),
     Ignore(Publishable),
     DelayUntilBeaconBlock(Arc<SignedExecutionPayloadEnvelope<P>>, H256),
+    DelayUntilState(Arc<SignedExecutionPayloadEnvelope<P>>, H256, Slot),
     DelayUntilSlot(Arc<SignedExecutionPayloadEnvelope<P>>),
 }
 

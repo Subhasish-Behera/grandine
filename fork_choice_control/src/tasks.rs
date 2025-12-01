@@ -526,10 +526,13 @@ impl<P: Preset, W> Run for ExecutionPayloadEnvelopeTask<P, W> {
             .as_ref()
             .map(|metrics| metrics.fc_execution_payload_envelope_task_times.start_timer());
 
+        let beacon_block_root = execution_payload_envelope.message.beacon_block_root;
+
         let result = store_snapshot.validate_execution_payload_envelope(
             execution_payload_envelope,
             beacon_block_seen,
             &origin,
+            || store_snapshot.chain_link(beacon_block_root).map(|chain_link| chain_link.state(&store_snapshot)),
         );
 
         MutatorMessage::ExecutionPayloadEnvelope {

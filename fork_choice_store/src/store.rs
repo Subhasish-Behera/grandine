@@ -2444,6 +2444,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         envelope: Arc<SignedExecutionPayloadEnvelope<P>>,
         beacon_block_seen: bool,
         origin: &ExecutionPayloadEnvelopeOrigin,
+        state_fn: impl FnOnce() -> Option<Arc<BeaconState<P>>>,
     ) -> Result<ExecutionPayloadEnvelopeAction<P>> {
         let slot = envelope.message.slot;
         let beacon_block_root = envelope.message.beacon_block_root;
@@ -2474,7 +2475,6 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         };
 
         let block = &chain_link.block;
-        let state = chain_link.state(self);
 
         // [REJECT] block.slot equals envelope.slot
         ensure!(
@@ -2484,6 +2484,15 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
                 actual: slot,
             },
         );
+
+        // Delay envelope validations until the state is available.
+        let Some(state) = state_fn() else {
+            return Ok(ExecutionPayloadEnvelopeAction::DelayUntilState(
+                envelope,
+                beacon_block_root,
+                slot,
+            ));
+        };
 
         // [REJECT] The builder_index must be a valid and active validator
         let validator = state

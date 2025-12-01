@@ -1859,6 +1859,40 @@ where
                     beacon_block_root,
                 );
             }
+            Ok(ExecutionPayloadEnvelopeAction::DelayUntilState(
+                execution_payload_envelope,
+                beacon_block_root,
+                slot,
+            )) => {
+                if let Some(metrics) = self.metrics.as_ref() {
+                    metrics.register_mutator_execution_payload_envelope(&["delayed_until_state"]);
+                }
+
+                let pending_envelope = PendingExecutionPayloadEnvelope {
+                    execution_payload_envelope,
+                    beacon_block_seen,
+                    origin,
+                    submission_time,
+                };
+
+                if let Some(state) = self
+                    .state_cache
+                    .existing_state_at_slot(&self.store, beacon_block_root, slot)
+                {
+                    self.retry_execution_payload_envelope(wait_group.clone(), pending_envelope);
+                } else {
+                    debug_with_peers!(
+                        "execution payload envelope delayed until state at same slot is ready \
+                         (block_root: {beacon_block_root:?}, slot: {slot})",
+                    );
+
+                    self.delayed_until_state
+                        .entry((beacon_block_root, slot))
+                        .or_default()
+                        .execution_payload_envelopes
+                        .push(pending_envelope);
+                }
+            }
             Ok(ExecutionPayloadEnvelopeAction::DelayUntilSlot(execution_payload_envelope)) => {
                 if let Some(metrics) = self.metrics.as_ref() {
                     metrics
