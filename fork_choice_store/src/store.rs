@@ -2506,21 +2506,19 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         );
 
         // [REJECT] The builder signature envelope.signature is valid
-        // ExecutionPayloadEnvelope is Gloas-only, so state must be Gloas
-        let BeaconState::Gloas(gloas_state) = state.as_ref() else {
-            bail!("ExecutionPayloadEnvelope validation requires Gloas state");
-        };
-        transition_functions::gloas::execution_payload_processing::verify_execution_payload_envelope_signature(
-            &self.chain_config,
-            &self.pubkey_cache,
-            gloas_state,
-            &envelope,
-            SingleVerifier,
+        SingleVerifier.verify_singular(
+            envelope.message.signing_root(&self.chain_config, &state),
+            envelope.signature,
+            self.pubkey_cache.get_or_insert(validator.pubkey)?,
+            SignatureKind::ExecutionPayloadEnvelope,
         )?;
 
         // [REJECT] Get the payload bid from state
         // Spec: "this can be obtained from the state.latest_execution_payload_bid"
-        let bid = &gloas_state.latest_execution_payload_bid;
+        let bid = match state.as_ref() {
+            BeaconState::Gloas(gloas_state) => gloas_state.latest_execution_payload_bid,
+            _ => bail!("ExecutionPayloadEnvelope requires Gloas state"),
+        };
 
         // [REJECT] envelope.builder_index == bid.builder_index
         ensure!(
