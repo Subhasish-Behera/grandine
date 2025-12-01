@@ -1810,7 +1810,10 @@ where
 
                 if origin.should_generate_event() {
                     self.event_channels
-                        .send_execution_payload_envelope_event(&execution_payload_envelope);
+                        .send_execution_payload_available_event(
+                            execution_payload_envelope.message.slot,
+                            execution_payload_envelope.message.beacon_block_root,
+                        );
                 }
 
                 let (gossip_id, sender) = origin.split();
