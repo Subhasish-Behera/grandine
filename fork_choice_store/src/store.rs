@@ -2509,14 +2509,9 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
             SingleVerifier,
         )?;
 
-        // [REJECT] Get the bid from the block
-        // ExecutionPayloadEnvelope is Gloas-only, so block must be Gloas
-        let SignedBeaconBlock::Gloas(gloas_block) = block.as_ref() else {
-            bail!("ExecutionPayloadEnvelope validation requires Gloas block");
-        };
-
-        let signed_bid = &gloas_block.message.body.signed_execution_payload_bid;
-        let bid = &signed_bid.message;
+        // [REJECT] Get the payload bid from state
+        // Spec: "this can be obtained from the state.latest_execution_payload_bid"
+        let bid = &gloas_state.latest_execution_payload_bid;
 
         // [REJECT] envelope.builder_index == bid.builder_index
         ensure!(
