@@ -856,11 +856,6 @@ impl ExecutionPayloadEnvelopeOrigin {
     }
 
     #[must_use]
-    pub const fn is_from_block(&self) -> bool {
-        false
-    }
-
-    #[must_use]
     pub const fn should_generate_event(&self) -> bool {
         matches!(self, Self::Gossip(_))
     }

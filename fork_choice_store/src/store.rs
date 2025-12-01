@@ -2449,12 +2449,10 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         let beacon_block_root = envelope.message.beacon_block_root;
         let builder_index = envelope.message.builder_index;
 
-        if !origin.is_from_block() {
-            // [IGNORE] The envelope is from a slot greater than or equal to the latest finalized slot
-            // Spec: envelope.slot >= compute_start_slot_at_epoch(store.finalized_checkpoint.epoch)
-            if slot < self.finalized_slot() {
-                return Ok(ExecutionPayloadEnvelopeAction::Ignore(false));
-            }
+        // [IGNORE] The envelope is from a slot greater than or equal to the latest finalized slot
+        // Spec: envelope.slot >= compute_start_slot_at_epoch(store.finalized_checkpoint.epoch)
+        if slot < self.finalized_slot() {
+            return Ok(ExecutionPayloadEnvelopeAction::Ignore(false));
         }
 
         // [IGNORE] The envelope's beacon_block_root has been seen (via gossip or non-gossip sources)
