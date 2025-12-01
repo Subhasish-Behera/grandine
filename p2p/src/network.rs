@@ -2359,11 +2359,11 @@ impl<P: Preset> Network<P> {
             }
             PubsubMessage::PayloadAttestationMessage(payload_attestation) => {
                 debug!("received payload attestation message as gossip from {source}");
-                P2pToSync::GossipPayloadAttestation(
-                    payload_attestation,
-                    GossipId { source, message_id },
-                )
-                .send(&self.channels.p2p_to_sync_tx);
+
+                let gossip_id = GossipId { source, message_id };
+
+                self.controller
+                    .on_gossip_payload_attestation(payload_attestation, gossip_id);
             }
             PubsubMessage::ExecutionPayloadBid(_) => {
                 // TODO: Implement ExecutionPayloadBid gossip handling

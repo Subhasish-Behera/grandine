@@ -3380,7 +3380,7 @@ where
 
         let PendingExecutionPayloadEnvelope {
             execution_payload_envelope,
-            beacon_block_seen,
+            beacon_block_seen: _,
             origin,
             submission_time,
         } = pending_execution_payload_envelope;
@@ -3390,7 +3390,7 @@ where
             mutator_tx: self.owned_mutator_tx(),
             wait_group,
             execution_payload_envelope,
-            beacon_block_seen,
+            beacon_block_seen: true,
             origin,
             submission_time,
             metrics: self.metrics.clone(),

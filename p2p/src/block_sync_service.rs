@@ -679,13 +679,6 @@ impl<P: Preset> BlockSyncService<P> {
                                 );
                             }
                         }
-                        P2pToSync::GossipPayloadAttestation(payload_attestation, gossip_id) => {
-                            debug!("received payload attestation as gossip");
-                            self.controller.on_gossip_payload_attestation(
-                                payload_attestation,
-                                gossip_id,
-                            );
-                        }                        
                         P2pToSync::Stop => {
                             SyncToApi::Stop.send(&self.sync_to_api_tx);
 
