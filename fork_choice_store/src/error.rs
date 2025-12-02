@@ -7,7 +7,7 @@ use types::{
     bellatrix::containers::PowBlock,
     combined::{Attestation, DataColumnSidecar, SignedAggregateAndProof, SignedBeaconBlock},
     deneb::containers::BlobSidecar,
-    gloas::containers::PayloadAttestationMessage,
+    gloas::containers::{PayloadAttestationMessage, SignedExecutionPayloadEnvelope},
     phase0::primitives::{Slot, SubnetId, ValidatorIndex, H256},
     preset::{Mainnet, Preset},
 };
@@ -159,8 +159,11 @@ pub enum Error<P: Preset> {
         expected: ValidatorIndex,
         actual: ValidatorIndex,
     },
-    #[error("execution payload block hash mismatch: expected {expected:?}, actual {actual:?}")]
-    ExecutionPayloadBlockHashMismatch { expected: H256, actual: H256 },
+    #[error("execution payload block hash mismatch (envelope: {envelope:?}, expected: {expected:?})")]
+    ExecutionPayloadBlockHashMismatch {
+        envelope: Arc<SignedExecutionPayloadEnvelope<P>>,
+        expected: H256,
+    },
     #[error("validator not active (builder_index: {builder_index})")]
     ValidatorNotActive { builder_index: ValidatorIndex },
     #[error("payload attestation's block is invalid: {payload_attestation:?}")]
@@ -198,4 +201,6 @@ pub enum Error<P: Preset> {
     },
 }
 
+// ExecutionPayloadBlockHashMismatch uses Arc pattern to avoid enum bloat
+// Size maintained at 9 usize (same as before our changes)
 assert_eq_size!(Error<Mainnet>, [usize; 9]);

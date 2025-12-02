@@ -2494,18 +2494,11 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
             ));
         };
 
-        // [REJECT] The builder_index must be a valid and active validator
-        let validator = state
-            .validators()
-            .get(builder_index)
-            .map_err(|_| Error::<P>::ValidatorNotActive { builder_index })?;
-
-        ensure!(
-            predicates::is_active_validator(validator, accessors::get_current_epoch(&state)),
-            Error::<P>::ValidatorNotActive { builder_index },
-        );
-
         // [REJECT] The builder signature envelope.signature is valid
+        // Note: We don't need to check if builder_index is valid/active/builder here
+        // because those checks are already done during bid validation
+        let validator = state.validators().get(builder_index)?;
+
         SingleVerifier.verify_singular(
             envelope.message.signing_root(&self.chain_config, &state),
             envelope.signature,
@@ -2533,8 +2526,8 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         ensure!(
             envelope.message.payload.block_hash == bid.block_hash,
             Error::<P>::ExecutionPayloadBlockHashMismatch {
+                envelope: envelope.clone(),
                 expected: bid.block_hash,
-                actual: envelope.message.payload.block_hash,
             },
         );
 
