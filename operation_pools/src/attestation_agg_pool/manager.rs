@@ -33,6 +33,7 @@ use crate::{
             PackProposableAttestationsTask, SetCommitteesWithAggregatorsTask,
             SetRegisteredValidatorsTask,
         },
+        types::AttestationPrePool,
     },
     misc::PoolTask,
 };
@@ -129,6 +130,13 @@ impl<P: Preset, W: Wait> Manager<P, W> {
                 committee_index,
             )
             .await
+    }
+
+    pub async fn attestation_pre_pool_by_data(
+        &self,
+        data: AttestationData,
+    ) -> Option<AttestationPrePool> {
+        self.pool.attestation_pre_pool_by_data(data).await
     }
 
     pub async fn best_proposable_attestations(
