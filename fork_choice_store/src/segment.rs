@@ -13,9 +13,9 @@ use im::{
 #[cfg(target_os = "zkvm")]
 use std::vec::Vec as Vector;
 use thiserror::Error;
-use types::{phase0::primitives::Slot, preset::Preset};
+use types::{phase0::primitives::{Slot, H256}, preset::Preset, traits::SignedBeaconBlock as _};
 
-use crate::misc::{ChainLink, UnfinalizedBlock};
+use crate::misc::{ChainLink, Location, UnfinalizedBlock};
 
 #[derive(Clone, Debug)]
 pub struct Segment<P: Preset> {
@@ -25,6 +25,10 @@ pub struct Segment<P: Preset> {
     // finalized and the finalized blocks have been removed from it. The number of finalized blocks
     // is equal to `Segment.first_position`.
     first_position: Position,
+    //Cached metadata to reduce lookups
+    parent_location: Option<Location>,
+    parent_root: H256,
+    first_block_root: H256,
 }
 
 impl<P: Preset> From<Segment<P>> for Vector<UnfinalizedBlock<P>> {
@@ -75,9 +79,15 @@ impl<'segment, P: Preset> IntoIterator for &'segment mut Segment<P> {
 impl<P: Preset> Segment<P> {
     #[must_use]
     pub fn new(chain_link: ChainLink<P>) -> Self {
+        let parent_root = chain_link.block.message().parent_root();
+        let first_block_root = chain_link.block_root;
+
         Self {
             blocks: Vector::unit(UnfinalizedBlock::new(chain_link)),
             first_position: Position::default(),
+            parent_location: None,
+            parent_root,
+            first_block_root,
         }
     }
 
@@ -204,6 +214,14 @@ impl<P: Preset> Segment<P> {
             .next()
             .expect("position must be valid because it is already filled");
 
+        // Update cached first_block_root after finalization
+        if let Some(new_first_block) = remaining.front() {
+            self.first_block_root = new_first_block.chain_link.block_root;
+            self.parent_root = new_first_block.chain_link.block.message().parent_root();
+            // parent_location invalidated - will be recomputed if needed
+            self.parent_location = None;
+        }
+
         core::mem::replace(&mut self.blocks, remaining)
     }
 
@@ -222,6 +240,26 @@ impl<P: Preset> Segment<P> {
         assert!(index < self.len().get());
 
         index
+    }
+
+    //Accessors for cached metadata
+    #[must_use]
+    pub const fn parent_location(&self) -> Option<Location> {
+        self.parent_location
+    }
+
+    pub fn set_parent_location(&mut self, location: Option<Location>) {
+        self.parent_location = location;
+    }
+
+    #[must_use]
+    pub const fn parent_root(&self) -> H256 {
+        self.parent_root
+    }
+
+    #[must_use]
+    pub const fn first_block_root(&self) -> H256 {
+        self.first_block_root
     }
 }
 

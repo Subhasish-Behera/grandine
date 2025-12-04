@@ -202,5 +202,4 @@ pub enum Error<P: Preset> {
 }
 
 // ExecutionPayloadBlockHashMismatch uses Arc pattern to avoid enum bloat
-// Size maintained at 9 usize (same as before our changes)
-assert_eq_size!(Error<Mainnet>, [usize; 9]);
+assert_eq_size!(Error<Mainnet>, [usize; 6]);

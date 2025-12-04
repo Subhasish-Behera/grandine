@@ -9,6 +9,7 @@ use std::{
 };
 
 use anyhow::{anyhow, bail, ensure, Result};
+use tracing::debug;
 use arithmetic::NonZeroExt as _;
 use clock::Tick;
 use dashmap::DashMap;
@@ -29,7 +30,7 @@ use itertools::{izip, Either, EitherOrBoth, Itertools as _};
 use logging::{error_with_peers, info_with_peers, warn_with_peers};
 use prometheus_metrics::Metrics;
 use pubkey_cache::PubkeyCache;
-use ssz::{ContiguousList, SszHash as _};
+use ssz::{BitVector, ContiguousList, SszHash as _};
 use std_ext::ArcExt as _;
 use tap::Pipe as _;
 use tracing::instrument;
@@ -78,7 +79,7 @@ use crate::{
         AttestationAction, AttestationItem, AttestationValidationError, AttesterSlashingOrigin,
         BlobSidecarAction, BlobSidecarOrigin, BlockAction, BranchPoint, ChainLink,
         DataAvailabilityPolicy, DataColumnSidecarAction, DataColumnSidecarOrigin, Difference,
-        DifferenceAtLocation, DissolvedDifference, LatestMessage, Location,
+        DifferenceAtLocation, DissolvedDifference, ForkChoicePayloadStatus, LatestMessage, Location,
         PartialAttestationAction, PartialBlockAction, PayloadAction, Score, SegmentId, Storage,
         UnfinalizedBlock, ValidAttestation,
     },
@@ -222,6 +223,17 @@ pub struct Store<P: Preset, S: Storage<P>> {
     // Attestations cannot affect fork choice until their slots have passed.
     // This field is used to store them in the meantime.
     current_slot_attestations: Vector<ValidAttestation<P>>,
+
+    // ePBS: Dual location maps for empty and full variants
+    // - Empty variants (beacon block only): keyed by beacon_block_root
+    // ePBS: Both empty and full variants keyed by beacon_block_root (from envelope)
+    // - Empty variants: beacon block without execution payload
+    // - Full variants: beacon block + execution payload (envelope.beacon_block_root)
+    unfinalized_locations_empty: HashMap<H256, Location>,
+    unfinalized_locations_full: HashMap<H256, Location>,
+    // ePBS: Tracks PTC (Payload Timeliness Committee) votes for each block root.
+    // Used to determine if payload arrived on time.
+    ptc_vote: HashMap<H256, BitVector<P::PtcSize>>,
     execution_payload_locations: HashMap<ExecutionBlockHash, Location>,
     aggregate_and_proof_supersets: Arc<AggregateAndProofSupersets<P>>,
     accepted_blob_sidecars:
@@ -286,7 +298,8 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         let anchor = ChainLink {
             block_root,
             block: anchor_block,
-            state: Some(anchor_state.clone_arc()),
+            block_state: Some(anchor_state.clone_arc()),
+            execution_payload_state: None,
             current_justified_checkpoint: checkpoint,
             finalized_checkpoint: checkpoint,
             unrealized_justified_checkpoint: checkpoint,
@@ -320,6 +333,9 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
             latest_messages,
             checkpoint_states: HashMap::unit(checkpoint, anchor_state),
             current_slot_attestations: vector![],
+            unfinalized_locations_empty: hashmap! {},
+            unfinalized_locations_full: hashmap! {},
+            ptc_vote: HashMap::default(),
             execution_payload_locations: hashmap! {},
             aggregate_and_proof_supersets: Arc::new(AggregateAndProofSupersets::new()),
             accepted_blob_sidecars: HashMap::default(),
@@ -473,17 +489,40 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
 
     #[must_use]
     pub fn chain_link(&self, block_root: H256) -> Option<&ChainLink<P>> {
-        if let Some(location) = self.unfinalized_locations.get(&block_root) {
+        if let Some(location) = self.get_location(block_root) {
             let Location {
                 segment_id,
                 position,
             } = location;
 
-            return Some(&self.unfinalized[segment_id][*position].chain_link);
+            return Some(&self.unfinalized[&segment_id][position].chain_link);
         }
 
         let index = self.finalized_indices.get(&block_root)?;
 
+        Some(&self.finalized[*index])
+    }
+
+    /// ePBS: Get ChainLink for block_root, preferring full variant if both exist.
+    ///
+    /// Used in validation flow to select parent state:
+    /// - Full variant has execution_payload_state (post-execution) → preferred
+    /// - Empty variant has only block_state (pre-execution) → fallback
+    ///
+    /// This uses get_location() which prefers full variant when both exist.
+    #[must_use]
+    pub fn chain_link_prefer_full(&self, block_root: H256) -> Option<&ChainLink<P>> {
+        if let Some(location) = self.get_location(block_root) {
+            let Location {
+                segment_id,
+                position,
+            } = location;
+
+            return Some(&self.unfinalized[&segment_id][position].chain_link);
+        }
+
+        // Check finalized
+        let index = self.finalized_indices.get(&block_root)?;
         Some(&self.finalized[*index])
     }
 
@@ -505,7 +544,278 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
     }
 
     fn contains_unfinalized_block(&self, block_root: H256) -> bool {
-        self.unfinalized_locations.contains_key(&block_root)
+        self.get_location(block_root).is_some()
+    }
+
+    /// ePBS: Get location for block_root, preferring full variant if both exist.
+    ///
+    /// This canonicalization ensures:
+    /// - Structural operations use same location (consistency)
+    /// - Fork choice operations prefer complete variant (full has execution_state)
+    /// - Children of block consistently extend from same variant
+    ///
+    /// Lookup strategy (optimized with block_root keying):
+    /// 1. Check unfinalized_locations_full by block_root (prefer full if exists)
+    /// 2. Otherwise check unfinalized_locations_empty by block_root
+    /// 3. Both maps keyed by same beacon_block_root, so no conversion needed
+    #[must_use]
+    fn get_location(&self, block_root: H256) -> Option<Location> {
+        // Check full variant first (prefer it if exists)
+        if let Some(full_loc) = self.unfinalized_locations_full.get(&block_root) {
+            return Some(*full_loc);
+        }
+
+        // Fall back to empty variant
+        if let Some(empty_loc) = self.unfinalized_locations_empty.get(&block_root) {
+            return Some(*empty_loc);
+        }
+
+        // Neither exists
+        None
+    }
+
+    /// ePBS: Get parent payload status for fork choice.
+    /// Spec: https://github.com/ethereum/consensus-specs/blob/v1.6.1/specs/gloas/fork-choice#get_parent_payload_status
+    /// FULL if current bid's parent_block_hash matches parent bid's block_hash.
+    /// EMPTY otherwise (child builds on parent's empty variant).
+    #[must_use]
+    fn get_parent_payload_status(&self, block_root: H256) -> ForkChoicePayloadStatus {
+        let Some(current) = self.chain_link(block_root) else {
+            return ForkChoicePayloadStatus::Empty;
+        };
+
+        let Some(current_gloas_body) = current.block.message().body().with_payload_bid() else {
+            return ForkChoicePayloadStatus::Empty; // Pre-Gloas
+        };
+
+        let parent_root = current.block.message().parent_root();
+        let Some(parent) = self.chain_link(parent_root) else {
+            return ForkChoicePayloadStatus::Empty;
+        };
+
+        let Some(parent_gloas_body) = parent.block.message().body().with_payload_bid() else {
+            return ForkChoicePayloadStatus::Empty; // Pre-Gloas parent
+        };
+
+        let parent_bid = &parent_gloas_body.signed_execution_payload_bid().message;
+        let current_bid = &current_gloas_body.signed_execution_payload_bid().message;
+
+        // Parent is full if current bid's parent_block_hash matches parent bid's block_hash
+        if current_bid.parent_block_hash == parent_bid.block_hash {
+            ForkChoicePayloadStatus::Full
+        } else {
+            ForkChoicePayloadStatus::Empty
+        }
+    }
+
+    /// ePBS: Check if parent node has execution payload processed (is full variant).
+    ///
+    /// Spec: https://github.com/ethereum/consensus-specs/blob/v1.6.1/specs/gloas/fork-choice#is_parent_node_full
+    /// ```python
+    /// def is_parent_node_full(store: Store, block: BeaconBlock) -> bool:
+    ///     return get_parent_payload_status(store, block) == PAYLOAD_STATUS_FULL
+    /// ```
+    #[must_use]
+    fn is_parent_node_full(&self, block_root: H256) -> bool {
+        self.get_parent_payload_status(block_root).is_full()
+    }
+
+    /// ePBS: Check if payload was timely.
+    /// Spec: https://github.com/ethereum/consensus-specs/blob/v1.6.1/specs/gloas/fork-choice#is_payload_timely
+    /// True if locally available AND PTC votes > THRESHOLD (256).
+    /// PAYLOAD_TIMELY_THRESHOLD = PTC_SIZE // 2 = 512 // 2 = 256.
+    #[must_use]
+    fn is_payload_timely(&self, block_root: H256) -> bool {
+        // Check if we have PTC votes for this block
+        let Some(ptc_votes) = self.ptc_vote.get(&block_root) else {
+            return false;
+        };
+
+        // Check if payload is locally available (has full variant with execution state)
+        let has_execution_state = self
+            .get_location(block_root)
+            .and_then(|location| {
+                self.unfinalized
+                    .get(&location.segment_id)
+                    .map(|segment| &segment[location.position])
+            })
+            .and_then(|block| block.chain_link.execution_payload_state.as_ref())
+            .is_some();
+
+        if !has_execution_state {
+            return false;
+        }
+
+        // Count PTC votes (PAYLOAD_TIMELY_THRESHOLD = PTC_SIZE / 2 = 256)
+        let vote_count = ptc_votes.count_ones();
+        let threshold = P::PtcSize::USIZE / 2;
+
+        vote_count > threshold
+    }
+
+    /// ePBS: Check if vote supports node variant.
+    /// Spec: https://github.com/ethereum/consensus-specs/blob/v1.6.1/specs/gloas/fork-choice#is_supporting_vote
+    /// Direct vote: payload_present must match node status (FULL/EMPTY).
+    /// Ancestor vote: node status must match ancestor status (or PENDING).
+    #[must_use]
+    fn is_supporting_vote(
+        &self,
+        node_root: H256,
+        node_payload_status: ForkChoicePayloadStatus,
+        message: &LatestMessage,
+    ) -> bool {
+        // Direct vote: message votes for the node directly
+        if node_root == message.beacon_block_root {
+            // PENDING nodes accept all votes
+            if node_payload_status.is_pending() {
+                return true;
+            }
+
+            // Get node block to check slot
+            let Some(node_block) = self.chain_link(node_root) else {
+                return false;
+            };
+            let node_slot = node_block.block.message().slot();
+
+            // Votes from same slot or earlier don't count (must be from later slot)
+            if message.slot <= node_slot {
+                return false;
+            }
+
+            // Check if vote's payload_present matches node's status
+            if message.payload_present {
+                node_payload_status.is_full()
+            } else {
+                node_payload_status.is_empty()
+            }
+        } else {
+            // Ancestor vote: message votes for an ancestor of the node
+            let Some(node_block) = self.chain_link(node_root) else {
+                return false;
+            };
+            let node_slot = node_block.block.message().slot();
+
+            // Get ancestor at node's slot
+            let Some((ancestor_root, ancestor_status)) = self.ancestor(message.beacon_block_root, node_slot) else {
+                return false;
+            };
+
+            // Check if ancestor matches node root and payload status matches
+            ancestor_root == node_root
+                && (node_payload_status.is_pending()
+                    || node_payload_status == ancestor_status)
+        }
+    }
+
+    /// ePBS: Decides if payload from previous slot should be extended.
+    /// Spec: https://github.com/ethereum/consensus-specs/blob/v1.6.1/specs/gloas/fork-choice#should_extend_previous_slot
+    /// Used as tiebreaker between EMPTY/FULL variants from previous slot.
+    /// TRUE if timely, no boost, boost conflicts, or boost extends payload.
+    #[must_use]
+    fn should_extend_payload(&self, block_root: H256) -> bool {
+        // Condition 1: Payload was timely (PTC voted for it)
+        if self.is_payload_timely(block_root) {
+            return true;
+        }
+
+        let proposer_root = self.proposer_boost_root;
+
+        // Condition 2: No proposer boost set
+        if proposer_root == H256::zero() {
+            return true;
+        }
+
+        // Get proposer boost block
+        let Some(proposer_block) = self.chain_link(proposer_root) else {
+            return true; // Can't verify, default to extend
+        };
+
+        let proposer_parent = proposer_block.block.message().parent_root();
+
+        // Condition 3: Proposer boost does not build on this block
+        if proposer_parent != block_root {
+            return true;
+        }
+
+        // Condition 4: Proposer boost builds on FULL variant
+        self.is_parent_node_full(proposer_root)
+    }
+
+    /// ePBS: Tiebreaker for head selection between variants.
+    /// Spec: https://github.com/ethereum/consensus-specs/blob/v1.6.1/specs/gloas/fork-choice#compute_tiebreaker
+    /// Only applies to previous slot blocks. Priority: FULL (timely) > EMPTY > FULL (late).
+    /// Returns: 0 (lowest), 1 (middle), 2 (highest).
+    #[must_use]
+    fn get_payload_status_tiebreaker(
+        &self,
+        block_root: H256,
+        payload_status: ForkChoicePayloadStatus,
+    ) -> u8 {
+        // Not from previous slot or PENDING: return status as-is
+        let Some(block) = self.chain_link(block_root) else {
+            return payload_status as u8;
+        };
+
+        let block_slot = block.block.message().slot();
+        let current_slot = self.slot();
+
+        // Only apply tiebreaker to blocks from previous slot
+        if payload_status.is_pending() || block_slot + 1 != current_slot {
+            return payload_status as u8;
+        }
+
+        // Deciding on previous slot payload: EMPTY vs FULL
+        match payload_status {
+            ForkChoicePayloadStatus::Empty => 1, // Middle priority
+            ForkChoicePayloadStatus::Full => {
+                // High priority if timely, low priority if late
+                if self.should_extend_payload(block_root) {
+                    2 // Highest priority
+                } else {
+                    0 // Lowest priority
+                }
+            }
+            ForkChoicePayloadStatus::Pending => unreachable!(), // Already checked above
+        }
+    }
+
+    /// ePBS: Extract PTC votes from block's payload_attestations.
+    /// Spec: https://github.com/ethereum/consensus-specs/blob/v1.6.1/specs/gloas/fork-choice#process_payload_attestation_message
+    /// Populates ptc_vote map used by is_payload_timely().
+    /// Called during on_block().
+    fn notify_ptc_messages(&mut self, block: &SignedBeaconBlock<P>) {
+        let block_root = block.message().hash_tree_root();
+
+        // Initialize empty BitVector for current block
+        self.ptc_vote
+            .entry(block_root)
+            .or_insert_with(BitVector::default);
+
+        // Only process Gloas blocks (pre-Gloas has no payload_attestations)
+        let Some(gloas_body) = block.message().body().with_payload_attestations() else {
+            return;
+        };
+
+        // Process each payload attestation
+        for payload_attestation in gloas_body.payload_attestations() {
+            let attested_root = payload_attestation.data.beacon_block_root;
+
+            // Get or create BitVector for attested block
+            let ptc_votes = self
+                .ptc_vote
+                .entry(attested_root)
+                .or_insert_with(BitVector::default);
+
+            // Aggregate votes: OR the aggregation_bits
+            let aggregation_bits = &payload_attestation.aggregation_bits;
+
+            // Iterate and set bits
+            for (index, bit) in aggregation_bits.into_iter().enumerate() {
+                if bit {
+                    ptc_votes.set(index, true);
+                }
+            }
+        }
     }
 
     #[must_use]
@@ -535,7 +845,8 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         proposer_index: ValidatorIndex,
         block_root: H256,
     ) -> bool {
-        self.unfinalized_locations.values().any(|location| {
+        // ePBS: Check empty variant map (blocks always start as empty)
+        self.unfinalized_locations_empty.values().any(|location| {
             let Location {
                 segment_id,
                 position,
@@ -630,9 +941,9 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         let Location {
             segment_id,
             position,
-        } = self.unfinalized_locations.get(&block_root)?;
+        } = self.get_location(block_root)?;
 
-        Some(&mut self.unfinalized[segment_id][*position].chain_link)
+        Some(&mut self.unfinalized[&segment_id][position].chain_link)
     }
 
     pub fn unfinalized_fork_tips(&self) -> impl Iterator<Item = &ChainLink<P>> {
@@ -745,7 +1056,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
     }
 
     pub fn chain_ending_with(&self, block_root: H256) -> impl Iterator<Item = &ChainLink<P>> {
-        if let Some(location) = self.unfinalized_locations.get(&block_root).copied() {
+        if let Some(location) = self.get_location(block_root) {
             let segment = &self.unfinalized[&location.segment_id];
 
             return self
@@ -795,13 +1106,24 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
     }
 
     fn parent_location(&self, segment: &Segment<P>) -> Option<Location> {
-        let parent_root = segment
-            .first_block()
-            .chain_link
-            .block
-            .message()
-            .parent_root();
-        self.unfinalized_locations.get(&parent_root).copied()
+        // Optimization: Use cached parent_location if available
+        if let Some(cached) = segment.parent_location() {
+            return Some(cached);
+        }
+
+        // Fallback: Compute from parent_root (for old segments or after finalization)
+        self.get_location(segment.parent_root())
+    }
+
+    /// ePBS: Get parent location for variant-aware weight propagation.
+    /// Empty votes propagate through empty ancestors only.
+    /// Full votes propagate through full ancestors (preferred) or empty ancestors.
+    fn parent_location_for_variant(
+        &self,
+        segment: &Segment<P>,
+        _is_full_variant: bool,  // Not needed anymore
+    ) -> Option<Location> {
+        segment.parent_location()  // Just use cached parent from insertion
     }
 
     // Finality of a block or state can be determined by comparing its slot with the finalized slot.
@@ -857,7 +1179,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
                 break 'block true;
             }
 
-            let ancestor_at_finalized_slot = self
+            let (ancestor_root, _payload_status) = self
                 .ancestor(
                     unfinalized_block.chain_link.block_root,
                     self.finalized_slot(),
@@ -866,7 +1188,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
                     "every block in the store should have an ancestor at the last finalized slot",
                 );
 
-            ancestor_at_finalized_slot == self.finalized_checkpoint.root
+            ancestor_root == self.finalized_checkpoint.root
         };
 
         correct_justified && correct_finalized
@@ -916,6 +1238,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
             && self
                 .ancestor(self.proposer_boost_root, unfinalized_block.slot())
                 .expect("every unfinalized block has an ancestor at every unfinalized slot")
+                .0  // Extract root from tuple
                 == unfinalized_block.chain_link.block_root;
 
         let proposer_score = if ancestor_of_boosted_block {
@@ -945,8 +1268,22 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
     /// This should never return `None` in normal operation, but the reasons for that are slightly
     /// different at each call site, so we call `Option::expect` every time we use this instead of
     /// changing the type.
-    fn ancestor(&self, descendant_root: H256, ancestor_slot: Slot) -> Option<H256> {
-        if let Some(location) = self.unfinalized_locations.get(&descendant_root).copied() {
+    /// ePBS: Returns (root, payload_status) tuple.
+    /// Spec: https://github.com/ethereum/consensus-specs/blob/v1.6.1/specs/gloas/fork-choice#get_ancestor
+    /// If descendant.slot <= ancestor_slot: PENDING.
+    /// Otherwise: get_parent_payload_status(descendant) for ancestor status.
+    fn ancestor(&self, descendant_root: H256, ancestor_slot: Slot) -> Option<(H256, ForkChoicePayloadStatus)> {
+        // Get descendant block to check its slot
+        let descendant_chain_link = self.chain_link(descendant_root)?;
+        let descendant_slot = descendant_chain_link.block.message().slot();
+
+        // If requesting current block or future slot → PENDING
+        if descendant_slot <= ancestor_slot {
+            return Some((descendant_root, ForkChoicePayloadStatus::Pending));
+        }
+
+        // Find ancestor at the requested slot
+        if let Some(location) = self.get_location(descendant_root) {
             let descendant_segment = &self.unfinalized[&location.segment_id];
 
             let chain_link = self
@@ -955,7 +1292,12 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
                 .map(|unfinalized_block| &unfinalized_block.chain_link)
                 .or_else(|| self.finalized_before_or_at(ancestor_slot))?;
 
-            return Some(chain_link.block_root);
+            let ancestor_root = chain_link.block_root;
+
+            // Determine payload status by checking if descendant builds on ancestor's full variant
+            let payload_status = self.get_parent_payload_status(descendant_root);
+
+            return Some((ancestor_root, payload_status));
         }
 
         assert!(
@@ -963,8 +1305,13 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
             "Store::ancestor should only be called with roots of blocks known to be in the store",
         );
 
-        self.finalized_before_or_at(ancestor_slot)
-            .map(|chain_link| chain_link.block_root)
+        let chain_link = self.finalized_before_or_at(ancestor_slot)?;
+        let ancestor_root = chain_link.block_root;
+
+        // For finalized blocks, check payload status
+        let payload_status = self.get_parent_payload_status(descendant_root);
+
+        Some((ancestor_root, payload_status))
     }
 
     #[must_use]
@@ -1051,7 +1398,18 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
                         );
                     }
 
-                    parent.state(self)
+                    // ePBS: For Gloas, choose state based on parent variant
+                    // Spec (fork-choice.md:509-514):
+                    // if is_parent_node_full(store, block):
+                    //     state = copy(store.execution_payload_states[block.parent_root])
+                    // else:
+                    //     state = copy(store.block_states[block.parent_root])
+                    if self.is_parent_node_full(block_root) {
+                        parent.execution_state(self)
+                            .expect("parent is full variant but has no execution_payload_state")
+                    } else {
+                        parent.state(self)
+                    }
                 });
 
             // This validation was removed from Capella in `consensus-specs` v1.4.0-alpha.0.
@@ -1245,7 +1603,8 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         let chain_link = ChainLink {
             block_root,
             block: block.clone_arc(),
-            state: Some(state),
+            block_state: Some(state),
+            execution_payload_state: None,
             current_justified_checkpoint: justified_checkpoint,
             finalized_checkpoint,
             unrealized_justified_checkpoint,
@@ -1733,7 +2092,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
             },
         );
 
-        let ancestor_at_target_epoch_start = self
+        let (ancestor_root, _payload_status) = self
             .ancestor(beacon_block_root, Self::start_of_epoch(target.epoch))
             .expect(
                 "the validation for attestation.data.beacon_block_root above ensures \
@@ -1742,7 +2101,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
 
         // > LMD vote must be consistent with FFG vote target
         ensure!(
-            target.root == ancestor_at_target_epoch_start,
+            target.root == ancestor_root,
             Error::LmdGhostInconsistentWithFfgTarget {
                 attestation: attestation.clone_arc(),
             },
@@ -1982,14 +2341,14 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         if !origin.is_from_back_sync() {
             // [REJECT] The current finalized_checkpoint is an ancestor of the sidecar's block
             // -- i.e. get_checkpoint_block(store, block_header.parent_root, store.finalized_checkpoint.epoch) == store.finalized_checkpoint.root.
-            let ancestor_at_finalized_slot = self
+            let (ancestor_root, _payload_status) = self
                 .ancestor(block_header.parent_root, self.finalized_slot())
                 .expect(
                     "every block in the store should have an ancestor at the last finalized slot",
                 );
 
             ensure!(
-                ancestor_at_finalized_slot == self.finalized_checkpoint.root,
+                ancestor_root == self.finalized_checkpoint.root,
                 Error::BlobSidecarBlockNotADescendantOfFinalized { blob_sidecar },
             );
         }
@@ -2222,14 +2581,14 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         if !origin.is_from_back_sync() {
             // [REJECT] The current finalized_checkpoint is an ancestor of the sidecar's block
             // -- i.e. get_checkpoint_block(store, block_header.parent_root, store.finalized_checkpoint.epoch) == store.finalized_checkpoint.root.
-            let ancestor_at_finalized_slot = self
+            let (ancestor_root, _payload_status) = self
                 .ancestor(block_header.parent_root, self.finalized_slot())
                 .expect(
                     "every block in the store should have an ancestor at the last finalized slot",
                 );
 
             ensure!(
-                ancestor_at_finalized_slot == self.finalized_checkpoint.root,
+                ancestor_root == self.finalized_checkpoint.root,
                 Error::DataColumnSidecarBlockNotADescendantOfFinalized {
                     data_column_sidecar
                 },
@@ -2439,111 +2798,6 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         }
     }
 
-    pub fn validate_execution_payload_envelope(
-        &self,
-        envelope: Arc<SignedExecutionPayloadEnvelope<P>>,
-        beacon_block_seen: bool,
-        origin: &ExecutionPayloadEnvelopeOrigin,
-        state_fn: impl FnOnce() -> Option<Arc<BeaconState<P>>>,
-    ) -> Result<ExecutionPayloadEnvelopeAction<P>> {
-        let slot = envelope.message.slot;
-        let beacon_block_root = envelope.message.beacon_block_root;
-        let builder_index = envelope.message.builder_index;
-
-        // [IGNORE] The envelope is from a slot greater than or equal to the latest finalized slot
-        // Spec: envelope.slot >= compute_start_slot_at_epoch(store.finalized_checkpoint.epoch)
-        if slot < self.finalized_slot() {
-            return Ok(ExecutionPayloadEnvelopeAction::Ignore(false));
-        }
-
-        // [IGNORE] The envelope's beacon_block_root has been seen (via gossip or non-gossip sources)
-        // (a client MAY queue envelope for processing once the block is retrieved)
-        if !beacon_block_seen {
-            return Ok(ExecutionPayloadEnvelopeAction::DelayUntilBeaconBlock(
-                envelope,
-                beacon_block_root,
-            ));
-        }
-
-        // Get the beacon block to validate against
-        let Some(chain_link) = self.chain_link(beacon_block_root) else {
-            // Block not in store yet, delay until it arrives
-            return Ok(ExecutionPayloadEnvelopeAction::DelayUntilBeaconBlock(
-                envelope,
-                beacon_block_root,
-            ));
-        };
-
-        let block = &chain_link.block;
-
-        // [REJECT] block.slot equals envelope.slot
-        ensure!(
-            block.message().slot() == slot,
-            Error::<P>::ExecutionPayloadEnvelopeSlotMismatch {
-                expected: block.message().slot(),
-                actual: slot,
-            },
-        );
-
-        // Delay envelope validations until the state is available.
-        let Some(state) = state_fn() else {
-            return Ok(ExecutionPayloadEnvelopeAction::DelayUntilState(
-                envelope,
-                beacon_block_root,
-                slot,
-            ));
-        };
-
-        // [REJECT] The builder signature envelope.signature is valid
-        // Note: We don't need to check if builder_index is valid/active/builder here
-        // because those checks are already done during bid validation
-        let validator = state.validators().get(builder_index)?;
-
-        SingleVerifier.verify_singular(
-            envelope.message.signing_root(&self.chain_config, &state),
-            envelope.signature,
-            self.pubkey_cache.get_or_insert(validator.pubkey)?,
-            SignatureKind::ExecutionPayloadEnvelope,
-        )?;
-
-        // [REJECT] Get the payload bid from state
-        // Spec: "this can be obtained from the state.latest_execution_payload_bid"
-        let bid = match state.as_ref() {
-            BeaconState::Gloas(gloas_state) => gloas_state.latest_execution_payload_bid,
-            _ => bail!("ExecutionPayloadEnvelope requires Gloas state"),
-        };
-
-        // [REJECT] envelope.builder_index == bid.builder_index
-        ensure!(
-            builder_index == bid.builder_index,
-            Error::<P>::BuilderIndexMismatch {
-                expected: bid.builder_index,
-                actual: builder_index,
-            },
-        );
-
-        // [REJECT] payload.block_hash == bid.block_hash
-        ensure!(
-            envelope.message.payload.block_hash == bid.block_hash,
-            Error::<P>::ExecutionPayloadBlockHashMismatch {
-                envelope: envelope.clone(),
-                expected: bid.block_hash,
-            },
-        );
-
-        // [IGNORE] The node has not seen another valid SignedExecutionPayloadEnvelope
-        // for this block root from this builder (spec line 230-231)
-        if self
-            .accepted_execution_payload_envelopes
-            .contains(&(slot, beacon_block_root, builder_index))
-        {
-            return Ok(ExecutionPayloadEnvelopeAction::Ignore(true));
-        }
-
-        // All validations passed
-        Ok(ExecutionPayloadEnvelopeAction::Accept(envelope))
-    }
-
     pub fn validate_payload_attestation(
         &self,
         payload_attestation: Arc<PayloadAttestationMessage>,
@@ -2594,12 +2848,14 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
 
         // [REJECT] The message's validator index is within the payload committee in get_ptc(state, data.slot).
         // The state is the head state corresponding to processing the block up to the current slot as determined by the fork choice.
-        let Some(ref state) = chain_link.state else {
+        let Some(ref block_state) = chain_link.block_state else {
             return Ok(PayloadAttestationAction::DelayUntilBlock(
                 payload_attestation,
                 block_root,
             ));
         };
+
+        let state = chain_link.state(self);
 
         // This seems to be the same as above check with current slot
         if data.slot != state.slot() {
@@ -2607,7 +2863,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         }
 
         // TODO: (gloas): cache ptc members for the slot
-        let Ok(ptc_members) = accessors::ptc_for_slot(state, data.slot) else {
+        let Ok(ptc_members) = accessors::ptc_for_slot(&state, data.slot) else {
             return Ok(PayloadAttestationAction::Ignore(false));
         };
 
@@ -2622,10 +2878,10 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
 
         if !skip_signatures_verification && origin.verify_signatures() {
             SingleVerifier.verify_singular(
-                data.signing_root(&self.chain_config, state),
+                data.signing_root(&self.chain_config, &state),
                 payload_attestation.signature,
                 self.pubkey_cache
-                    .get_or_insert(*accessors::public_key(state, validator_index)?)?,
+                    .get_or_insert(*accessors::public_key(&state, validator_index)?)?,
                 SignatureKind::PayloadAttestation,
             )?;
         }
@@ -2685,9 +2941,9 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         }
 
         let current_slot_attestations = core::mem::take(&mut self.current_slot_attestations);
-        let differences = self.attestation_balance_differences(current_slot_attestations)?;
+        let (differences_empty, differences_full) = self.attestation_balance_differences(current_slot_attestations)?;
 
-        self.apply_balance_differences(differences)?;
+        self.apply_balance_differences(differences_empty, differences_full)?;
         self.update_head_segment_id();
 
         // Pruning the state cache requires the head slot, which depends on head_segment_id
@@ -2736,7 +2992,20 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
 
         // Apply proposer boost to first block in case of equivocation.
         // See <https://github.com/ethereum/consensus-specs/pull/3352>.
-        let is_before_attesting_interval = self.tick.is_before_attesting_interval();
+        // Check if we're in the first interval according to spec
+        // For Gloas: 16 ticks/slot, 4 intervals → first interval is ticks 0-4 (0-3s boundary)
+        // For pre-Gloas: 12 ticks/slot, 3 intervals → first interval is ticks 0-3 (0-4s)
+        let is_before_attesting_interval = {
+            let tick_index = self.tick.kind as usize;
+
+            if self.phase() >= Phase::Gloas {
+                // Gloas: At exactly 3s, tick_index = 4 (Attest), which should still get boost
+                tick_index <= 4
+            } else {
+                // Pre-Gloas: At exactly 4s, tick_index = 4 (Attest), which should NOT get boost
+                tick_index < 4
+            }
+        };
         let is_first_block = self.proposer_boost_root.is_zero();
 
         // > Add proposer score boost if the block is timely
@@ -2802,6 +3071,9 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         };
 
         log_imported_block_info();
+
+        // ePBS: Extract PTC votes from payload_attestations
+        self.notify_ptc_messages(chain_link.block.as_ref());
 
         self.insert_block(chain_link)?;
 
@@ -2908,12 +3180,12 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         &mut self,
         valid_attestations: impl IntoIterator<Item = ValidAttestation<P>>,
     ) -> Result<Option<ChainLink<P>>> {
-        let differences = self.attestation_balance_differences(valid_attestations)?;
+        let (differences_empty, differences_full) = self.attestation_balance_differences(valid_attestations)?;
 
         let old_head_segment_id = self.head_segment_id;
         let old_head = self.head().clone();
 
-        self.apply_balance_differences(differences)?;
+        self.apply_balance_differences(differences_empty, differences_full)?;
         self.update_head_segment_id();
 
         self.reorganized(old_head_segment_id)
@@ -2949,21 +3221,13 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         let old_head_segment_id = self.head_segment_id;
         let old_head = self.head().clone();
 
-        self.apply_balance_differences(differences)?;
+        self.apply_balance_differences(differences, std::iter::empty())?;
         self.update_head_segment_id();
 
         self.reorganized(old_head_segment_id)
             .then_some(old_head)
             .pipe(Ok)
     }
-
-    // TODO: Implement apply_execution_payload_envelope
-    // This should:
-    // 1. Insert (slot, beacon_block_root, builder_index) into accepted_execution_payload_envelopes
-    // 2. Add envelope to execution_payload_envelope_cache
-    // 3. Update ChainLink from empty variant to full variant with execution payload
-    // 4. Integrate with execution engine for payload validation
-
 
     pub fn apply_blob_sidecar(&mut self, blob_sidecar: Arc<BlobSidecar<P>>) {
         let block_header = blob_sidecar.signed_block_header.message;
@@ -3009,6 +3273,186 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         }
 
         self.data_column_cache.insert(data_sidecar);
+    }
+
+    pub fn validate_execution_payload_envelope(
+        &self,
+        envelope: Arc<SignedExecutionPayloadEnvelope<P>>,
+        beacon_block_seen: bool,
+        origin: &ExecutionPayloadEnvelopeOrigin,
+        state_fn: impl FnOnce() -> Option<Arc<BeaconState<P>>>,
+    ) -> Result<ExecutionPayloadEnvelopeAction<P>> {
+        let slot = envelope.message.slot;
+        let beacon_block_root = envelope.message.beacon_block_root;
+        let builder_index = envelope.message.builder_index;
+
+        // [IGNORE] The envelope is from a slot greater than or equal to the latest finalized slot
+        if slot < self.finalized_slot() {
+            return Ok(ExecutionPayloadEnvelopeAction::Ignore(false));
+        }
+
+        // [IGNORE] The envelope's beacon_block_root has been seen
+        if !beacon_block_seen {
+            return Ok(ExecutionPayloadEnvelopeAction::DelayUntilBeaconBlock(
+                envelope,
+                beacon_block_root,
+            ));
+        }
+
+        // Get the beacon block to validate against
+        let Some(chain_link) = self.chain_link(beacon_block_root) else {
+            return Ok(ExecutionPayloadEnvelopeAction::DelayUntilBeaconBlock(
+                envelope,
+                beacon_block_root,
+            ));
+        };
+
+        let block = &chain_link.block;
+
+        // [REJECT] block.slot equals envelope.slot
+        ensure!(
+            block.message().slot() == slot,
+            Error::<P>::ExecutionPayloadEnvelopeSlotMismatch {
+                expected: block.message().slot(),
+                actual: slot,
+            },
+        );
+
+        // Delay until state is available
+        let Some(state) = state_fn() else {
+            return Ok(ExecutionPayloadEnvelopeAction::DelayUntilState(
+                envelope,
+                beacon_block_root,
+                slot,
+            ));
+        };
+
+        // [REJECT] The builder signature is valid
+        let validator = state.validators().get(builder_index)?;
+
+        SingleVerifier.verify_singular(
+            envelope.message.signing_root(&self.chain_config, &state),
+            envelope.signature,
+            self.pubkey_cache.get_or_insert(validator.pubkey)?,
+            SignatureKind::ExecutionPayloadEnvelope,
+        )?;
+
+        // [REJECT] Get the payload bid from state
+        let bid = match state.as_ref() {
+            BeaconState::Gloas(gloas_state) => gloas_state.latest_execution_payload_bid,
+            _ => bail!("ExecutionPayloadEnvelope requires Gloas state"),
+        };
+
+        // [REJECT] envelope.builder_index == bid.builder_index
+        ensure!(
+            builder_index == bid.builder_index,
+            Error::<P>::BuilderIndexMismatch {
+                expected: bid.builder_index,
+                actual: builder_index,
+            },
+        );
+
+        // [REJECT] payload.block_hash == bid.block_hash
+        ensure!(
+            envelope.message.payload.block_hash == bid.block_hash,
+            Error::<P>::ExecutionPayloadBlockHashMismatch {
+                envelope: envelope.clone(),
+                expected: bid.block_hash,
+            },
+        );
+
+        // [IGNORE] Not seen another valid envelope for this block from this builder
+        if self
+            .accepted_execution_payload_envelopes
+            .contains(&(slot, beacon_block_root, builder_index))
+        {
+            return Ok(ExecutionPayloadEnvelopeAction::Ignore(true));
+        }
+
+        Ok(ExecutionPayloadEnvelopeAction::Accept(envelope))
+    }
+
+    /// Implements `on_execution_payload` from fork choice spec
+    ///
+    /// Spec: https://github.com/ethereum/consensus-specs/blob/v1.6.1/specs/gloas/fork-choice#on_execution_payload
+    /// ePBS: Apply execution payload envelope to create full variant.
+    /// Called after validation passes. Processes execution payload and inserts via insert_payload().
+    pub fn apply_execution_payload_envelope(
+        &mut self,
+        signed_envelope: Arc<SignedExecutionPayloadEnvelope<P>>,
+        execution_engine: impl ExecutionEngine<P>,
+    ) -> Result<()> {
+        let envelope = &signed_envelope.message;
+        let beacon_block_root = envelope.beacon_block_root;
+        let payload = &envelope.payload;
+
+        // Get empty variant ChainLink (must already exist from block processing)
+        let empty_chain_link = self.chain_link(beacon_block_root)
+            .ok_or_else(|| anyhow::anyhow!(
+                "Empty variant not found for beacon_block_root {beacon_block_root:?}"
+            ))?;
+
+        // Verify this is actually an empty variant (no execution_payload_state yet)
+        if empty_chain_link.execution_payload_state.is_some() {
+            debug!(
+                "Full variant already exists for beacon_block_root {beacon_block_root:?}, ignoring duplicate"
+            );
+            return Ok(());
+        }
+
+        // Get block_state from empty variant
+        let block_state = empty_chain_link.state(self);
+
+        // TODO: Add data availability check when implemented
+        // Spec: https://github.com/ethereum/consensus-specs/blob/v1.6.1/specs/gloas/fork-choice#on_execution_payload
+        // assert is_data_available(beacon_block_root)
+        // For now, we assume data is available if we got here
+
+        // Clone state for execution payload processing
+        let mut execution_state = block_state.clone_arc();
+
+        // Process execution payload (state transition)
+        // Spec: https://github.com/ethereum/consensus-specs/blob/v1.6.1/specs/gloas/fork-choice#on_execution_payload
+        // process_execution_payload()
+        // This validates payload consistency, processes for gossip, notifies EL, updates state
+        if let BeaconState::Gloas(gloas_state) = execution_state.make_mut() {
+            transition_functions::gloas::execution_payload_processing::process_execution_payload(
+                &self.chain_config,
+                &self.pubkey_cache,
+                gloas_state,
+                &signed_envelope,
+                execution_engine,
+                NullVerifier, // Signature already verified in validate_execution_payload_envelope
+            )?;
+        } else {
+            bail!("Execution payload envelope requires Gloas state");
+        }
+
+        // Create full variant ChainLink with execution_payload_state
+        let full_chain_link = ChainLink {
+            block_root: empty_chain_link.block_root,
+            block: empty_chain_link.block.clone_arc(),
+            block_state: empty_chain_link.block_state.clone(),
+            execution_payload_state: Some(execution_state),
+            current_justified_checkpoint: empty_chain_link.current_justified_checkpoint,
+            finalized_checkpoint: empty_chain_link.finalized_checkpoint,
+            unrealized_justified_checkpoint: empty_chain_link.unrealized_justified_checkpoint,
+            unrealized_finalized_checkpoint: empty_chain_link.unrealized_finalized_checkpoint,
+            payload_status: PayloadStatus::Valid,
+        };
+
+        // Insert full variant into fork choice tree
+        // Use beacon_block_root from envelope (same as empty block's root)
+        self.insert_payload(beacon_block_root, full_chain_link)?;
+
+        debug!(
+            "Applied execution payload envelope for beacon_block_root: {beacon_block_root:?}, \
+             slot: {}, payload_hash: {:?}",
+            envelope.slot,
+            payload.block_hash
+        );
+
+        Ok(())
     }
 
     pub fn accepted_data_column_sidecars_count(
@@ -3079,7 +3523,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
 
         let new_block_location;
 
-        if let Some(parent) = self.unfinalized_locations.get(&parent_root).copied() {
+        if let Some(parent) = self.get_location(parent_root) {
             let parent_is_invalid =
                 self.unfinalized[&parent.segment_id][parent.position].is_invalid();
 
@@ -3107,8 +3551,10 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
                     position: Position::default(),
                 };
 
+                let mut segment = Segment::new(chain_link);
+                segment.set_parent_location(Some(parent));
                 self.unfinalized
-                    .insert(new_block_location.segment_id, Segment::new(chain_link))
+                    .insert(new_block_location.segment_id, segment)
                     .unwrap_none();
             }
         } else {
@@ -3119,12 +3565,15 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
                 position: Position::default(),
             };
 
+            let segment = Segment::new(chain_link);
+            // parent_location is None for segments rooted at finalized checkpoint
             self.unfinalized
-                .insert(new_block_location.segment_id, Segment::new(chain_link))
+                .insert(new_block_location.segment_id, segment)
                 .unwrap_none();
         }
 
-        self.unfinalized_locations
+        // ePBS: Insert into unfinalized_locations_empty (empty variant)
+        self.unfinalized_locations_empty
             .insert(block_root, new_block_location)
             .unwrap_none();
 
@@ -3136,11 +3585,103 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         Ok(())
     }
 
+    /// ePBS: Insert full variant (with execution payload) for existing empty variant.
+    ///
+    /// Flow:
+    /// 1. Empty variant already inserted via insert_block()
+    /// 2. Full variant arrives later with execution payload envelope
+    /// 3. This method creates sibling segment for full variant
+    ///
+    /// Segment structure (siblings):
+    /// ```
+    /// Segment N:   [..., Parent X, Empty A]
+    /// Segment N+1: [Full A]  ← Forks from Parent X (sibling of Empty A)
+    /// ```
+    fn insert_payload(
+        &mut self,
+        beacon_block_root: H256,  // From envelope.beacon_block_root (same as empty block)
+        chain_link: ChainLink<P>,
+    ) -> Result<()> {
+        let block = &chain_link.block;
+        let parent_root = block.message().parent_root();
+
+        // Extract payload hash for execution_payload_locations (still needed for EL queries)
+        let payload_hash = chain_link.execution_block_hash().expect(
+            "insert_payload called with ChainLink missing execution_block_hash - \
+             this should never happen as full variant requires execution payload"
+        );
+
+        // Check if parent exists
+        ensure!(
+            self.get_location(parent_root).is_some(),
+            "Parent not found for parent_root: {parent_root:?}"
+        );
+
+        // Use same logic as insert_block()
+        let new_block_location;
+
+        if let Some(parent) = self.get_location(parent_root) {
+            let parent_is_invalid = self.unfinalized[&parent.segment_id][parent.position].is_invalid();
+
+            let payload_status = if parent_is_invalid {
+                PayloadStatus::Invalid
+            } else {
+                chain_link.payload_status
+            };
+
+            let chain_link = ChainLink {
+                payload_status,
+                ..chain_link
+            };
+
+            if parent.position == self.unfinalized[&parent.segment_id].last_position() {
+                // EXTEND parent's segment (rare - empty already extended it)
+                new_block_location = Location {
+                    segment_id: parent.segment_id,
+                    position: parent.position.next()?,
+                };
+
+                self.unfinalized[&parent.segment_id].push(UnfinalizedBlock::new(chain_link));
+            } else {
+                // FORK from parent (expected - creates sibling segment)
+                new_block_location = Location {
+                    segment_id: self.lowest_unused_segment_id()?,
+                    position: Position::default(),
+                };
+
+                let mut segment = Segment::new(chain_link);
+                segment.set_parent_location(Some(parent));
+                self.unfinalized
+                    .insert(new_block_location.segment_id, segment)
+                    .unwrap_none();
+            }
+        } else {
+            unreachable!("Parent existence already checked above");
+        }
+
+        // Register full variant location (keyed by beacon_block_root)
+        // Gracefully handle duplicate envelope (same beacon_block_root)
+        if self.unfinalized_locations_full.contains_key(&beacon_block_root) {
+            debug!(
+                "Duplicate execution payload envelope for beacon_block_root: {beacon_block_root:?}, ignoring"
+            );
+            return Ok(());
+        }
+
+        self.unfinalized_locations_full
+            .insert(beacon_block_root, new_block_location)
+            .unwrap_none();
+
+        // Also register in execution_payload_locations (same hash)
+        self.execution_payload_locations
+            .insert(payload_hash, new_block_location);
+
+        Ok(())
+    }
+
     fn finalize_blocks(&mut self) -> Option<Location> {
         let locations_from_newest_to_root = core::iter::successors(
-            self.unfinalized_locations
-                .get(&self.finalized_checkpoint.root)
-                .copied(),
+            self.get_location(self.finalized_checkpoint.root),
             |location| self.parent_location(&self.unfinalized[&location.segment_id]),
         )
         .collect_vec();
@@ -3154,7 +3695,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
                 .unfinalized
                 .remove(&completely_finalized_location.segment_id)
                 .expect(
-                    "self.unfinalized_locations and Segment.parent \
+                    "self.unfinalized_locations_empty and Segment.parent \
                      should only refer to segments in self.unfinalized",
                 );
 
@@ -3172,6 +3713,26 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
 
         self.move_to_finalized(finalized);
 
+        // Optimization 2 fix: Invalidate cached parent_location for remaining segments
+        // that pointed to removed segments (now finalized/pruned)
+        let segments_to_invalidate: Vec<_> = self
+            .unfinalized
+            .iter()
+            .filter_map(|(segment_id, segment)| {
+                segment.parent_location().and_then(|cached_parent| {
+                    (!self.unfinalized.contains_key(&cached_parent.segment_id))
+                        .then_some(*segment_id)
+                })
+            })
+            .collect();
+
+        for segment_id in segments_to_invalidate {
+            self.unfinalized
+                .get_mut(&segment_id)
+                .expect("segment exists")
+                .set_parent_location(None);
+        }
+
         Some(*partially_finalized_location)
     }
 
@@ -3179,7 +3740,8 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         let Self {
             finalized,
             finalized_indices,
-            unfinalized_locations,
+            unfinalized_locations_empty,
+            unfinalized_locations_full,
             execution_payload_locations,
             ..
         } = self;
@@ -3194,11 +3756,19 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
                     .insert(block_root, old_len + offset)
                     .unwrap_none();
 
-                unfinalized_locations.remove(&block_root).expect(
-                    "roots of unfinalized blocks should be present in self.unfinalized_locations",
-                );
+                // ePBS: Need to clean up ALL possible entries for this block:
+                // 1. Empty variant (if exists) - keyed by block_root
+                // 2. Full variant (if exists) - keyed by payload_hash
+                // 3. Both could exist for the same beacon block
+                //
+                // Use remove() without expect - gracefully handle missing entries
 
+                // Always try to remove from empty variant map (keyed by block_root)
+                unfinalized_locations_empty.remove(&block_root);
+
+                // Remove from full variant map and execution_payload_locations if has execution payload
                 if let Some(block_hash) = unfinalized_block.chain_link.execution_block_hash() {
+                    unfinalized_locations_full.remove(&block_hash);
                     execution_payload_locations.remove(&block_hash);
                 }
 
@@ -3266,11 +3836,23 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
 
     fn remove_orphaned(&mut self, orphaned_blocks: Vector<UnfinalizedBlock<P>>) {
         for block in orphaned_blocks {
-            self.unfinalized_locations
-                .remove(&block.chain_link.block_root)
-                .expect(
-                    "roots of unfinalized blocks should be present in self.unfinalized_locations",
-                );
+            let block_root = block.chain_link.block_root;
+
+            // ePBS: For each orphaned block, need to clean up ALL possible entries:
+            // 1. Empty variant (if exists) - keyed by block_root
+            // 2. Full variant (if exists) - keyed by payload_hash
+            // 3. Both could exist for the same beacon block
+            //
+            // Use remove() without expect - it's okay if entry doesn't exist
+            // (could have been removed already, or variant never created)
+
+            // Remove from empty variant map (keyed by block_root)
+            self.unfinalized_locations_empty.remove(&block_root);
+
+            // Remove from full variant map (keyed by payload_hash) if block has execution payload
+            if let Some(block_hash) = block.chain_link.execution_block_hash() {
+                self.unfinalized_locations_full.remove(&block_hash);
+            }
         }
     }
 
@@ -3316,10 +3898,12 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
                 // (as long as the justified block is not orphaned, which is possible according to
                 // the Fork Choice specification). It is not sufficient because it does not prevent
                 // `ChainLink`s with unloaded states from becoming justified or finalized later.
-                if let Some(state) = chain_link.state.take() {
+                if let Some(block_state) = chain_link.block_state.take() {
                     if misc::is_epoch_start::<P>(chain_link.slot()) {
+                        let execution_payload_state = chain_link.execution_payload_state.take();
                         to_persist.push(ChainLink {
-                            state: Some(state),
+                            block_state: Some(block_state),
+                            execution_payload_state,
                             ..chain_link.clone()
                         });
                     }
@@ -3375,7 +3959,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
                 .expect("the combined balances of the planned validators fit in i64");
         }
 
-        self.apply_balance_differences(differences)
+        self.apply_balance_differences(differences, std::iter::empty())
     }
 
     // `Vector` has no `resize` method as of `im` version 15.1.0.
@@ -3404,8 +3988,6 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
             .retain(|(slot, _, _), _| finalized_slot <= *slot);
         self.accepted_payload_bids
             .retain(|(slot, _), _| finalized_slot <= *slot);
-        self.accepted_execution_payload_envelopes
-            .retain(|(slot, _, _)| finalized_slot <= *slot);
         self.sidecars_construction_started
             .retain(|_, slot| finalized_slot <= *slot);
         self.requested_blobs_from_el
@@ -3480,8 +4062,9 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
     fn attestation_balance_differences(
         &mut self,
         valid_attestations: impl IntoIterator<Item = ValidAttestation<P>>,
-    ) -> Result<HashedMap<H256, Difference>> {
-        let mut differences = Self::difference_map();
+    ) -> Result<(HashedMap<H256, Difference>, HashedMap<H256, Difference>)> {
+        let mut differences_empty: HashedMap<H256, Difference> = Self::difference_map();
+        let mut differences_full: HashedMap<H256, Difference> = Self::difference_map();
 
         // > Update latest messages for attesting indices
         for valid_attestation in valid_attestations {
@@ -3513,9 +4096,19 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
                 continue;
             }
 
+            // [New in Gloas:EIP7732] payload_present based on attestation.data.index
+            // Pre-Gloas: data.index is committee index, always treat as empty (no full variant exists)
+            // Gloas: data.index indicates empty (0) or full (1) variant vote
+            let payload_present = if self.phase() >= Phase::Gloas {
+                data.index == 1
+            } else {
+                false // Pre-Gloas: all blocks in empty map, no full variants exist
+            };
+
             let latest_message = Arc::new(LatestMessage {
-                epoch,
+                slot,
                 beacon_block_root,
+                payload_present,
             });
 
             // The indices must be filtered here rather than in a task to avoid race conditions.
@@ -3531,11 +4124,12 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
 
                 if let Some(Some(old_message)) = &self.latest_messages.get(index) {
                     let LatestMessage {
-                        epoch: old_epoch,
+                        slot: old_slot,
                         beacon_block_root: old_beacon_block_root,
+                        payload_present: old_payload_present,
                     } = **old_message;
 
-                    if epoch <= old_epoch {
+                    if slot <= old_slot {
                         continue;
                     }
 
@@ -3543,16 +4137,45 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
                         continue;
                     }
 
-                    differences
-                        .entry(old_beacon_block_root)
-                        .or_default()
-                        .sub_assign(balance);
+                    // [Gloas] Slot check per is_supporting_vote
+                    // The code is inlined to fit eager calculation of differences.
+                    // Spec: https://github.com/ethereum/consensus-specs/blob/v1.6.1/specs/gloas/fork-choice#is_supporting_vote
+                    if payload_present {
+                        if let Some(voted_block) = self.chain_link(beacon_block_root) {
+                            if slot <= voted_block.block.message().slot() {
+                                continue; // Same-slot FULL votes invalid
+                            }
+                        }
+                    }
+
+                    if old_payload_present {
+                        // Full variant: use beacon_block_root directly (no conversion needed!)
+                        differences_full
+                            .entry(old_beacon_block_root)
+                            .or_default()
+                            .sub_assign(balance);
+                    } else {
+                        // Empty variant: use beacon_block_root directly
+                        differences_empty
+                            .entry(old_beacon_block_root)
+                            .or_default()
+                            .sub_assign(balance);
+                    }
                 }
 
-                differences
-                    .entry(beacon_block_root)
-                    .or_default()
-                    .add_assign(balance);
+                if payload_present {
+                    // Full variant: use beacon_block_root directly (no conversion needed!)
+                    differences_full
+                        .entry(beacon_block_root)
+                        .or_default()
+                        .add_assign(balance);
+                } else {
+                    // Empty variant: use beacon_block_root directly
+                    differences_empty
+                        .entry(beacon_block_root)
+                        .or_default()
+                        .add_assign(balance);
+                }
 
                 // Note that we mutate `Store.latest_messages` as we go along.
                 // This prevents duplicate attestations from being counted more than once.
@@ -3562,18 +4185,16 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
             }
         }
 
-        Ok(differences)
+        Ok((differences_empty, differences_full))
     }
 
     fn apply_balance_differences(
         &mut self,
-        differences: impl IntoIterator<Item = (H256, Difference)>,
+        differences_empty: impl IntoIterator<Item = (H256, Difference)>,
+        differences_full: impl IntoIterator<Item = (H256, Difference)>,
     ) -> Result<()> {
-        // This could be parallelized by making `Store::propagate_and_dissolve_differences` return
-        // an `Ordmap<SegmentId, DissolvedDifference>`, but it would almost certainly not be worth
-        // the overhead.
         for (segment_id, group) in &self
-            .propagate_and_dissolve_differences(differences)?
+            .propagate_and_dissolve_differences(differences_empty, differences_full)?
             .into_iter()
             .chunk_by(|dissolved_difference| dissolved_difference.segment_id)
         {
@@ -3619,26 +4240,42 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         Ok(())
     }
 
-    // This could be rewritten to return an `Iterator` instead of a `Vec`,
-    // but the cost of using a `Vec` is probably negligible.
+    // ePBS: Propagate balance differences for both empty and full variants.
+    // Converts map keys to Locations using direct lookups, then processes segment tree.
     fn propagate_and_dissolve_differences(
         &self,
-        differences: impl IntoIterator<Item = (H256, Difference)>,
+        differences_empty: impl IntoIterator<Item = (H256, Difference)>,
+        differences_full: impl IntoIterator<Item = (H256, Difference)>,
     ) -> Result<Vec<DissolvedDifference>> {
-        let mut difference_queue = differences
-            .into_iter()
-            .filter(|(_, difference)| *difference != 0)
-            .filter_map(|(block_root, difference)| {
-                // `block_root` may refer to a finalized block.
-                // Changes to balances of finalized blocks are irrelevant.
-                let location = *self.unfinalized_locations.get(&block_root)?;
+        let mut difference_queue = BinaryHeap::new();
 
-                Some(DifferenceAtLocation {
+        // Convert empty map: H256 → Location (direct lookup, tag as empty variant)
+        for (block_root, difference) in differences_empty {
+            if difference == 0 {
+                continue;
+            }
+            if let Some(&location) = self.unfinalized_locations_empty.get(&block_root) {
+                difference_queue.push(DifferenceAtLocation {
                     difference,
                     location,
-                })
-            })
-            .collect::<BinaryHeap<_>>();
+                    is_full_variant: false,
+                });
+            }
+        }
+
+        // Convert full map: H256 → Location (direct lookup, tag as full variant)
+        for (beacon_block_root, difference) in differences_full {
+            if difference == 0 {
+                continue;
+            }
+            if let Some(&location) = self.unfinalized_locations_full.get(&beacon_block_root) {
+                difference_queue.push(DifferenceAtLocation {
+                    difference,
+                    location,
+                    is_full_variant: true,
+                });
+            }
+        }
 
         let mut propagated_and_dissolved_differences = vec![];
 
@@ -3669,10 +4306,15 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
             if previous.difference != 0 {
                 propagated_and_dissolved_differences.push(previous.apply_from_start());
 
-                if let Some(parent) = self.parent_location(&self.unfinalized[&segment_id]) {
+                // Use variant-aware parent resolution
+                if let Some(parent) = self.parent_location_for_variant(
+                    &self.unfinalized[&segment_id],
+                    previous.is_full_variant,
+                ) {
                     difference_queue.push(DifferenceAtLocation {
                         difference: previous.difference,
                         location: parent,
+                        is_full_variant: previous.is_full_variant,
                     });
                 }
             }
@@ -3709,19 +4351,41 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
 
                 let sibling = &segment[next_position_in_segment];
 
-                if self.score(sibling) < branch_point.score || sibling.is_invalid() {
+                // ePBS: Compare (score, tiebreaker, root) for proper variant selection
+                let sibling_score = self.score(sibling);
+
+                if sibling_score < branch_point.score || sibling.is_invalid() {
                     best_descendant_of_segment = Some(branch_point.best_descendant);
+                } else if sibling_score == branch_point.score {
+                    // Tie on score: use payload status tiebreaker
+                    // Priority: FULL (timely) > EMPTY > FULL (late)
+                    let sibling_root = sibling.chain_link.block_root;
+                    let sibling_status = self.get_parent_payload_status(sibling_root);
+                    let sibling_tiebreaker = self.get_payload_status_tiebreaker(sibling_root, sibling_status);
+
+                    let branch_status = self.get_parent_payload_status(branch_point.root);
+                    let branch_tiebreaker = self.get_payload_status_tiebreaker(branch_point.root, branch_status);
+
+                    // Compare (tiebreaker, root) - lower values lose
+                    if (sibling_tiebreaker, sibling_root) < (branch_tiebreaker, branch_point.root) {
+                        best_descendant_of_segment = Some(branch_point.best_descendant);
+                    }
+                    // else: sibling wins or equal (prefer sibling on exact tie)
                 }
             }
 
             if let Some(best_descendant) = best_descendant_of_segment {
-                let score = self.score(segment.first_block());
+                let first_block = segment.first_block();
+                let score = self.score(first_block);
+                // Optimization: Use cached first_block_root
+                let root = segment.first_block_root();
 
                 if let Some(parent) = self.parent_location(segment) {
                     branch_points.push(BranchPoint {
                         parent,
                         best_descendant,
                         score,
+                        root,
                     });
                     continue;
                 }
@@ -3881,7 +4545,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         let mut state = self
             .chain_ending_with(block_root)
             .find_map(|chain_link| {
-                let state = chain_link.state.clone().or_else(|| {
+                let state = chain_link.block_state.clone().or_else(|| {
                     match self.stored_state_by_block_root(chain_link.block_root) {
                         Ok(state_opt) => state_opt,
                         Err(error) => {
@@ -4359,11 +5023,19 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
             self.finalized_indices.len(),
         );
 
+        // ePBS: Report both location maps
         metrics.set_collection_length(
             module_path!(),
             &type_name,
-            "unfinalized_locations",
-            self.unfinalized_locations.len(),
+            "unfinalized_locations_empty",
+            self.unfinalized_locations_empty.len(),
+        );
+
+        metrics.set_collection_length(
+            module_path!(),
+            &type_name,
+            "unfinalized_locations_full",
+            self.unfinalized_locations_full.len(),
         );
 
         metrics.set_collection_length(
