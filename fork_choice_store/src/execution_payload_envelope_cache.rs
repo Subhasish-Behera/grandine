@@ -28,6 +28,16 @@ impl<P: Preset> ExecutionPayloadEnvelopeCache<P> {
             .retain(|_, (_, envelope_slot, _)| finalized_slot <= *envelope_slot);
     }
 
+    pub fn prune(&mut self, prune_slot: Slot) {
+        self.envelopes
+            .retain(|_, (_, slot, _)| prune_slot <= *slot);
+    }
+
+    pub fn prune_persisted(&mut self, prune_slot: Slot) {
+        self.envelopes
+            .retain(|_, (_, slot, persisted)| !*persisted || prune_slot <= *slot);
+    }
+
     pub fn has_unpersisted_envelopes(&self) -> bool {
         self.envelopes
             .iter()
