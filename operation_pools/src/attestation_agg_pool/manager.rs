@@ -10,6 +10,7 @@ use dedicated_executor::DedicatedExecutor;
 use eth1_api::ApiController;
 use features::Feature;
 use fork_choice_control::Wait;
+use logging::warn_with_peers;
 use prometheus_metrics::Metrics;
 use ssz::ContiguousList;
 use std_ext::ArcExt as _;
@@ -17,6 +18,8 @@ use tracing::instrument;
 use types::{
     combined::{Attestation as CombinedAttestation, BeaconState},
     config::Config,
+    electra::containers::Attestation as ElectraAttestation,
+    nonstandard::Phase,
     phase0::{
         containers::{Attestation, AttestationData},
         primitives::{CommitteeIndex, Epoch, Slot, ValidatorIndex, H256},
@@ -27,12 +30,14 @@ use validator_statistics::ValidatorStatistics;
 
 use crate::{
     attestation_agg_pool::{
+        convert_to_electra_attestation, convert_to_electra_attestation_use_pre_pool,
         pool::Pool,
         tasks::{
             BestProposableAttestationsTask, ComputeProposerIndicesTask, InsertAttestationTask,
             PackProposableAttestationsTask, SetCommitteesWithAggregatorsTask,
             SetRegisteredValidatorsTask,
         },
+        types::AttestationPrePool,
     },
     misc::PoolTask,
 };
@@ -129,6 +134,39 @@ impl<P: Preset, W: Wait> Manager<P, W> {
                 committee_index,
             )
             .await
+    }
+
+    pub async fn attestation_pre_pool_by_data(
+        &self,
+        data: AttestationData,
+    ) -> Option<AttestationPrePool> {
+        self.pool.attestation_pre_pool_by_data(data).await
+    }
+
+    pub async fn electra_aggregate_for_publish(
+        &self,
+        phase0_aggregate: Attestation<P>,
+        phase: Phase,
+    ) -> Option<ElectraAttestation<P>> {
+        if phase < Phase::Gloas {
+            return convert_to_electra_attestation(phase0_aggregate).ok();
+        }
+
+        let data = phase0_aggregate.data;
+        let Some(pre_pool) = self.attestation_pre_pool_by_data(data).await else {
+            warn_with_peers!(
+                "missing pre-pool attestation data for attestation data (slot {}, committee {})",
+                data.slot,
+                data.index
+            );
+            return None;
+        };
+
+        convert_to_electra_attestation_use_pre_pool(
+            phase0_aggregate,
+            pre_pool,
+        )
+        .ok()
     }
 
     pub async fn best_proposable_attestations(
