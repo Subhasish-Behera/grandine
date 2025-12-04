@@ -858,6 +858,15 @@ impl<P: Preset> SyncManager<P> {
             .ready_to_request_by_root(data_column_identifier, peer_id)
     }
 
+    pub fn ready_to_request_envelope_by_root(
+        &mut self,
+        block_root: H256,
+        peer_id: Option<PeerId>,
+    ) -> bool {
+        self.execution_payload_envelope_requests
+            .ready_to_request_by_root(&block_root, peer_id)
+    }
+
     pub fn add_blob_request_by_range(&mut self, app_request_id: AppRequestId, batch: SyncBatch<P>) {
         self.log(
             Level::Debug,
