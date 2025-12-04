@@ -1,10 +1,11 @@
 use std::sync::Arc;
 
-use anyhow::{bail, Error as AnyhowError, Result};
+use anyhow::{bail, ensure, Error as AnyhowError, Result};
 use eth1_api::{ApiController, RealController};
 use fork_choice_control::Wait;
 use helper_functions::{accessors, misc};
 use logging::debug_with_peers;
+use ssz::BitVector;
 use typenum::Unsigned as _;
 use types::{
     combined::{Attestation, BeaconState},
@@ -13,6 +14,7 @@ use types::{
         error::AttestationConversionError,
     },
     phase0::containers::{Attestation as Phase0Attestation, AttestationData},
+    phase0::primitives::CommitteeIndex,
     preset::Preset,
 };
 
@@ -64,6 +66,48 @@ pub fn convert_to_electra_attestation<P: Preset>(
     attestation: Phase0Attestation<P>,
 ) -> Result<ElectraAttestation<P>> {
     attestation.try_into()
+}
+//dev notes: can not use the try_into implmentation used in convert_to_electra_attestations anymore
+//because it had no logic/acccess to the state on how to set data.index(which can be both 1 and 0). it alwyas sets to 0.
+// but here when u are getting attestation from the pool, the data.index, the rest 2 fields are supplied from the caller
+// restored index is the actualy indirect execution_payload_availability in gloas path. at both call sites
+// why commitee index is needed as a field: it is not needed when the caller is block producer(because its in pool format there)
+// but its required in validatrors aggregate path because therer attestation.data.index has become payload status. so to be used in both
+// sites, its taking comitee index as a fields as well.
+
+pub fn convert_to_electra_attestation_with_committee_index<P: Preset>(
+    attestation: Phase0Attestation<P>,
+    committee_index: CommitteeIndex,
+    restored_index: CommitteeIndex,
+) -> Result<ElectraAttestation<P>> {
+    let Phase0Attestation {
+        aggregation_bits,
+        data,
+        signature,
+    } = attestation;
+
+    ensure!(
+        committee_index < P::MaxCommitteesPerSlot::U64,
+        AttestationConversionError::InvalidCommitteeIndex
+    );
+
+    let aggregation_bits: Vec<u8> = aggregation_bits.into();
+    let mut committee_bits = BitVector::default();
+    committee_bits.set(committee_index.try_into()?, true);
+
+    // Restore the correct data.index for the Electra attestation.
+    // In the pool, data.index = committee_index. The caller provides the correct
+    // restored_index: 0 for pre-Gloas Electra, payload_status for Gloas.
+    let data = AttestationData { index: restored_index, ..data };
+
+    Ok(ElectraAttestation {
+        aggregation_bits: aggregation_bits
+            .try_into()
+            .map_err(AttestationConversionError::InvalidAggregationBits)?,
+        data,
+        committee_bits,
+        signature,
+    })
 }
 
 // TODO(feature/electra): properly refactor attestations
