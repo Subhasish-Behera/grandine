@@ -82,6 +82,24 @@ where
         self.store_snapshot().finalized_root()
     }
 
+    /// Count of chain links with execution_payload_state (full variants)
+    #[must_use]
+    pub fn execution_payload_states_count(&self) -> usize {
+        self.store_snapshot().execution_payload_states_count()
+    }
+
+    /// Count of blocks with PTC votes
+    #[must_use]
+    pub fn blocks_with_ptc_votes_count(&self) -> usize {
+        self.store_snapshot().blocks_with_ptc_votes_count()
+    }
+
+    /// Head payload status as u8 (0=empty, 1=pending, 2=full)
+    #[must_use]
+    pub fn head_payload_status(&self) -> u8 {
+        self.store_snapshot().head_payload_status()
+    }
+
     #[must_use]
     pub fn genesis_time(&self) -> UnixSeconds {
         let store = self.store_snapshot();

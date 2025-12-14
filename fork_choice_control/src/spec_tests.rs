@@ -19,6 +19,7 @@ use types::{
     },
     config::Config,
     deneb::primitives::{Blob, KzgProof},
+    gloas::containers::SignedExecutionPayloadEnvelope,
     nonstandard::{Phase, TimedPowBlock},
     phase0::{
         containers::Checkpoint,
@@ -51,6 +52,11 @@ enum Step {
         pow_block: PathBuf,
     },
     PayloadStatus(PayloadStatusWithBlockHash),
+    ExecutionPayload {
+        execution_payload: PathBuf,
+        #[serde(default = "serde_aux::field_attributes::bool_true")]
+        valid: bool,
+    },
     AttesterSlashing {
         attester_slashing: PathBuf,
     },
@@ -68,6 +74,10 @@ struct Checks {
     justified_checkpoint: Option<Checkpoint>,
     finalized_checkpoint: Option<Checkpoint>,
     proposer_boost_root: Option<H256>,
+    // Gloas/EIP7732-specific checks (parsed but not verified yet)
+    execution_payload_states_count: Option<usize>,
+    blocks_with_ptc_votes: Option<usize>,
+    head_payload_status: Option<u8>,
 }
 
 #[derive(Deserialize)]
@@ -159,6 +169,7 @@ struct HeadCheck {
     ["consensus-spec-tests/tests/minimal/gloas/fork_choice/on_block/*/*"]             [gloas_minimal_on_block]             [Minimal] [Gloas];
     ["consensus-spec-tests/tests/minimal/gloas/fork_choice/reorg/*/*"]                [gloas_minimal_reorg]                [Minimal] [Gloas];
     ["consensus-spec-tests/tests/minimal/gloas/fork_choice/withholding/*/*"]          [gloas_minimal_withholding]          [Minimal] [Gloas];
+    ["consensus-spec-tests/tests/minimal/gloas/fork_choice/base/pyspec_tests/*"]      [gloas_minimal_base_pyspec]          [Minimal] [Gloas];
 )]
 #[test_resources(glob)]
 fn function_name(case: Case) {
@@ -305,6 +316,21 @@ fn run_case<P: Preset>(config: &Arc<Config>, case: Case) {
             Step::PayloadStatus(payload_status_with_block_hash) => {
                 last_payload_status = Some(payload_status_with_block_hash);
             }
+            Step::ExecutionPayload {
+                execution_payload,
+                valid,
+            } => {
+                let signed_envelope = case.ssz::<_, Arc<SignedExecutionPayloadEnvelope<P>>>(
+                    config.as_ref(),
+                    execution_payload,
+                );
+
+                if valid {
+                    context.on_execution_payload_envelope(&signed_envelope);
+                } else {
+                    context.on_invalid_execution_payload_envelope(&signed_envelope);
+                }
+            }
             Step::AttesterSlashing {
                 attester_slashing: file_name,
             } => {
@@ -329,6 +355,9 @@ fn run_case<P: Preset>(config: &Arc<Config>, case: Case) {
                     justified_checkpoint,
                     finalized_checkpoint,
                     proposer_boost_root,
+                    execution_payload_states_count,
+                    blocks_with_ptc_votes,
+                    head_payload_status,
                 } = *checks;
 
                 if let Some(HeadCheck { slot, root }) = head {
@@ -354,6 +383,18 @@ fn run_case<P: Preset>(config: &Arc<Config>, case: Case) {
 
                 if let Some(proposer_boost_root) = proposer_boost_root {
                     context.assert_proposer_boost_root(proposer_boost_root);
+                }
+
+                if let Some(count) = execution_payload_states_count {
+                    context.assert_execution_payload_states_count(count);
+                }
+
+                if let Some(count) = blocks_with_ptc_votes {
+                    context.assert_blocks_with_ptc_votes_count(count);
+                }
+
+                if let Some(status) = head_payload_status {
+                    context.assert_head_payload_status(status);
                 }
             }
         }

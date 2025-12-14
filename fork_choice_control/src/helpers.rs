@@ -491,6 +491,28 @@ impl<P: Preset> Context<P> {
         self.next_p2p_message().unwrap_none();
     }
 
+    pub fn on_execution_payload_envelope(
+        &mut self,
+        signed_envelope: &Arc<types::gloas::containers::SignedExecutionPayloadEnvelope<P>>,
+    ) {
+        self.controller()
+            .on_gossip_execution_payload(signed_envelope.clone_arc(), GossipId::default(), true);
+        self.controller().wait_for_tasks();
+        // Drain the Accept message
+        assert!(matches!(self.next_p2p_message(), Some(P2pMessage::Accept(_))));
+    }
+
+    pub fn on_invalid_execution_payload_envelope(
+        &mut self,
+        signed_envelope: &Arc<types::gloas::containers::SignedExecutionPayloadEnvelope<P>>,
+    ) {
+        self.controller()
+            .on_gossip_execution_payload(signed_envelope.clone_arc(), GossipId::default(), true);
+        self.controller().wait_for_tasks();
+        // Drain the Reject message
+        assert!(matches!(self.next_p2p_message(), Some(P2pMessage::Reject(_, _))));
+    }
+
     pub fn on_notified_valid_payload(&self, block: &SignedBeaconBlock<P>) {
         let execution_block_hash = Self::execution_block_hash(block);
 
@@ -553,6 +575,24 @@ impl<P: Preset> Context<P> {
 
     pub fn assert_proposer_boost_root(&self, expected_root: H256) {
         assert_eq!(self.controller().proposer_boost_root(), expected_root);
+    }
+
+    pub fn assert_execution_payload_states_count(&self, expected_count: usize) {
+        assert_eq!(
+            self.controller().execution_payload_states_count(),
+            expected_count,
+        );
+    }
+
+    pub fn assert_blocks_with_ptc_votes_count(&self, expected_count: usize) {
+        assert_eq!(
+            self.controller().blocks_with_ptc_votes_count(),
+            expected_count,
+        );
+    }
+
+    pub fn assert_head_payload_status(&self, expected_status: u8) {
+        assert_eq!(self.controller().head_payload_status(), expected_status);
     }
 
     pub fn assert_head(&self, expected_head_slot: Slot, expected_head_root: H256) {

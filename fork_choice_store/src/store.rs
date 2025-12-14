@@ -295,11 +295,18 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
             root: block_root,
         };
 
+        // For Gloas, genesis/anchor is conceptually a "full" block with execution state
+        let execution_payload_state = if anchor_state.phase() >= Phase::Gloas {
+            Some(anchor_state.clone_arc())
+        } else {
+            None
+        };
+
         let anchor = ChainLink {
             block_root,
             block: anchor_block,
             block_state: Some(anchor_state.clone_arc()),
-            execution_payload_state: None,
+            execution_payload_state,
             current_justified_checkpoint: checkpoint,
             finalized_checkpoint: checkpoint,
             unrealized_justified_checkpoint: checkpoint,
@@ -331,11 +338,16 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
             justified_active_balances: Self::active_balances(&anchor_state),
             timely_proposer_score: OnceLock::new(),
             latest_messages,
-            checkpoint_states: HashMap::unit(checkpoint, anchor_state),
             current_slot_attestations: vector![],
             unfinalized_locations_empty: hashmap! {},
             unfinalized_locations_full: hashmap! {},
-            ptc_vote: HashMap::default(),
+            // For Gloas, anchor block should be in ptc_vote map
+            ptc_vote: if anchor_state.phase() >= Phase::Gloas {
+                HashMap::unit(block_root, BitVector::default())
+            } else {
+                HashMap::default()
+            },
+            checkpoint_states: HashMap::unit(checkpoint, anchor_state),
             execution_payload_locations: hashmap! {},
             aggregate_and_proof_supersets: Arc::new(AggregateAndProofSupersets::new()),
             accepted_blob_sidecars: HashMap::default(),
@@ -572,6 +584,24 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
 
         // Neither exists
         None
+    }
+
+    /// ePBS: Get the node's own payload status for fork choice tiebreaker.
+    /// Spec: node.payload_status in get_payload_status_tiebreaker
+    /// - FULL if execution_payload_state is Some (envelope processed)
+    /// - EMPTY if execution_payload_state is None but block exists
+    /// - PENDING if bid exists but envelope not yet received (not implemented yet)
+    #[must_use]
+    fn get_node_payload_status(&self, block_root: H256) -> ForkChoicePayloadStatus {
+        let Some(chain_link) = self.chain_link(block_root) else {
+            return ForkChoicePayloadStatus::Empty;
+        };
+
+        if chain_link.execution_payload_state.is_some() {
+            ForkChoicePayloadStatus::Full
+        } else {
+            ForkChoicePayloadStatus::Empty
+        }
     }
 
     /// ePBS: Get parent payload status for fork choice.
@@ -1028,6 +1058,32 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
     #[must_use]
     pub fn unfinalized_head(&self) -> Option<&UnfinalizedBlock<P>> {
         self.head_segment()?.last_non_invalid_block()
+    }
+
+    /// Count of chain links with execution_payload_state (full variants)
+    #[must_use]
+    pub fn execution_payload_states_count(&self) -> usize {
+        self.canonical_chain()
+            .filter(|chain_link| chain_link.execution_payload_state.is_some())
+            .count()
+    }
+
+    /// Count of blocks with PTC votes
+    #[must_use]
+    pub fn blocks_with_ptc_votes_count(&self) -> usize {
+        self.ptc_vote.len()
+    }
+
+    /// Head payload status as u8 (0=pending, 1=empty, 2=full)
+    #[must_use]
+    pub fn head_payload_status(&self) -> u8 {
+        let head = self.head();
+        // Full if has execution_payload_state
+        if head.execution_payload_state.is_some() {
+            ForkChoicePayloadStatus::Full as u8
+        } else {
+            ForkChoicePayloadStatus::Empty as u8
+        }
     }
 
     fn head_segment(&self) -> Option<&Segment<P>> {
@@ -3441,9 +3497,34 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
             payload_status: PayloadStatus::Valid,
         };
 
-        // Insert full variant into fork choice tree
-        // Use beacon_block_root from envelope (same as empty block's root)
+        let parent_root = empty_chain_link.block.message().parent_root();
+        eprintln!(
+            "DEBUG apply_envelope: beacon_block_root={beacon_block_root:?}, parent_root={parent_root:?}, \
+             slot={}, unfinalized_segments={}, head_segment_id={:?}",
+            envelope.slot,
+            self.unfinalized.len(),
+            self.head_segment_id
+        );
+
+        // Insert full variant as sibling segment (forks from parent)
         self.insert_payload(beacon_block_root, full_chain_link)?;
+
+        eprintln!(
+            "DEBUG after insert_payload: unfinalized_segments={}, locations_empty={}, locations_full={}",
+            self.unfinalized.len(),
+            self.unfinalized_locations_empty.len(),
+            self.unfinalized_locations_full.len()
+        );
+
+        // Re-run head selection - full variant may now win via tiebreaker
+        self.update_head_segment_id();
+
+        eprintln!(
+            "DEBUG after update_head: head_segment_id={:?}, canonical_chain_count={}, exec_payload_states={}",
+            self.head_segment_id,
+            self.canonical_chain().count(),
+            self.execution_payload_states_count()
+        );
 
         debug!(
             "Applied execution payload envelope for beacon_block_root: {beacon_block_root:?}, \
@@ -3451,6 +3532,101 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
             envelope.slot,
             payload.block_hash
         );
+
+        Ok(())
+    }
+
+    fn insert_payload(
+        &mut self,
+        beacon_block_root: H256,
+        chain_link: ChainLink<P>,
+    ) -> Result<()> {
+        let block = &chain_link.block;
+        let parent_root = block.message().parent_root();
+
+        // Extract payload hash for execution_payload_locations
+        let payload_hash = chain_link.execution_block_hash().expect(
+            "insert_payload called with ChainLink missing execution_block_hash"
+        );
+
+        let new_block_location;
+
+        if let Some(parent) = self.get_location(parent_root) {
+            // Parent is in unfinalized
+            eprintln!(
+                "DEBUG insert_payload: parent in unfinalized, parent_loc={:?}, last_pos={:?}",
+                parent,
+                self.unfinalized[&parent.segment_id].last_position()
+            );
+
+            let parent_is_invalid = self.unfinalized[&parent.segment_id][parent.position].is_invalid();
+
+            let payload_status = if parent_is_invalid {
+                PayloadStatus::Invalid
+            } else {
+                chain_link.payload_status
+            };
+
+            let chain_link = ChainLink {
+                payload_status,
+                ..chain_link
+            };
+
+            if parent.position == self.unfinalized[&parent.segment_id].last_position() {
+                // EXTEND parent's segment
+                eprintln!("DEBUG insert_payload: EXTENDING segment {:?}", parent.segment_id);
+                new_block_location = Location {
+                    segment_id: parent.segment_id,
+                    position: parent.position.next()?,
+                };
+
+                self.unfinalized[&parent.segment_id].push(UnfinalizedBlock::new(chain_link));
+            } else {
+                // FORK from parent (creates sibling segment for full variant)
+                eprintln!("DEBUG insert_payload: FORKING from segment {:?}", parent.segment_id);
+                new_block_location = Location {
+                    segment_id: self.lowest_unused_segment_id()?,
+                    position: Position::default(),
+                };
+
+                let mut segment = Segment::new(chain_link);
+                segment.set_parent_location(Some(parent));
+                self.unfinalized
+                    .insert(new_block_location.segment_id, segment)
+                    .unwrap_none();
+            }
+        } else if self.finalized_indices.contains_key(&parent_root) {
+            eprintln!("DEBUG insert_payload: parent is FINALIZED, creating new root segment");
+            // Parent is finalized (e.g., anchor/genesis)
+            // Create new segment rooted at finalized checkpoint
+            new_block_location = Location {
+                segment_id: self.lowest_unused_segment_id()?,
+                position: Position::default(),
+            };
+
+            let segment = Segment::new(chain_link);
+            // parent_location is None for segments rooted at finalized checkpoint
+            self.unfinalized
+                .insert(new_block_location.segment_id, segment)
+                .unwrap_none();
+        } else {
+            bail!("Parent not found for parent_root: {parent_root:?}");
+        }
+
+        // Register full variant location
+        if self.unfinalized_locations_full.contains_key(&beacon_block_root) {
+            debug!(
+                "Duplicate execution payload envelope for beacon_block_root: {beacon_block_root:?}"
+            );
+            return Ok(());
+        }
+
+        self.unfinalized_locations_full
+            .insert(beacon_block_root, new_block_location)
+            .unwrap_none();
+
+        self.execution_payload_locations
+            .insert(payload_hash, new_block_location);
 
         Ok(())
     }
@@ -3587,97 +3763,24 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
 
     /// ePBS: Insert full variant (with execution payload) for existing empty variant.
     ///
-    /// Flow:
-    /// 1. Empty variant already inserted via insert_block()
-    /// 2. Full variant arrives later with execution payload envelope
-    /// 3. This method creates sibling segment for full variant
-    ///
-    /// Segment structure (siblings):
-    /// ```
-    /// Segment N:   [..., Parent X, Empty A]
-    /// Segment N+1: [Full A]  ← Forks from Parent X (sibling of Empty A)
-    /// ```
-    fn insert_payload(
-        &mut self,
-        beacon_block_root: H256,  // From envelope.beacon_block_root (same as empty block)
-        chain_link: ChainLink<P>,
-    ) -> Result<()> {
-        let block = &chain_link.block;
-        let parent_root = block.message().parent_root();
-
-        // Extract payload hash for execution_payload_locations (still needed for EL queries)
-        let payload_hash = chain_link.execution_block_hash().expect(
-            "insert_payload called with ChainLink missing execution_block_hash - \
-             this should never happen as full variant requires execution payload"
-        );
-
-        // Check if parent exists
-        ensure!(
-            self.get_location(parent_root).is_some(),
-            "Parent not found for parent_root: {parent_root:?}"
-        );
-
-        // Use same logic as insert_block()
-        let new_block_location;
-
-        if let Some(parent) = self.get_location(parent_root) {
-            let parent_is_invalid = self.unfinalized[&parent.segment_id][parent.position].is_invalid();
-
-            let payload_status = if parent_is_invalid {
-                PayloadStatus::Invalid
-            } else {
-                chain_link.payload_status
-            };
-
-            let chain_link = ChainLink {
-                payload_status,
-                ..chain_link
-            };
-
-            if parent.position == self.unfinalized[&parent.segment_id].last_position() {
-                // EXTEND parent's segment (rare - empty already extended it)
-                new_block_location = Location {
-                    segment_id: parent.segment_id,
-                    position: parent.position.next()?,
-                };
-
-                self.unfinalized[&parent.segment_id].push(UnfinalizedBlock::new(chain_link));
-            } else {
-                // FORK from parent (expected - creates sibling segment)
-                new_block_location = Location {
-                    segment_id: self.lowest_unused_segment_id()?,
-                    position: Position::default(),
-                };
-
-                let mut segment = Segment::new(chain_link);
-                segment.set_parent_location(Some(parent));
-                self.unfinalized
-                    .insert(new_block_location.segment_id, segment)
-                    .unwrap_none();
-            }
-        } else {
-            unreachable!("Parent existence already checked above");
-        }
-
-        // Register full variant location (keyed by beacon_block_root)
-        // Gracefully handle duplicate envelope (same beacon_block_root)
-        if self.unfinalized_locations_full.contains_key(&beacon_block_root) {
-            debug!(
-                "Duplicate execution payload envelope for beacon_block_root: {beacon_block_root:?}, ignoring"
-            );
-            return Ok(());
-        }
-
-        self.unfinalized_locations_full
-            .insert(beacon_block_root, new_block_location)
-            .unwrap_none();
-
-        // Also register in execution_payload_locations (same hash)
-        self.execution_payload_locations
-            .insert(payload_hash, new_block_location);
-
-        Ok(())
-    }
+    // NOTE: Duplicate insert_payload commented out - using the one at line 3498
+    // /// Flow:
+    // /// 1. Empty variant already inserted via insert_block()
+    // /// 2. Full variant arrives later with execution payload envelope
+    // /// 3. This method creates sibling segment for full variant
+    // ///
+    // /// Segment structure (siblings):
+    // /// ```
+    // /// Segment N:   [..., Parent X, Empty A]
+    // /// Segment N+1: [Full A]  ← Forks from Parent X (sibling of Empty A)
+    // /// ```
+    // fn insert_payload(
+    //     &mut self,
+    //     beacon_block_root: H256,  // From envelope.beacon_block_root (same as empty block)
+    //     chain_link: ChainLink<P>,
+    // ) -> Result<()> {
+    //     ...
+    // }
 
     fn finalize_blocks(&mut self) -> Option<Location> {
         let locations_from_newest_to_root = core::iter::successors(
@@ -4359,16 +4462,40 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
                 } else if sibling_score == branch_point.score {
                     // Tie on score: use payload status tiebreaker
                     // Priority: FULL (timely) > EMPTY > FULL (late)
+                    // Spec: get_payload_status_tiebreaker uses node.payload_status (the node's own status)
+
+                    // Get sibling status directly from the chain_link (not via root lookup which prefers full)
                     let sibling_root = sibling.chain_link.block_root;
-                    let sibling_status = self.get_parent_payload_status(sibling_root);
+                    let sibling_status = if sibling.chain_link.execution_payload_state.is_some() {
+                        ForkChoicePayloadStatus::Full
+                    } else {
+                        ForkChoicePayloadStatus::Empty
+                    };
                     let sibling_tiebreaker = self.get_payload_status_tiebreaker(sibling_root, sibling_status);
 
-                    let branch_status = self.get_parent_payload_status(branch_point.root);
-                    let branch_tiebreaker = self.get_payload_status_tiebreaker(branch_point.root, branch_status);
+                    // Get branch status from the first block of the branch's best_descendant segment
+                    let branch_segment = &self.unfinalized[&branch_point.best_descendant];
+                    let branch_first = branch_segment.first_block();
+                    let branch_root = branch_first.chain_link.block_root;
+                    let branch_status = if branch_first.chain_link.execution_payload_state.is_some() {
+                        ForkChoicePayloadStatus::Full
+                    } else {
+                        ForkChoicePayloadStatus::Empty
+                    };
+                    let branch_tiebreaker = self.get_payload_status_tiebreaker(branch_root, branch_status);
+
+                    eprintln!(
+                        "DEBUG tiebreaker: sibling_root={:?} status={:?} tb={}, branch_root={:?} status={:?} tb={}",
+                        sibling_root, sibling_status, sibling_tiebreaker,
+                        branch_root, branch_status, branch_tiebreaker
+                    );
 
                     // Compare (tiebreaker, root) - lower values lose
-                    if (sibling_tiebreaker, sibling_root) < (branch_tiebreaker, branch_point.root) {
+                    if (sibling_tiebreaker, sibling_root) < (branch_tiebreaker, branch_root) {
+                        eprintln!("DEBUG tiebreaker: branch wins");
                         best_descendant_of_segment = Some(branch_point.best_descendant);
+                    } else {
+                        eprintln!("DEBUG tiebreaker: sibling wins");
                     }
                     // else: sibling wins or equal (prefer sibling on exact tie)
                 }
