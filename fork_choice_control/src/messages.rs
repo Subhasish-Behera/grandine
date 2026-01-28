@@ -13,7 +13,8 @@ use fork_choice_store::{
     AttesterSlashingOrigin, BlobSidecarAction, BlobSidecarOrigin, BlockAction, BlockOrigin,
     ChainLink, DataColumnSidecarAction, DataColumnSidecarOrigin, ExecutionPayloadBidAction,
     ExecutionPayloadBidOrigin, ExecutionPayloadEnvelopeAction, ExecutionPayloadEnvelopeOrigin,
-    PayloadAttestationAction, PayloadAttestationOrigin,
+    PayloadAttestationAction, PayloadAttestationOrigin, ProposerPreferencesAction,
+    ProposerPreferencesOrigin,
 };
 use logging::debug_with_peers;
 use serde::Serialize;
@@ -170,6 +171,11 @@ pub enum MutatorMessage<P: Preset, W> {
         wait_group: W,
         result: Result<ExecutionPayloadBidAction>,
         origin: ExecutionPayloadBidOrigin,
+    },
+    ProposerPreferences {
+        wait_group: W,
+        result: Result<ProposerPreferencesAction>,
+        origin: ProposerPreferencesOrigin,
     },
     PreprocessedBeaconState {
         state: Arc<BeaconState<P>>,

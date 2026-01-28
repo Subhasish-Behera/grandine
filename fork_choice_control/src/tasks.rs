@@ -12,7 +12,7 @@ use fork_choice_store::{
     AggregateAndProofOrigin, AttestationItem, AttestationOrigin, AttesterSlashingOrigin,
     BlobSidecarOrigin, BlockAction, BlockOrigin, DataColumnSidecarAction, DataColumnSidecarOrigin,
     ExecutionPayloadBidOrigin, ExecutionPayloadEnvelopeOrigin, PayloadAttestationOrigin,
-    StateCacheProcessor, Store,
+    ProposerPreferencesOrigin, StateCacheProcessor, Store,
 };
 use futures::channel::mpsc::Sender as MultiSender;
 use helper_functions::{
@@ -34,6 +34,7 @@ use types::{
     fulu::containers::DataColumnIdentifier,
     gloas::containers::{
         PayloadAttestationMessage, SignedExecutionPayloadBid, SignedExecutionPayloadEnvelope,
+        SignedProposerPreferences,
     },
     nonstandard::{RelativeEpoch, ValidationOutcome},
     phase0::{
@@ -607,6 +608,35 @@ impl<P: Preset, W> Run for ExecutionPayloadBidTask<P, W> {
         let result = store_snapshot.validate_execution_payload_bid(payload_bid, &origin);
 
         MutatorMessage::PayloadBid {
+            wait_group,
+            result,
+            origin,
+        }
+        .send(&mutator_tx);
+    }
+}
+
+pub struct ProposerPreferencesTask<P: Preset, W> {
+    pub store_snapshot: Arc<Store<P, Storage<P>>>,
+    pub mutator_tx: Sender<MutatorMessage<P, W>>,
+    pub wait_group: W,
+    pub signed_preferences: Box<SignedProposerPreferences>,
+    pub origin: ProposerPreferencesOrigin,
+}
+
+impl<P: Preset, W> Run for ProposerPreferencesTask<P, W> {
+    fn run(self) {
+        let Self {
+            store_snapshot,
+            mutator_tx,
+            wait_group,
+            signed_preferences,
+            origin,
+        } = self;
+
+        let result = store_snapshot.validate_proposer_preferences(signed_preferences, &origin);
+
+        MutatorMessage::ProposerPreferences {
             wait_group,
             result,
             origin,

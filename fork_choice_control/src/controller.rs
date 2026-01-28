@@ -25,8 +25,8 @@ use execution_engine::{ExecutionEngine, PayloadStatusV1};
 use fork_choice_store::{
     AggregateAndProofOrigin, AttestationItem, AttestationOrigin, AttesterSlashingOrigin,
     BlobSidecarOrigin, BlockOrigin, DataColumnSidecarOrigin, ExecutionPayloadBidOrigin,
-    ExecutionPayloadEnvelopeOrigin, PayloadAttestationOrigin, StateCacheProcessor, Store,
-    StoreConfig,
+    ExecutionPayloadEnvelopeOrigin, PayloadAttestationOrigin, ProposerPreferencesOrigin,
+    StateCacheProcessor, Store, StoreConfig,
 };
 use futures::channel::{mpsc::Sender as MultiSender, oneshot::Sender as OneshotSender};
 use genesis::AnchorCheckpointProvider;
@@ -46,6 +46,7 @@ use types::{
     fulu::primitives::ColumnIndex,
     gloas::containers::{
         PayloadAttestationMessage, SignedExecutionPayloadBid, SignedExecutionPayloadEnvelope,
+        SignedProposerPreferences,
     },
     nonstandard::ValidationOutcome,
     phase0::primitives::{ExecutionBlockHash, Slot, SubnetId, H256},
@@ -67,7 +68,8 @@ use crate::{
     tasks::{
         AggregateAndProofTask, AttestationTask, AttesterSlashingTask, BlobSidecarTask, BlockTask,
         BlockVerifyForGossipTask, DataColumnSidecarTask, ExecutionPayloadBidTask,
-        ExecutionPayloadEnvelopeTask, PayloadAttestationTask, StateAtSlotCacheFlushTask,
+        ExecutionPayloadEnvelopeTask, PayloadAttestationTask, ProposerPreferencesTask,
+        StateAtSlotCacheFlushTask,
     },
     thread_pool::{Spawn, ThreadPool},
     unbounded_sink::UnboundedSink,
@@ -418,6 +420,20 @@ where
         sender: OneshotSender<Result<ValidationOutcome>>,
     ) {
         self.spawn_execution_payload_bid_task(payload_bid, ExecutionPayloadBidOrigin::Api(sender))
+    }
+
+    pub fn on_gossip_proposer_preferences(
+        &self,
+        signed_preferences: Box<SignedProposerPreferences>,
+        gossip_id: GossipId,
+    ) {
+        self.spawn(ProposerPreferencesTask {
+            store_snapshot: self.owned_store_snapshot(),
+            mutator_tx: self.owned_mutator_tx(),
+            wait_group: self.owned_wait_group(),
+            signed_preferences,
+            origin: ProposerPreferencesOrigin::Gossip(gossip_id),
+        })
     }
 
     pub fn on_notified_fork_choice_update(&self, payload_status: PayloadStatusV1) {

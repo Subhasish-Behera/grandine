@@ -38,7 +38,7 @@ use types::{
             BUILDER_PAYMENT_THRESHOLD_DENOMINATOR, BUILDER_PAYMENT_THRESHOLD_NUMERATOR,
             DOMAIN_PTC_ATTESTER,
         },
-        containers::{IndexedPayloadAttestation, PayloadAttestation},
+        containers::{IndexedPayloadAttestation, PayloadAttestation, ProposerPreferences},
     },
     nonstandard::{AttestationEpoch, Participation, RelativeEpoch},
     phase0::{
@@ -1108,6 +1108,58 @@ pub fn get_builder_payment_quorum_threshold<P: Preset>(state: &impl BeaconState<
         .saturating_mul(BUILDER_PAYMENT_THRESHOLD_NUMERATOR);
 
     quorum.saturating_div(BUILDER_PAYMENT_THRESHOLD_DENOMINATOR)
+}
+
+/// Check if validator is proposer for given slot in next epoch's proposer_lookahead.
+/// Returns false if state is pre-Gloas (no proposer_preferences gossip) or if the validator
+/// is not the expected proposer for the slot.
+#[must_use]
+pub fn is_valid_proposal_slot<P: Preset>(
+    state: &impl BeaconState<P>,
+    preferences: &ProposerPreferences,
+) -> bool {
+    let Some(post_gloas) = state.post_gloas() else {
+        return false;
+    };
+
+    // Index into proposer_lookahead for next epoch:
+    // proposer_lookahead[SLOTS_PER_EPOCH + proposal_slot % SLOTS_PER_EPOCH]
+    let index = P::SlotsPerEpoch::U64 + (preferences.proposal_slot % P::SlotsPerEpoch::U64);
+
+    post_gloas
+        .proposer_lookahead()
+        .get(index)
+        .map(|&proposer| proposer == preferences.validator_index)
+        .unwrap_or(false)
+}
+
+/// Get the slots in the next epoch for which `validator_index` is proposing.
+/// Returns empty Vec if state is pre-Gloas (no proposer_preferences gossip).
+#[must_use]
+pub fn get_upcoming_proposal_slots<P: Preset>(
+    state: &impl BeaconState<P>,
+    validator_index: ValidatorIndex,
+) -> Vec<Slot> {
+    let Some(post_gloas) = state.post_gloas() else {
+        return Vec::new();
+    };
+
+    let next_epoch = get_current_epoch(state) + 1;
+    let next_epoch_start = misc::compute_start_slot_at_epoch::<P>(next_epoch);
+    let proposer_lookahead = post_gloas.proposer_lookahead();
+
+    // Next epoch portion starts at index SLOTS_PER_EPOCH
+    (0..P::SlotsPerEpoch::USIZE)
+        .filter_map(|offset| {
+            let index = (P::SlotsPerEpoch::USIZE + offset) as u64;
+            let proposer = proposer_lookahead.get(index).ok()?;
+            if *proposer == validator_index {
+                Some(next_epoch_start + offset as u64)
+            } else {
+                None
+            }
+        })
+        .collect()
 }
 
 #[cfg(test)]

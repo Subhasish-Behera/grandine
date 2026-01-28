@@ -38,8 +38,8 @@ use fork_choice_store::{
     BlobSidecarAction, BlobSidecarOrigin, BlockAction, BlockOrigin, ChainLink,
     DataColumnSidecarAction, DataColumnSidecarOrigin, Error, ExecutionPayloadBidAction,
     ExecutionPayloadBidOrigin, ExecutionPayloadEnvelopeAction, ExecutionPayloadEnvelopeOrigin,
-    PayloadAction, PayloadAttestationAction, PayloadAttestationOrigin, StateCacheProcessor, Store,
-    ValidAttestation,
+    PayloadAction, PayloadAttestationAction, PayloadAttestationOrigin, ProposerPreferencesAction,
+    ProposerPreferencesOrigin, StateCacheProcessor, Store, ValidAttestation,
 };
 use futures::channel::{mpsc::Sender as MultiSender, oneshot::Sender as OneshotSender};
 use helper_functions::{accessors, misc, predicates, verifier::NullVerifier};
@@ -339,6 +339,11 @@ where
                     result,
                     origin,
                 } => self.handle_payload_bid(&wait_group, result, origin),
+                MutatorMessage::ProposerPreferences {
+                    wait_group,
+                    result,
+                    origin,
+                } => self.handle_proposer_preferences(&wait_group, result, origin),
                 MutatorMessage::PreprocessedBeaconState { state } => {
                     self.prepare_execution_payload_for_next_slot(&state);
                 }
@@ -2107,6 +2112,58 @@ where
                 }
 
                 reply_to_http_api(sender, Err(anyhow!(source)));
+            }
+        }
+    }
+
+    fn handle_proposer_preferences(
+        &mut self,
+        _wait_group: &W,
+        result: Result<ProposerPreferencesAction>,
+        origin: ProposerPreferencesOrigin,
+    ) {
+        match result {
+            Ok(ProposerPreferencesAction::Accept(signed_preferences)) => {
+                trace_with_peers!(
+                    "proposer preferences accepted (validator_index: {}, proposal_slot: {})",
+                    signed_preferences.message.validator_index,
+                    signed_preferences.message.proposal_slot
+                );
+
+                let (gossip_id, sender) = origin.split();
+
+                if let Some(gossip_id) = gossip_id {
+                    self.send_to_p2p(P2pMessage::Accept(gossip_id));
+                }
+
+                reply_to_http_api(sender, Ok(ValidationOutcome::Accept));
+
+                self.store_mut().apply_proposer_preferences(signed_preferences);
+
+                self.update_store_snapshot();
+            }
+            Ok(ProposerPreferencesAction::Ignore(publishable)) => {
+                let (gossip_id, sender) = origin.split();
+
+                if let Some(gossip_id) = gossip_id {
+                    self.send_to_p2p(P2pMessage::Ignore(gossip_id));
+                }
+
+                reply_to_http_api(sender, Ok(ValidationOutcome::Ignore(publishable)));
+            }
+            Err(error) => {
+                warn_with_peers!("proposer preferences rejected (error: {error:?})");
+
+                let (gossip_id, sender) = origin.split();
+
+                if gossip_id.is_some() {
+                    self.send_to_p2p(P2pMessage::Reject(
+                        gossip_id,
+                        MutatorRejectionReason::InvalidProposerPreferences,
+                    ));
+                }
+
+                reply_to_http_api(sender, Err(anyhow!(error)));
             }
         }
     }

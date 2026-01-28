@@ -62,7 +62,9 @@ use types::{
         containers::{DataColumnIdentifier, DataColumnsByRootIdentifier},
         primitives::ColumnIndex,
     },
-    gloas::containers::{PayloadAttestationMessage, SignedExecutionPayloadEnvelope},
+    gloas::containers::{
+        PayloadAttestationMessage, SignedExecutionPayloadEnvelope, SignedProposerPreferences,
+    },
     nonstandard::{Phase, RelativeEpoch, WithStatus},
     phase0::{
         consts::{FAR_FUTURE_EPOCH, GENESIS_EPOCH},
@@ -549,6 +551,9 @@ impl<P: Preset> Network<P> {
                         ValidatorToP2p::PublishPayloadAttestation(payload_attestation_message) => {
                             self.publish_payload_attestation_message(payload_attestation_message);
                         }
+                        ValidatorToP2p::PublishProposerPreferences(signed_preferences) => {
+                            self.publish_proposer_preferences(signed_preferences);
+                        }
                         ValidatorToP2p::UpdateDataColumnSubnets(custody_group_count) => {
                             self.update_data_column_subnets(custody_group_count);
                         }
@@ -868,6 +873,19 @@ impl<P: Preset> Network<P> {
         self.publish(PubsubMessage::PayloadAttestationMessage(
             payload_attestation_message,
         ));
+    }
+
+    fn publish_proposer_preferences(
+        &self,
+        signed_proposer_preferences: Box<SignedProposerPreferences>,
+    ) {
+        trace_with_peers!(
+            "publishing proposer preferences: (validator_index: {}, slot: {})",
+            signed_proposer_preferences.message.validator_index,
+            signed_proposer_preferences.message.proposal_slot
+        );
+
+        self.publish(PubsubMessage::ProposerPreference(signed_proposer_preferences));
     }
 
     fn publish_aggregate_and_proof(&self, aggregate_and_proof: Arc<SignedAggregateAndProof<P>>) {
@@ -2399,6 +2417,19 @@ impl<P: Preset> Network<P> {
 
                 self.controller
                     .on_gossip_execution_payload_bid(payload_bid, GossipId { source, message_id });
+            }
+            PubsubMessage::ProposerPreference(signed_preferences) => {
+                if let Some(metrics) = self.metrics.as_ref() {
+                    metrics.register_gossip_object(&["proposer_preferences"]);
+                }
+
+                trace_with_peers!(
+                    "received signed proposer preferences as gossip: \
+                    {signed_preferences:?} from {source}"
+                );
+
+                self.controller
+                    .on_gossip_proposer_preferences(signed_preferences, GossipId { source, message_id });
             }
             PubsubMessage::LightClientFinalityUpdate(_) => {
                 debug_with_peers!("received light client finality update as gossip");

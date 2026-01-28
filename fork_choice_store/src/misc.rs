@@ -25,6 +25,7 @@ use types::{
     deneb::containers::BlobSidecar,
     gloas::containers::{
         PayloadAttestationMessage, SignedExecutionPayloadBid, SignedExecutionPayloadEnvelope,
+        SignedProposerPreferences,
     },
     nonstandard::{PayloadStatus, Publishable, ValidationOutcome},
     phase0::{
@@ -891,6 +892,11 @@ pub enum ExecutionPayloadBidAction {
     Ignore(Publishable),
 }
 
+pub enum ProposerPreferencesAction {
+    Accept(Box<SignedProposerPreferences>),
+    Ignore(Publishable),
+}
+
 pub enum PartialBlockAction {
     Accept,
     Ignore,
@@ -958,6 +964,34 @@ impl ExecutionPayloadEnvelopeOrigin {
     #[must_use]
     pub const fn is_from_back_sync(&self) -> bool {
         matches!(self, Self::BackSync)
+    }
+}
+
+pub enum ProposerPreferencesOrigin {
+    Gossip(GossipId),
+    Own,
+}
+
+impl ProposerPreferencesOrigin {
+    #[must_use]
+    pub fn split(
+        self,
+    ) -> (
+        Option<GossipId>,
+        Option<OneshotSender<Result<ValidationOutcome>>>,
+    ) {
+        match self {
+            Self::Gossip(gossip_id) => (Some(gossip_id), None),
+            Self::Own => (None, None),
+        }
+    }
+
+    #[must_use]
+    pub const fn verify_signatures(&self) -> bool {
+        match self {
+            Self::Gossip(_) => true,
+            Self::Own => false,
+        }
     }
 }
 

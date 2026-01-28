@@ -55,7 +55,7 @@ use types::{
     },
     gloas::containers::{
         DataColumnSidecar as GloasDataColumnSidecar, PayloadAttestationMessage,
-        SignedExecutionPayloadBid, SignedExecutionPayloadEnvelope,
+        SignedExecutionPayloadBid, SignedExecutionPayloadEnvelope, SignedProposerPreferences,
     },
     nonstandard::{BlobSidecarWithId, DataColumnSidecarWithId, PayloadStatus, Phase, WithStatus},
     phase0::{
@@ -89,7 +89,7 @@ use crate::{
     validations::validate_merge_block,
     AttestationOrigin, ExecutionPayloadBidAction, ExecutionPayloadBidOrigin,
     ExecutionPayloadEnvelopeAction, ExecutionPayloadEnvelopeOrigin, PayloadAttestationAction,
-    PayloadAttestationOrigin,
+    PayloadAttestationOrigin, ProposerPreferencesAction, ProposerPreferencesOrigin,
 };
 
 /// [`Store`] from the Fork Choice specification.
@@ -237,6 +237,7 @@ pub struct Store<P: Preset, S: Storage<P>> {
     >,
     accepted_payload_bids: HashMap<Slot, HashMap<ValidatorIndex, SignedExecutionPayloadBid>>,
     accepted_execution_payload_envelopes: HashSet<(Slot, H256, ValidatorIndex)>,
+    proposer_preferences: HashMap<Slot, Box<SignedProposerPreferences>>,
     blob_cache: BlobCache<P>,
     state_cache: Arc<StateCacheProcessor<P>>,
     storage: Arc<S>,
@@ -328,6 +329,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
             accepted_gloas_data_column_sidecars: HashMap::default(),
             accepted_payload_bids: HashMap::default(),
             accepted_execution_payload_envelopes: HashSet::default(),
+            proposer_preferences: HashMap::default(),
             blob_cache: BlobCache::default(),
             state_cache: Arc::new(StateCacheProcessor::new(
                 store_config.state_cache_lock_timeout,
@@ -1314,6 +1316,23 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
             return Ok(ExecutionPayloadBidAction::Ignore(false));
         }
 
+        // > the `SignedProposerPreferences` where `preferences.proposal_slot` is equal to `bid.slot` has been seen
+        let Some(proposer_prefs) = self.proposer_preferences.get(&bid.slot) else {
+            return Ok(ExecutionPayloadBidAction::Ignore(true));
+        };
+
+        // > `bid.fee_recipient` matches the `fee_recipient` from the proposer's `SignedProposerPreferences`
+        ensure!(
+            bid.fee_recipient == proposer_prefs.message.fee_recipient,
+            Error::<P>::ExecutionPayloadBidFeeRecipientMismatch { payload_bid }
+        );
+
+        // > `bid.gas_limit` matches the `gas_limit` from the proposer's `SignedProposerPreferences`
+        ensure!(
+            bid.gas_limit == proposer_prefs.message.gas_limit,
+            Error::<P>::ExecutionPayloadBidGasLimitMismatch { payload_bid }
+        );
+
         // > the `bid.parent_block_hash` is the block hash of a known execution payload in fork choice
         if !self
             .execution_payload_locations
@@ -1384,6 +1403,54 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         }
 
         Ok(ExecutionPayloadBidAction::Accept(payload_bid))
+    }
+
+    pub fn validate_proposer_preferences(
+        &self,
+        signed_preferences: Box<SignedProposerPreferences>,
+        origin: &ProposerPreferencesOrigin,
+    ) -> Result<ProposerPreferencesAction> {
+        let preferences = &signed_preferences.message;
+        let validator_index = preferences.validator_index;
+        let proposal_slot = preferences.proposal_slot;
+        let state = self.justified_state();
+
+        // [IGNORE] proposal_slot is in the next epoch
+        let current_epoch = accessors::get_current_epoch(state);
+        let proposal_epoch = misc::compute_epoch_at_slot::<P>(proposal_slot);
+        if proposal_epoch != current_epoch + 1 {
+            return Ok(ProposerPreferencesAction::Ignore(false));
+        }
+
+        // [IGNORE] First message from this validator for this slot
+        if self.proposer_preferences.contains_key(&proposal_slot) {
+            return Ok(ProposerPreferencesAction::Ignore(true));
+        }
+
+        // [REJECT] validator is valid proposer for slot
+        ensure!(
+            accessors::is_valid_proposal_slot::<P>(state, preferences),
+            Error::<P>::InvalidProposerPreferencesProposalSlot { signed_preferences }
+        );
+
+        // [REJECT] Signature valid
+        if origin.verify_signatures() {
+            let validator = state.validators().get(validator_index)?;
+            let pubkey = self.pubkey_cache.get_or_insert(validator.pubkey)?;
+
+            if let Err(error) = preferences.verify(
+                &self.chain_config,
+                state,
+                signed_preferences.signature,
+                pubkey,
+            ) {
+                bail!(error.context(Error::<P>::InvalidProposerPreferencesSignature {
+                    signed_preferences
+                }));
+            }
+        }
+
+        Ok(ProposerPreferencesAction::Accept(signed_preferences))
     }
 
     #[expect(clippy::too_many_lines)]
@@ -3175,6 +3242,14 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         let accepted_bids = self.accepted_payload_bids.entry(bid.slot).or_default();
 
         accepted_bids.insert(bid.builder_index, *payload_bid);
+    }
+
+    pub fn apply_proposer_preferences(
+        &mut self,
+        signed_preferences: Box<SignedProposerPreferences>,
+    ) {
+        let slot = signed_preferences.message.proposal_slot;
+        self.proposer_preferences.insert(slot, signed_preferences);
     }
 
     pub fn apply_data_column_sidecar(&mut self, data_sidecar: Arc<DataColumnSidecar<P>>) {

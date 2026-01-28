@@ -28,7 +28,9 @@ use types::{
         containers::{DataColumnIdentifier, DataColumnsByRootIdentifier},
         primitives::ColumnIndex,
     },
-    gloas::containers::{PayloadAttestationMessage, SignedExecutionPayloadEnvelope},
+    gloas::containers::{
+        PayloadAttestationMessage, SignedExecutionPayloadEnvelope, SignedProposerPreferences,
+    },
     nonstandard::Phase,
     phase0::{
         containers::{Checkpoint, ProposerSlashing, SignedVoluntaryExit},
@@ -221,6 +223,7 @@ pub enum ValidatorToP2p<P: Preset> {
     PublishSyncCommitteeMessage(Box<(SubnetId, SyncCommitteeMessage)>),
     PublishContributionAndProof(Box<SignedContributionAndProof<P>>),
     PublishPayloadAttestation(Arc<PayloadAttestationMessage>),
+    PublishProposerPreferences(Box<SignedProposerPreferences>),
     UpdateDataColumnSubnets(u64),
 }
 

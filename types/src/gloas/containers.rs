@@ -159,7 +159,7 @@ pub struct PayloadAttestation<P: Preset> {
     pub signature: SignatureBytes,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Deserialize, Serialize, Ssz)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Deserialize, Hash, Serialize, Ssz)]
 #[serde(bound = "", deny_unknown_fields)]
 pub struct ProposerPreferences {
     #[serde(with = "serde_utils::string_or_native")]
@@ -169,6 +169,13 @@ pub struct ProposerPreferences {
     pub fee_recipient: ExecutionAddress,
     #[serde(with = "serde_utils::string_or_native")]
     pub gas_limit: Gas,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Deserialize, Serialize, Ssz)]
+#[serde(bound = "", deny_unknown_fields)]
+pub struct SignedProposerPreferences {
+    pub message: ProposerPreferences,
+    pub signature: SignatureBytes,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Deserialize, Hash, Serialize, Ssz)]
@@ -247,12 +254,5 @@ pub struct SignedExecutionPayloadBid {
 #[serde(bound = "", deny_unknown_fields)]
 pub struct SignedExecutionPayloadEnvelope<P: Preset> {
     pub message: ExecutionPayloadEnvelope<P>,
-    pub signature: SignatureBytes,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Deserialize, Serialize, Ssz)]
-#[serde(bound = "", deny_unknown_fields)]
-pub struct SignedProposerPreferences {
-    pub message: ProposerPreferences,
     pub signature: SignatureBytes,
 }

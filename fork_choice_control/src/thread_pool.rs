@@ -29,7 +29,7 @@ use crate::{
         DataColumnSidecarTask, ExecutionPayloadBidTask, ExecutionPayloadEnvelopeTask,
         PayloadAttestationTask, PersistBlobSidecarsTask, PersistDataColumnSidecarsTask,
         PersistExecutionPayloadEnvelopesTask, PersistPubkeyCacheTask, PreprocessStateTask,
-        RetryDataColumnSidecarTask, Run, StateAtSlotCacheFlushTask,
+        ProposerPreferencesTask, RetryDataColumnSidecarTask, Run, StateAtSlotCacheFlushTask,
     },
     wait::Wait,
 };
@@ -152,6 +152,7 @@ enum LowPriorityTask<P: Preset, W> {
     PayloadAttestation(PayloadAttestationTask<P, W>),
     // TODO: (gloas): figure out whether it should be low or mid priority
     PayloadBid(ExecutionPayloadBidTask<P, W>),
+    ProposerPreferences(ProposerPreferencesTask<P, W>),
     PersistBlobSidecarsTask(PersistBlobSidecarsTask<P, W>),
     PersistPubkeyCacheTask(PersistPubkeyCacheTask<P, W>),
     StateAtSlotCacheFlush(StateAtSlotCacheFlushTask<P>),
@@ -168,6 +169,7 @@ impl<P: Preset, W> Run for LowPriorityTask<P, W> {
             Self::AttesterSlashing(task) => task.run(),
             Self::PayloadAttestation(task) => task.run(),
             Self::PayloadBid(task) => task.run(),
+            Self::ProposerPreferences(task) => task.run(),
             Self::PersistBlobSidecarsTask(task) => task.run(),
             Self::PersistPubkeyCacheTask(task) => task.run(),
             Self::StateAtSlotCacheFlush(task) => task.run(),
@@ -248,6 +250,12 @@ impl<P: Preset, E, W> Spawn<P, E, W> for PayloadAttestationTask<P, W> {
 }
 
 impl<P: Preset, E, W> Spawn<P, E, W> for ExecutionPayloadBidTask<P, W> {
+    fn spawn(self, critical: &mut Critical<P, E, W>) {
+        critical.low_priority_tasks.push_back(self.into())
+    }
+}
+
+impl<P: Preset, E, W> Spawn<P, E, W> for ProposerPreferencesTask<P, W> {
     fn spawn(self, critical: &mut Critical<P, E, W>) {
         critical.low_priority_tasks.push_back(self.into())
     }

@@ -9,6 +9,7 @@ use types::{
     deneb::containers::BlobSidecar,
     gloas::containers::{
         PayloadAttestationMessage, SignedExecutionPayloadBid, SignedExecutionPayloadEnvelope,
+        SignedProposerPreferences,
     },
     phase0::primitives::{Slot, SubnetId, ValidatorIndex, H256},
     preset::{Mainnet, Preset},
@@ -156,9 +157,25 @@ pub enum Error<P: Preset> {
     ExecutionPayloadBidOffProtocolPaymentDisallowed {
         payload_bid: Arc<SignedExecutionPayloadBid>,
     },
+    #[error("execution payload bid fee_recipient does not match proposer preferences: {payload_bid:?}")]
+    ExecutionPayloadBidFeeRecipientMismatch {
+        payload_bid: Arc<SignedExecutionPayloadBid>,
+    },
+    #[error("execution payload bid gas_limit does not match proposer preferences: {payload_bid:?}")]
+    ExecutionPayloadBidGasLimitMismatch {
+        payload_bid: Arc<SignedExecutionPayloadBid>,
+    },
     #[error("execution payload bid has invalid signature: {payload_bid:?}")]
     InvalidExecutionPayloadBidSignature {
         payload_bid: Arc<SignedExecutionPayloadBid>,
+    },
+    #[error("proposer preferences has invalid proposal slot: {signed_preferences:?}")]
+    InvalidProposerPreferencesProposalSlot {
+        signed_preferences: Box<SignedProposerPreferences>,
+    },
+    #[error("proposer preferences has invalid signature: {signed_preferences:?}")]
+    InvalidProposerPreferencesSignature {
+        signed_preferences: Box<SignedProposerPreferences>,
     },
     #[error("aggregate and proof has invalid signature: {aggregate_and_proof:?}")]
     InvalidAggregateAndProofSignature {

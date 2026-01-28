@@ -229,6 +229,7 @@ pub enum MutatorRejectionReason {
     InvalidExecutionPayloadEnvelope,
     InvalidPayloadAttestation,
     InvalidPayloadBid,
+    InvalidProposerPreferences,
 }
 
 #[derive(Clone, Copy, Debug)]

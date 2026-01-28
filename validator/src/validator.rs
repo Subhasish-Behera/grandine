@@ -73,7 +73,7 @@ use types::{
     },
     gloas::containers::{
         ExecutionPayloadEnvelope, PayloadAttestationData, PayloadAttestationMessage,
-        SignedExecutionPayloadEnvelope,
+        ProposerPreferences, SignedExecutionPayloadEnvelope, SignedProposerPreferences,
     },
     nonstandard::{
         KzgProofs, OwnAttestation, Phase, SyncCommitteeEpoch, WithBlobsAndMev, WithStatus,
@@ -176,6 +176,7 @@ pub struct Validator<P: Preset, W: Wait> {
     validator_to_slasher_tx: Option<UnboundedSender<ValidatorToSlasher>>,
     subscribe_to_all_data_column_subnets: bool,
     last_cgc_update_epoch: Option<Epoch>,
+    last_proposer_preferences_epoch: Option<Epoch>,
 }
 
 impl<P: Preset, W: Wait + Sync> Validator<P, W> {
@@ -258,6 +259,7 @@ impl<P: Preset, W: Wait + Sync> Validator<P, W> {
             validator_to_slasher_tx,
             subscribe_to_all_data_column_subnets,
             last_cgc_update_epoch: None,
+            last_proposer_preferences_epoch: None,
         }
     }
 
@@ -692,6 +694,15 @@ impl<P: Preset, W: Wait + Sync> Validator<P, W> {
             self.own_sync_committee_members.get_or_try_init(|| {
                 self.own_sync_committee_members_for_epoch(SyncCommitteeEpoch::Current, state)
             })?;
+        }
+
+        // Broadcast proposer preferences at epoch start for Gloas and later phases
+        if tick.is_start_of_epoch::<P>()
+            && self.last_proposer_preferences_epoch != Some(current_epoch)
+            && slot_head.beacon_state.post_gloas().is_some()
+        {
+            self.broadcast_proposer_preferences(&slot_head).await;
+            self.last_proposer_preferences_epoch = Some(current_epoch);
         }
 
         match kind {
@@ -2576,6 +2587,95 @@ impl<P: Preset, W: Wait + Sync> Validator<P, W> {
         });
 
         self.last_registration_epoch = Some(current_epoch);
+    }
+
+    /// Broadcasts proposer preferences for the next epoch's slots where we are proposing.
+    #[instrument(level = "debug", skip_all)]
+    async fn broadcast_proposer_preferences(&self, slot_head: &SlotHead<P>) {
+        let chain_config = self.chain_config.clone_arc();
+        let proposer_configs = self.proposer_configs.clone_arc();
+        let signer = self.signer.clone_arc();
+        let p2p_tx = self.p2p_tx.clone();
+        let beacon_state = slot_head.beacon_state.clone_arc();
+
+        tokio::spawn(async move {
+            let signer_snapshot = signer.load();
+            let pubkeys = signer_snapshot.keys().copied().collect_vec();
+
+            // Collect all preferences and build signing triples.
+            // A validator may have multiple proposal slots in an epoch.
+            let (triples, preferences): (Vec<_>, Vec<_>) = pubkeys
+                .into_iter()
+                .flat_map(|pubkey| {
+                    let validator_index =
+                        accessors::index_of_public_key(&beacon_state, &pubkey)?;
+                    let upcoming_slots =
+                        accessors::get_upcoming_proposal_slots(&beacon_state, validator_index);
+
+                    if upcoming_slots.is_empty() {
+                        return None;
+                    }
+
+                    let fee_recipient = proposer_configs.fee_recipient(pubkey).ok()?;
+                    let gas_limit = proposer_configs.gas_limit(pubkey).ok()?;
+
+                    // Create triple and preferences for each proposal slot
+                    let items = upcoming_slots
+                        .into_iter()
+                        .map(|proposal_slot| {
+                            let pref = ProposerPreferences {
+                                proposal_slot,
+                                validator_index,
+                                fee_recipient,
+                                gas_limit,
+                            };
+                            let triple = SigningTriple {
+                                message: SigningMessage::ProposerPreferences(pref),
+                                signing_root: pref.signing_root(&chain_config, beacon_state.as_ref()),
+                                public_key: pubkey,
+                            };
+                            (triple, pref)
+                        })
+                        .collect_vec();
+
+                    Some(items)
+                })
+                .flatten()
+                .unzip();
+
+            if triples.is_empty() {
+                return;
+            }
+
+            let fork_info = Some(beacon_state.as_ref().into());
+
+            let signatures = match signer_snapshot
+                .sign_triples_without_slashing_protection(triples, fork_info)
+                .await
+            {
+                Ok(signatures) => signatures,
+                Err(error) => {
+                    warn_with_peers!("failed to sign proposer preferences: {error}");
+                    return;
+                }
+            };
+
+            // Publish each signed preference
+            for (pref, signature) in preferences.into_iter().zip(signatures) {
+                debug_with_peers!(
+                    "broadcasting proposer preferences for validator {} slot {}",
+                    pref.validator_index,
+                    pref.proposal_slot
+                );
+
+                let signed = SignedProposerPreferences {
+                    message: pref,
+                    signature: signature.into(),
+                };
+
+                ValidatorToP2p::PublishProposerPreferences(Box::new(signed)).send(&p2p_tx);
+            }
+        });
     }
 
     async fn track_collection_metrics(&self) {

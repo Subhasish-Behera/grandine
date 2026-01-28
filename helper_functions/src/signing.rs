@@ -30,10 +30,10 @@ use types::{
     },
     fulu::containers::BeaconBlock as FuluBeaconBlock,
     gloas::{
-        consts::{DOMAIN_BEACON_BUILDER, DOMAIN_PTC_ATTESTER},
+        consts::{DOMAIN_BEACON_BUILDER, DOMAIN_PROPOSER_PREFERENCES, DOMAIN_PTC_ATTESTER},
         containers::{
             BeaconBlock as GloasBeaconBlock, ExecutionPayloadBid, ExecutionPayloadEnvelope,
-            PayloadAttestationData,
+            PayloadAttestationData, ProposerPreferences,
         },
     },
     phase0::{
@@ -481,5 +481,14 @@ impl<P: Preset> SignForSingleFork<P> for ExecutionPayloadEnvelope<P> {
 
     fn epoch(&self) -> Epoch {
         misc::compute_epoch_at_slot::<P>(self.slot)
+    }
+}
+
+impl<P: Preset> SignForSingleFork<P> for ProposerPreferences {
+    const DOMAIN_TYPE: DomainType = DOMAIN_PROPOSER_PREFERENCES;
+    const SIGNATURE_KIND: SignatureKind = SignatureKind::ProposerPreferences;
+
+    fn epoch(&self) -> Epoch {
+        misc::compute_epoch_at_slot::<P>(self.proposal_slot)
     }
 }
