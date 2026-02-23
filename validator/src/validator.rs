@@ -1477,9 +1477,32 @@ impl<P: Preset, W: Wait + Sync> Validator<P, W> {
             .map(|((data, committee_index), aggregators)| async move {
                 // Pool stores data.index = committee_index for all Electra+.
                 let pool_data = AttestationData { index: *committee_index, ..*data };
-                self.attestation_agg_pool
-                    .best_aggregate_attestation(pool_data)
-                    .await
+                let aggregate_opt = self.attestation_agg_pool.best_aggregate_attestation(pool_data).await;
+
+                let pre_pool_opt = if phase >= Phase::Gloas {
+                    if let Some(aggregate) = aggregate_opt.as_ref() {
+                        let pre_pool = self
+                            .attestation_agg_pool
+                            .attestation_pre_pool_by_data(aggregate.data)
+                            .await;
+
+                        if pre_pool.is_none() {
+                            warn_with_peers!(
+                                "missing pre-pool attestation metadata for attestation data (slot {}, committee {})",
+                                aggregate.data.slot,
+                                aggregate.data.index
+                            );
+                        }
+
+                        pre_pool
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+
+                aggregate_opt
                     .into_iter()
                     .flat_map(|aggregate| {
                         aggregators.iter().filter_map(move |aggregator| {
@@ -1512,13 +1535,11 @@ impl<P: Preset, W: Wait + Sync> Validator<P, W> {
                                     selection_proof,
                                 })
                             } else {
-                                // data.index is the original value from the attestation:
-                                // 0 for pre-Gloas Electra, payload_status for Gloas.
-                                let aggregate = operation_pools::
-                                    convert_to_electra_attestation_with_committee_index(
+                                let attestation_pre_pool = pre_pool_opt?;
+                                let aggregate =
+                                    operation_pools::convert_to_electra_attestation_use_pre_pool(
                                         aggregate.clone(),
-                                        *committee_index,
-                                        data.index,
+                                        attestation_pre_pool,
                                     )
                                     .ok()?;
 

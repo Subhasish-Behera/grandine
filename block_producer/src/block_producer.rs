@@ -99,7 +99,7 @@ use types::{
             ValidatorIndex, H256,
         },
     },
-    preset::{Preset, SlotsPerHistoricalRoot, SyncSubcommitteeSize},
+    preset::{Preset, SyncSubcommitteeSize},
     traits::{BeaconState as _, PostBellatrixBeaconState, PostGloasBeaconState},
 };
 
@@ -901,64 +901,51 @@ impl<P: Preset, W: Wait> BlockBuildContext<P, W> {
                     Vec<ElectraAttestation<P>>,
                 )> = Vec::new();
 
-                for (electra_attestation, committee_index) in
-                    attestations.into_iter().filter_map(|attestation| {
-                        let committee_index = attestation.data.index;
-
-                        //dev notes: start with convert_to_electra_attestation_with_committee_index funciton then move to its callers
-                        let electra_attestation = if phase >= Phase::Gloas {
-                            // Restore data.index per spec (get_attestation_participation_flags):
-                            // - Same-slot attestation: data.index = 0
-                            // - Previous-slot: data.index = execution_payload_availability[slot]
-                            let head_block_slot = self
-                                .producer_context
-                                .controller
-                                .block_slot(attestation.data.beacon_block_root);
-                            // case of same slot
-                            let restored_index = if head_block_slot == Some(attestation.data.slot) {
-                                0
-                            } else {
-                                // lookup using execution_payload_availability
-                                let payload_status_bit = self.beacon_state.post_gloas()
-                                    .and_then(|s| {
-                                        let slot = usize::try_from(
-                                            head_block_slot.unwrap_or(attestation.data.slot),
-                                        ).ok()?;
-                                        s.execution_payload_availability()
-                                            .get(slot % SlotsPerHistoricalRoot::<P>::USIZE)
-                                    });
-                                let Some(payload_status_bit) = payload_status_bit else {
-                                    warn_with_peers!(
-                                        "missing execution_payload_availability bit for slot {}, \
-                                         skipping attestation (block_root: {:?})",
-                                        head_block_slot.unwrap_or(attestation.data.slot),
-                                        attestation.data.beacon_block_root,
-                                    );
-                                    return None;
-                                };
-                                u64::from(payload_status_bit)
-                            };
-
-                            operation_pools::convert_to_electra_attestation_with_committee_index(
-                                attestation,
-                                committee_index,
-                                restored_index,
-                            )
-                        } else {
-                            operation_pools::convert_to_electra_attestation(attestation)
+                for attestation in attestations {
+                    let (electra_attestation, committee_index) = if phase >= Phase::Gloas {
+                        let Some(attestation_pre_pool) = self
+                            .producer_context
+                            .attestation_agg_pool
+                            .attestation_pre_pool_by_data(attestation.data)
+                            .await
+                        else {
+                            warn_with_peers!(
+                                "missing pre-pool attestation metadata for attestation data (slot {}, committee {})",
+                                attestation.data.slot,
+                                attestation.data.index
+                            );
+                            continue;
                         };
 
+                        let committee_index = attestation_pre_pool.committee_index;
+                        let electra_attestation =
+                            operation_pools::convert_to_electra_attestation_use_pre_pool(
+                                attestation,
+                                attestation_pre_pool,
+                            );
+
                         match electra_attestation {
-                            Ok(electra_attestation) => Some((electra_attestation, committee_index)),
+                            Ok(electra_attestation) => (electra_attestation, committee_index),
                             Err(error) => {
                                 warn_with_peers!(
                                     "unable to convert to electra attestation: {error:?}"
                                 );
-                                None
+                                continue;
                             }
                         }
-                    })
-                {
+                    } else {
+                        let committee_index = attestation.data.index;
+                        match operation_pools::convert_to_electra_attestation(attestation) {
+                            Ok(electra_attestation) => (electra_attestation, committee_index),
+                            Err(error) => {
+                                warn_with_peers!(
+                                    "unable to convert to electra attestation: {error:?}"
+                                );
+                                continue;
+                            }
+                        }
+                    };
+
                     if let Some((_, indices, attestations)) =
                         results.iter_mut().find(|(data, indices, _)| {
                             *data == electra_attestation.data && !indices.contains(&committee_index)

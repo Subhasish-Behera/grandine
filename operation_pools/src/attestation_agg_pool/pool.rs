@@ -22,7 +22,9 @@ use types::{
     traits::BeaconState,
 };
 
-use crate::attestation_agg_pool::types::{Aggregate, AggregateMap, AttestationMap, AttestationSet};
+use crate::attestation_agg_pool::types::{
+    Aggregate, AggregateMap, AttestationMap, AttestationPrePool, AttestationSet,
+};
 
 #[expect(type_alias_bounds)]
 type AttestationsWithSlot<P: Preset> = (ContiguousList<Attestation<P>, P::MaxAttestations>, Slot);
@@ -31,6 +33,7 @@ pub struct Pool<P: Preset> {
     chain_config: Arc<ChainConfig>,
     aggregates: RwLock<BTreeMap<Epoch, AggregateMap<P>>>,
     data_root_to_data_map: RwLock<BTreeMap<Epoch, HashMap<H256, AttestationData>>>,
+    data_to_attestation_meta: RwLock<BTreeMap<Epoch, HashMap<AttestationData, AttestationPrePool>>>,
     // The type of the inner map does not affect the result of attestation packing,
     // though that may change if the packers are redesigned again.
     singular_attestations: RwLock<BTreeMap<Epoch, AttestationMap<P>>>,
@@ -46,6 +49,7 @@ impl<P: Preset> Pool<P> {
             chain_config,
             aggregates: RwLock::default(),
             data_root_to_data_map: RwLock::default(),
+            data_to_attestation_meta: RwLock::default(),
             singular_attestations: RwLock::default(),
             best_proposable_attestations: Mutex::default(),
             committees_with_aggregators: RwLock::default(),
@@ -65,6 +69,9 @@ impl<P: Preset> Pool<P> {
             let mut data_root_to_data_map = self.data_root_to_data_map.write().await;
             *data_root_to_data_map = data_root_to_data_map.split_off(&previous_epoch);
 
+            let mut data_to_attestation_meta = self.data_to_attestation_meta.write().await;
+            *data_to_attestation_meta = data_to_attestation_meta.split_off(&previous_epoch);
+
             let mut singular_attestations = self.singular_attestations.write().await;
             *singular_attestations = singular_attestations.split_off(&previous_epoch);
         }
@@ -73,15 +80,39 @@ impl<P: Preset> Pool<P> {
         *proposer_indices = proposer_indices.split_off(&slot);
     }
 
-    pub async fn add_data_root_to_data_entry(&self, data: AttestationData) {
-        let root = data.hash_tree_root();
-
+    pub async fn add_data_root_to_data_entry(&self, data_root: H256, data: AttestationData) {
         self.data_root_to_data_map
             .write()
             .await
             .entry(data.target.epoch)
             .or_default()
-            .insert(root, data);
+            .insert(data_root, data);
+    }
+
+    pub async fn add_data_root_to_attestation_pre_pool_entry(
+        &self,
+        _data_root: H256,
+        data: AttestationData,
+        attestation_pre_pool: AttestationPrePool,
+    ) {
+        self.data_to_attestation_meta
+            .write()
+            .await
+            .entry(data.target.epoch)
+            .or_default()
+            .insert(data, attestation_pre_pool);
+    }
+
+    pub async fn attestation_pre_pool_by_data(
+        &self,
+        data: AttestationData,
+    ) -> Option<AttestationPrePool> {
+        self.data_to_attestation_meta
+            .read()
+            .await
+            .get(&data.target.epoch)
+            .and_then(|data_map| data_map.get(&data))
+            .copied()
     }
 
     pub async fn aggregates(&self, data: AttestationData) -> Arc<Mutex<Vec<Aggregate<P>>>> {

@@ -18,6 +18,8 @@ use types::{
     preset::Preset,
 };
 
+use crate::attestation_agg_pool::types::AttestationPrePool;
+
 pub fn convert_attestation_for_pool<P: Preset, W: Wait>(
     controller: &ApiController<P, W>,
     attestation: Arc<Attestation<P>>,
@@ -67,24 +69,18 @@ pub fn convert_to_electra_attestation<P: Preset>(
 ) -> Result<ElectraAttestation<P>> {
     attestation.try_into()
 }
-//dev notes: can not use the try_into implmentation used in convert_to_electra_attestations anymore
-//because it had no logic/acccess to the state on how to set data.index(which can be both 1 and 0). it alwyas sets to 0.
-// but here when u are getting attestation from the pool, the data.index, the rest 2 fields are supplied from the caller
-// restored index is the actualy indirect execution_payload_availability in gloas path. at both call sites
-// why commitee index is needed as a field: it is not needed when the caller is block producer(because its in pool format there)
-// but its required in validatrors aggregate path because therer attestation.data.index has become payload status. so to be used in both
-// sites, its taking comitee index as a fields as well.
-
-pub fn convert_to_electra_attestation_with_committee_index<P: Preset>(
+pub fn convert_to_electra_attestation_use_pre_pool<P: Preset>(
     attestation: Phase0Attestation<P>,
-    committee_index: CommitteeIndex,
-    restored_index: CommitteeIndex,
+    attestation_pre_pool: AttestationPrePool,
 ) -> Result<ElectraAttestation<P>> {
     let Phase0Attestation {
         aggregation_bits,
         data,
         signature,
     } = attestation;
+
+    let committee_index = attestation_pre_pool.committee_index;
+    let restored_index = attestation_pre_pool.original_payload_index;
 
     ensure!(
         committee_index < P::MaxCommitteesPerSlot::U64,
