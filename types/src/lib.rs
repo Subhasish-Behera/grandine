@@ -100,6 +100,10 @@ pub mod gloas {
     mod spec_tests;
 }
 
+pub mod heze {
+    pub mod containers;
+}
+
 pub use collections::{
     DepositSignatureCache, PayloadExpectedWithdrawals, PendingDeposits, ProposerLookahead, Ptc,
     PtcWindow, Validators,
