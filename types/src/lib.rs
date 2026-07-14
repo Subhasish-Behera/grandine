@@ -102,6 +102,9 @@ pub mod gloas {
 
 pub mod heze {
     pub mod containers;
+
+    #[cfg(test)]
+    mod spec_tests;
 }
 
 pub use collections::{
