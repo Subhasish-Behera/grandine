@@ -7,8 +7,11 @@ use crate::{
 };
 
 mod tested_types {
-    pub use crate::heze::containers::{
-        ExecutionPayloadBid, InclusionList, SignedExecutionPayloadBid, SignedInclusionList,
+    pub use crate::heze::{
+        beacon_state::BeaconState,
+        containers::{
+            ExecutionPayloadBid, InclusionList, SignedExecutionPayloadBid, SignedInclusionList,
+        },
     };
 }
 
@@ -57,4 +60,10 @@ tests_for_type! {
     SignedExecutionPayloadBid<_>,
     "consensus-spec-tests/tests/mainnet/heze/ssz_static/SignedExecutionPayloadBid/*/*",
     "consensus-spec-tests/tests/minimal/heze/ssz_static/SignedExecutionPayloadBid/*/*",
+}
+
+tests_for_type! {
+    BeaconState<_>,
+    "consensus-spec-tests/tests/mainnet/heze/ssz_static/BeaconState/*/*",
+    "consensus-spec-tests/tests/minimal/heze/ssz_static/BeaconState/*/*",
 }

@@ -101,6 +101,7 @@ pub mod gloas {
 }
 
 pub mod heze {
+    pub mod beacon_state;
     pub mod containers;
 
     #[cfg(test)]
