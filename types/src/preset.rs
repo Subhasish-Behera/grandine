@@ -253,6 +253,17 @@ pub trait Preset: Copy + Eq + Ord + Hash + Default + Debug + Send + Sync + 'stat
         + Debug
         + Send
         + Sync;
+
+    // Heze
+    type InclusionListCommitteeSize: ContiguousVectorElements<ValidatorIndex>
+        + MerkleElements<ValidatorIndex>
+        + BitVectorBits
+        + MerkleBits
+        + Eq
+        + Ord
+        + Debug
+        + Send
+        + Sync;
     type MaxPayloadAttestation: MerkleElements<PayloadAttestation<Self>> + Eq + Debug + Send + Sync;
     type BuilderRegistryLimit: FitsInU64 + NonZero + Debug + Send + Sync;
     type BuilderPendingWithdrawalsLimit: MerkleElements<BuilderPendingWithdrawal>
@@ -419,6 +430,7 @@ impl Preset for Mainnet {
 
     // Gloas
     type PtcSize = U512;
+    type InclusionListCommitteeSize = U16;
     type MaxPayloadAttestation = U4;
     type BuilderRegistryLimit = U1099511627776;
     type BuilderPendingWithdrawalsLimit = U1048576;
@@ -532,6 +544,7 @@ impl Preset for Minimal {
 
     // Gloas
     type PtcSize = U16;
+    type InclusionListCommitteeSize = U16;
 
     // Derived type-level variables
     type MaxAttestersPerSlot = Prod<Self::MaxValidatorsPerCommittee, Self::MaxCommitteesPerSlot>;
@@ -624,6 +637,7 @@ impl Preset for Medalla {
 
         // Gloas
         type PtcSize;
+        type InclusionListCommitteeSize;
         type MaxPayloadAttestation;
         type BuilderRegistryLimit;
         type BuilderPendingWithdrawalsLimit;
