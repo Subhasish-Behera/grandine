@@ -462,7 +462,7 @@ fn process_validators_sweep_withdrawals<P: Preset>(
 
 pub fn process_withdrawals<P: Preset>(state: &mut impl PostGloasBeaconState<P>) -> Result<()> {
     // Return early if the parent block is empty.
-    if state.latest_execution_payload_bid().block_hash != state.latest_block_hash() {
+    if state.latest_execution_payload_bid().block_hash() != state.latest_block_hash() {
         return Ok(());
     }
 
@@ -703,7 +703,7 @@ pub fn process_parent_execution_payload<P: Preset>(
     let parent_bid = state.latest_execution_payload_bid();
     let requests = &block.body.parent_execution_requests;
 
-    if bid.parent_block_hash != parent_bid.block_hash {
+    if bid.parent_block_hash != parent_bid.block_hash() {
         // Parent was EMPTY -- no execution requests expected
         ensure!(
             *requests == ExecutionRequests::<P>::default(),
@@ -715,10 +715,10 @@ pub fn process_parent_execution_payload<P: Preset>(
     let computed = requests.hash_tree_root();
 
     ensure!(
-        computed == parent_bid.execution_requests_root,
+        computed == parent_bid.execution_requests_root(),
         Error::<P>::ExecutionRequestsRootMismatch {
             computed,
-            expected: parent_bid.execution_requests_root,
+            expected: parent_bid.execution_requests_root(),
         }
     );
 
@@ -757,8 +757,12 @@ pub fn apply_parent_execution_payload<P: Preset>(
 
     process_execution_requests(config, pubkey_cache, state, execution_requests)?;
 
-    let parent_bid = state.latest_execution_payload_bid().clone();
-    let parent_slot = parent_bid.slot;
+    let parent_bid = state.latest_execution_payload_bid();
+    let parent_slot = parent_bid.slot();
+    let parent_value = parent_bid.value();
+    let parent_fee_recipient = parent_bid.fee_recipient();
+    let parent_builder_index = parent_bid.builder_index();
+    let parent_block_hash = parent_bid.block_hash();
     let parent_epoch = compute_epoch_at_slot::<P>(parent_slot);
 
     if parent_epoch == get_current_epoch(state) {
@@ -767,13 +771,13 @@ pub fn apply_parent_execution_payload<P: Preset>(
     } else if parent_epoch == get_previous_epoch(state) {
         let payment_index = builder_payment_index_for_previous_epoch::<P>(parent_slot);
         settle_builder_payment(state, payment_index)?;
-    } else if parent_bid.value > 0 {
+    } else if parent_value > 0 {
         state
             .builder_pending_withdrawals_mut()
             .push(BuilderPendingWithdrawal {
-                fee_recipient: parent_bid.fee_recipient,
-                amount: parent_bid.value,
-                builder_index: parent_bid.builder_index,
+                fee_recipient: parent_fee_recipient,
+                amount: parent_value,
+                builder_index: parent_builder_index,
             })?;
     }
 
@@ -783,7 +787,7 @@ pub fn apply_parent_execution_payload<P: Preset>(
         .execution_payload_availability_mut()
         .set(slot % SlotsPerHistoricalRoot::<P>::non_zero_usize(), true);
 
-    *state.latest_block_hash_mut() = parent_bid.block_hash;
+    *state.latest_block_hash_mut() = parent_block_hash;
 
     Ok(())
 }
@@ -818,7 +822,7 @@ fn settle_builder_payment<P: Preset>(
 pub fn process_execution_payload_bid<P: Preset>(
     config: &Config,
     pubkey_cache: &PubkeyCache,
-    state: &mut impl PostGloasBeaconState<P>,
+    state: &mut GloasBeaconState<P>,
     signed_bid: &SignedExecutionPayloadBid<P>,
 ) -> Result<Slot> {
     let ExecutionPayloadBid {
@@ -848,10 +852,10 @@ pub fn process_execution_payload_bid<P: Preset>(
     }
 
     // > Cache the parent block's slot before overwriting the bid
-    let parent_slot = state.latest_execution_payload_bid().slot;
+    let parent_slot = state.latest_execution_payload_bid.slot;
 
     // > Cache the signed execution payload bid
-    *state.latest_execution_payload_bid_mut() = signed_bid.message.clone();
+    state.latest_execution_payload_bid = signed_bid.message.clone();
 
     Ok(parent_slot)
 }

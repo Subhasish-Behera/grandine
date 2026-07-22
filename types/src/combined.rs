@@ -128,9 +128,9 @@ use crate::{
     preset::{Mainnet, Preset},
     traits::{
         BeaconBlock as _, BeaconState as _, BlockBodyWithExecutionRequests,
-        ExecutionPayload as ExecutionPayloadTrait, PostAltairBeaconState, PostBellatrixBeaconState,
-        PostCapellaBeaconState, PostElectraBeaconState, PostFuluBeaconState, PostGloasBeaconState,
-        SignedBeaconBlock as _,
+        ExecutionPayload as ExecutionPayloadTrait, PayloadBid, PostAltairBeaconState,
+        PostBellatrixBeaconState, PostCapellaBeaconState, PostElectraBeaconState,
+        PostFuluBeaconState, PostGloasBeaconState, SignedBeaconBlock as _,
     },
 };
 
@@ -712,7 +712,7 @@ impl<P: Preset> SignedBeaconBlock<P> {
         self.message()
             .body()
             .with_payload_bid()
-            .map(|body| body.signed_execution_payload_bid().message.block_hash)
+            .map(|body| body.payload_bid().block_hash())
             .or_else(|| {
                 self.message()
                     .body()
@@ -741,7 +741,7 @@ impl<P: Preset> SignedBeaconBlock<P> {
     }
 
     #[must_use]
-    pub fn payload_bid(&self) -> Option<&ExecutionPayloadBid<P>> {
+    pub fn payload_bid(&self) -> Option<&dyn PayloadBid<P>> {
         self.message().payload_bid()
     }
 }

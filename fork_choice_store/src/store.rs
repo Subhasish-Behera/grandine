@@ -963,7 +963,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         };
 
         let builds_on_parent_block = bid.parent_block_root == head_block.parent_root();
-        let builds_on_parent_payload = bid.parent_block_hash == head_bid.parent_block_hash;
+        let builds_on_parent_payload = bid.parent_block_hash == head_bid.parent_hash();
 
         if builds_on_parent_block && builds_on_parent_payload {
             return true;
@@ -974,7 +974,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         }
 
         if self.should_build_on_full(bid.slot) {
-            return bid.parent_block_hash == head_bid.block_hash;
+            return bid.parent_block_hash == head_bid.block_hash();
         }
 
         builds_on_parent_payload
@@ -1620,8 +1620,8 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
             return PayloadPresence::Pending;
         };
 
-        let parent_block_hash = block_payload_bid.parent_block_hash;
-        let message_block_hash = parent_payload_bid.block_hash;
+        let parent_block_hash = block_payload_bid.parent_hash();
+        let message_block_hash = parent_payload_bid.block_hash();
 
         if parent_block_hash == message_block_hash {
             PayloadPresence::Full
@@ -1689,10 +1689,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         let block = chain_link.block.message();
 
         if let Some(body_with_payload_bid) = block.body().with_payload_bid() {
-            return body_with_payload_bid
-                .signed_execution_payload_bid()
-                .message
-                .parent_block_hash;
+            return body_with_payload_bid.payload_bid().parent_hash();
         }
 
         block
@@ -2212,7 +2209,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         }
 
         // > Check `is_gas_limit_target_compatible(parent_gas_limit, bid.gas_limit, target_gas_limit)` is True.
-        let parent_gas_limit = post_gloas_state.latest_execution_payload_bid().gas_limit;
+        let parent_gas_limit = post_gloas_state.latest_execution_payload_bid().gas_limit();
         if !predicates::is_gas_limit_target_compatible(
             parent_gas_limit,
             bid.gas_limit,
@@ -3399,7 +3396,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
                 .message()
                 .body()
                 .with_payload_bid()
-                .map(|body| body.signed_execution_payload_bid().blob_kzg_commitments())
+                .map(|body| body.payload_bid().blob_kzg_commitments())
                 .ok_or_else(|| Error::DataColumnSidecarBlockWithoutPayloadBid {
                     data_column_sidecar: data_column_sidecar.clone_arc(),
                 })?
@@ -3759,7 +3756,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
             .message()
             .body()
             .with_payload_bid()
-            .map(|body| &body.signed_execution_payload_bid().message)
+            .map(|body| body.payload_bid())
         else {
             return Err(Error::PayloadEnvelopeInvalidBlock {
                 payload_envelope: envelope,
@@ -3769,35 +3766,35 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
 
         // [REJECT] envelope.builder_index == bid.builder_index
         ensure!(
-            builder_index == bid.builder_index,
+            builder_index == bid.builder_index(),
             Error::<P>::BuilderIndexMismatch {
-                expected: bid.builder_index,
+                expected: bid.builder_index(),
                 actual: builder_index,
             },
         );
 
         ensure!(
-            envelope.message.payload.prev_randao == bid.prev_randao,
+            envelope.message.payload.prev_randao == bid.prev_randao(),
             Error::<P>::ExecutionPayloadPrevRandaoMismatch {
                 envelope,
-                expected: Box::new(bid.prev_randao),
+                expected: Box::new(bid.prev_randao()),
             },
         );
 
         ensure!(
-            envelope.message.payload.gas_limit == bid.gas_limit,
+            envelope.message.payload.gas_limit == bid.gas_limit(),
             Error::<P>::ExecutionPayloadGasLimitMismatch {
                 envelope,
-                expected: bid.gas_limit,
+                expected: bid.gas_limit(),
             },
         );
 
         // [REJECT] payload.block_hash == bid.block_hash
         ensure!(
-            envelope.message.payload.block_hash == bid.block_hash,
+            envelope.message.payload.block_hash == bid.block_hash(),
             Error::<P>::ExecutionPayloadBlockHashMismatch {
                 envelope,
-                expected: Box::new(bid.block_hash),
+                expected: Box::new(bid.block_hash()),
             },
         );
 
@@ -3854,10 +3851,10 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
 
         // [REJECT] hash_tree_root(envelope.execution_requests) == bid.execution_requests_root
         ensure!(
-            envelope.message.execution_requests.hash_tree_root() == bid.execution_requests_root,
+            envelope.message.execution_requests.hash_tree_root() == bid.execution_requests_root(),
             Error::<P>::ExecutionPayloadRequestsHashMismatch {
                 envelope,
-                expected: Box::new(bid.execution_requests_root),
+                expected: Box::new(bid.execution_requests_root()),
             },
         );
 
@@ -3917,7 +3914,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         }
 
         let versioned_hashes = bid
-            .blob_kzg_commitments
+            .blob_kzg_commitments()
             .iter()
             .copied()
             .map(misc::kzg_commitment_to_versioned_hash)

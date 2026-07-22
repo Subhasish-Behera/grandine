@@ -9,7 +9,7 @@
 //                      Update the comment at the top of `ssz::traits` if needed.
 // TODO(Grandine Team): GC unused impls for pointers.
 
-use core::fmt::Debug;
+use core::{fmt::Debug, marker::PhantomData};
 use std::sync::Arc;
 
 use bls::{AggregateSignatureBytes, SignatureBytes};
@@ -38,6 +38,7 @@ use crate::{
             ExecutionPayload as BellatrixExecutionPayload,
             ExecutionPayloadHeader as BellatrixExecutionPayloadHeader,
         },
+        primitives::Gas,
     },
     cache::Cache,
     capella::{
@@ -100,10 +101,17 @@ use crate::{
         containers::{
             Attestation as GloasAttestation, AttesterSlashing as GloasAttesterSlashing,
             BeaconBlock as GloasBeaconBlock, BeaconBlockBody as GloasBeaconBlockBody,
-            ExecutionPayloadBid, IndexedAttestation as GloasIndexedAttestation, PayloadAttestation,
-            SignedExecutionPayloadBid,
+            ExecutionPayloadBid as GloasExecutionPayloadBid,
+            IndexedAttestation as GloasIndexedAttestation, PayloadAttestation,
         },
         primitives::BuilderIndex,
+    },
+    heze::{
+        beacon_state::BeaconState as HezeBeaconState,
+        containers::{
+            BeaconBlock as HezeBeaconBlock, BeaconBlockBody as HezeBeaconBlockBody,
+            ExecutionPayloadBid as HezeExecutionPayloadBid,
+        },
     },
     nonstandard::Phase,
     phase0::{
@@ -117,8 +125,8 @@ use crate::{
             SignedVoluntaryExit, Validator,
         },
         primitives::{
-            DepositIndex, Epoch, ExecutionBlockHash, ExecutionBlockNumber, Gwei, H256, Slot,
-            UnixSeconds, ValidatorIndex,
+            DepositIndex, Epoch, ExecutionAddress, ExecutionBlockHash, ExecutionBlockNumber, Gwei,
+            H256, Slot, UnixSeconds, ValidatorIndex,
         },
     },
     preset::{Preset, SlotsPerHistoricalRoot},
@@ -345,6 +353,21 @@ pub trait BeaconState<P: Preset>: SszHash<PackingFactor = U1> + Send + Sync {
 
     [P: Preset]
     [GloasBeaconState<P>]
+    [self.field]
+    [&self.field]
+    [&mut self.field]
+    [(&mut self.validators, &self.balances)]
+    [(&mut self.balances, &self.slashings)]
+    [Some(self)]
+    [Some(self)]
+    [Some(self)]
+    [true]
+    [true]
+    [true]
+    [true];
+
+    [P: Preset]
+    [HezeBeaconState<P>]
     [self.field]
     [&self.field]
     [&mut self.field]
@@ -595,6 +618,11 @@ pub trait PostAltairBeaconState<P: Preset>: BeaconState<P> {
     [GloasBeaconState<P>]
     [&self.field]
     [&mut self.field];
+
+    [P: Preset]
+    [HezeBeaconState<P>]
+    [&self.field]
+    [&mut self.field];
 )]
 impl<parameters> PostAltairBeaconState<P> for implementor {
     #[duplicate_item(
@@ -688,6 +716,16 @@ impl<P: Preset> PostBellatrixBeaconState<P> for FuluBeaconState<P> {
 }
 
 impl<P: Preset> PostBellatrixBeaconState<P> for GloasBeaconState<P> {
+    fn latest_execution_payload_header(&self) -> &dyn ExecutionPayload<P> {
+        &self.latest_execution_payload_bid
+    }
+
+    fn latest_execution_payload_header_mut(&mut self) -> &mut dyn ExecutionPayload<P> {
+        &mut self.latest_execution_payload_bid
+    }
+}
+
+impl<P: Preset> PostBellatrixBeaconState<P> for HezeBeaconState<P> {
     fn latest_execution_payload_header(&self) -> &dyn ExecutionPayload<P> {
         &self.latest_execution_payload_bid
     }
@@ -813,6 +851,24 @@ impl<P: Preset> PostCapellaBeaconState<P> for GloasBeaconState<P> {
     }
 }
 
+impl<P: Preset> PostCapellaBeaconState<P> for HezeBeaconState<P> {
+    fn next_withdrawal_index(&self) -> WithdrawalIndex {
+        self.next_withdrawal_index
+    }
+
+    fn next_withdrawal_index_mut(&mut self) -> &mut WithdrawalIndex {
+        &mut self.next_withdrawal_index
+    }
+
+    fn next_withdrawal_validator_index(&self) -> ValidatorIndex {
+        self.next_withdrawal_validator_index
+    }
+
+    fn next_withdrawal_validator_index_mut(&mut self) -> &mut ValidatorIndex {
+        &mut self.next_withdrawal_validator_index
+    }
+}
+
 pub trait PostElectraBeaconState<P: Preset>: PostCapellaBeaconState<P> {
     fn deposit_requests_start_index(&self) -> u64;
     fn deposit_balance_to_consume(&self) -> Gwei;
@@ -862,6 +918,12 @@ pub trait PostElectraBeaconState<P: Preset>: PostCapellaBeaconState<P> {
 
     [P: Preset]
     [GloasBeaconState<P>]
+    [self.field]
+    [&self.field]
+    [&mut self.field];
+
+    [P: Preset]
+    [HezeBeaconState<P>]
     [self.field]
     [&self.field]
     [&mut self.field];
@@ -942,8 +1004,18 @@ impl<P: Preset> PostFuluBeaconState<P> for GloasBeaconState<P> {
     }
 }
 
+impl<P: Preset> PostFuluBeaconState<P> for HezeBeaconState<P> {
+    fn proposer_lookahead(&self) -> &ProposerLookahead<P> {
+        &self.proposer_lookahead
+    }
+
+    fn proposer_lookahead_mut(&mut self) -> &mut ProposerLookahead<P> {
+        &mut self.proposer_lookahead
+    }
+}
+
 pub trait PostGloasBeaconState<P: Preset>: PostFuluBeaconState<P> {
-    fn latest_execution_payload_bid(&self) -> &ExecutionPayloadBid<P>;
+    fn latest_execution_payload_bid(&self) -> &dyn PayloadBid<P>;
     fn execution_payload_availability(&self) -> BitVector<SlotsPerHistoricalRoot<P>>;
     fn builder_pending_payments(&self) -> &BuilderPendingPayments<P>;
     fn builder_pending_withdrawals(&self) -> &BuilderPendingWithdrawals;
@@ -953,7 +1025,6 @@ pub trait PostGloasBeaconState<P: Preset>: PostFuluBeaconState<P> {
     fn next_withdrawal_builder_index(&self) -> BuilderIndex;
     fn ptc_window(&self) -> &PtcWindow<P>;
 
-    fn latest_execution_payload_bid_mut(&mut self) -> &mut ExecutionPayloadBid<P>;
     fn execution_payload_availability_mut(&mut self) -> &mut BitVector<SlotsPerHistoricalRoot<P>>;
     fn builder_pending_payments_mut(&mut self) -> &mut BuilderPendingPayments<P>;
     fn builder_pending_withdrawals_mut(&mut self) -> &mut BuilderPendingWithdrawals;
@@ -982,6 +1053,12 @@ pub trait PostGloasBeaconState<P: Preset>: PostFuluBeaconState<P> {
     [self.field]
     [&self.field]
     [&mut self.field];
+
+    [P: Preset]
+    [HezeBeaconState<P>]
+    [self.field]
+    [&self.field]
+    [&mut self.field];
 )]
 impl<parameters> PostGloasBeaconState<P> for implementor {
     #[duplicate_item(
@@ -996,7 +1073,7 @@ impl<parameters> PostGloasBeaconState<P> for implementor {
 
     #[duplicate_item(
         field                               return_type;
-        [latest_execution_payload_bid]      [ExecutionPayloadBid<P>];
+        [latest_execution_payload_bid]      [dyn PayloadBid<P>];
         [builder_pending_payments]          [BuilderPendingPayments<P>];
         [builder_pending_withdrawals]       [BuilderPendingWithdrawals];
         [payload_expected_withdrawals]      [PayloadExpectedWithdrawals];
@@ -1009,7 +1086,6 @@ impl<parameters> PostGloasBeaconState<P> for implementor {
 
     #[duplicate_item(
         field                              method                                 return_type;
-        [latest_execution_payload_bid]     [latest_execution_payload_bid_mut]     [ExecutionPayloadBid<P>];
         [execution_payload_availability]   [execution_payload_availability_mut]   [BitVector<SlotsPerHistoricalRoot<P>>];
         [builder_pending_payments]         [builder_pending_payments_mut]         [BuilderPendingPayments<P>];
         [builder_pending_withdrawals]      [builder_pending_withdrawals_mut]      [BuilderPendingWithdrawals];
@@ -1104,14 +1180,8 @@ pub trait BeaconBlock<P: Preset>: SszHash<PackingFactor = U1> {
     fn state_root(&self) -> H256;
     fn body(&self) -> &dyn BeaconBlockBody<P>;
 
-    fn payload_bid(&self) -> Option<&ExecutionPayloadBid<P>> {
-        Some(
-            &self
-                .body()
-                .with_payload_bid()?
-                .signed_execution_payload_bid()
-                .message,
-        )
+    fn payload_bid(&self) -> Option<&dyn PayloadBid<P>> {
+        Some(self.body().with_payload_bid()?.payload_bid())
     }
 
     fn to_header(&self) -> BeaconBlockHeader {
@@ -1136,6 +1206,7 @@ pub trait BeaconBlock<P: Preset>: SszHash<PackingFactor = U1> {
     [Hc<ElectraBeaconBlock<P>>]      [self.field]    [&self.field];
     [Hc<FuluBeaconBlock<P>>]         [self.field]    [&self.field];
     [Hc<GloasBeaconBlock<P>>]        [self.field]    [&self.field];
+    [Hc<HezeBeaconBlock<P>>]         [self.field]    [&self.field];
 
     [BellatrixBlindedBeaconBlock<P>] [self.field]    [&self.field];
     [CapellaBlindedBeaconBlock<P>]   [self.field]    [&self.field];
@@ -1254,6 +1325,7 @@ pub trait BeaconBlockBody<P: Preset>: SszHash<PackingFactor = U1> {
     [ElectraBeaconBlockBody<P>]          [None]           [Some(self)]     [Some(self)]     [Some(self)]     [Some(self)]     [Some(self)]     [None]           [Some(self)]     [None]           [None];
     [FuluBeaconBlockBody<P>]             [None]           [Some(self)]     [Some(self)]     [Some(self)]     [Some(self)]     [Some(self)]     [None]           [Some(self)]     [None]           [None];
     [GloasBeaconBlockBody<P>]            [None]           [Some(self)]     [None]           [Some(self)]     [Some(self)]     [None]           [Some(self)]     [None]           [Some(self)]     [Some(self)];
+    [HezeBeaconBlockBody<P>]             [None]           [Some(self)]     [None]           [Some(self)]     [Some(self)]     [None]           [Some(self)]     [None]           [Some(self)]     [Some(self)];
 
     // `BellatrixBlindedBeaconBlockBody` does not implement `BlockBodyWithExecutionPayload`
     // because it does not have an `execution_payload` field.
@@ -1506,6 +1578,12 @@ impl<P: Preset> BlockBodyWithSyncAggregate<P> for GloasBeaconBlockBody<P> {
     }
 }
 
+impl<P: Preset> BlockBodyWithSyncAggregate<P> for HezeBeaconBlockBody<P> {
+    fn sync_aggregate(&self) -> SyncAggregate<P> {
+        self.sync_aggregate
+    }
+}
+
 impl<P: Preset> BlockBodyWithSyncAggregate<P> for BellatrixBlindedBeaconBlockBody<P> {
     fn sync_aggregate(&self) -> SyncAggregate<P> {
         self.sync_aggregate
@@ -1654,6 +1732,12 @@ impl<P: Preset> BlockBodyWithBlsToExecutionChanges<P> for GloasBeaconBlockBody<P
     }
 }
 
+impl<P: Preset> BlockBodyWithBlsToExecutionChanges<P> for HezeBeaconBlockBody<P> {
+    fn bls_to_execution_changes(&self) -> &dyn SszList<SignedBlsToExecutionChange> {
+        &self.bls_to_execution_changes
+    }
+}
+
 // Previously `PostDenebBeaconBlockBody`
 pub trait BlockBodyWithBlobKzgCommitments<P: Preset>: BeaconBlockBody<P> {
     // TODO(feature/deneb): method for state is_post_deneb
@@ -1698,7 +1782,13 @@ impl<P: Preset> BlockBodyWithBlobKzgCommitments<P> for FuluBlindedBeaconBlockBod
 
 impl<P: Preset> BlockBodyWithBlobKzgCommitments<P> for GloasBeaconBlockBody<P> {
     fn blob_kzg_commitments(&self) -> &dyn SszList<KzgCommitment> {
-        self.signed_execution_payload_bid().blob_kzg_commitments()
+        self.payload_bid().blob_kzg_commitments()
+    }
+}
+
+impl<P: Preset> BlockBodyWithBlobKzgCommitments<P> for HezeBeaconBlockBody<P> {
+    fn blob_kzg_commitments(&self) -> &dyn SszList<KzgCommitment> {
+        self.payload_bid().blob_kzg_commitments()
     }
 }
 
@@ -1725,6 +1815,12 @@ pub trait BlockBodyWithGloasAttestations<P: Preset>: BeaconBlockBody<P> {
 }
 
 impl<P: Preset> BlockBodyWithGloasAttestations<P> for GloasBeaconBlockBody<P> {
+    fn attestations(&self) -> &ProgressiveList<GloasAttestation<P>> {
+        &self.attestations
+    }
+}
+
+impl<P: Preset> BlockBodyWithGloasAttestations<P> for HezeBeaconBlockBody<P> {
     fn attestations(&self) -> &ProgressiveList<GloasAttestation<P>> {
         &self.attestations
     }
@@ -1761,6 +1857,12 @@ impl<P: Preset> BlockBodyWithGloasAttesterSlashings<P> for GloasBeaconBlockBody<
     }
 }
 
+impl<P: Preset> BlockBodyWithGloasAttesterSlashings<P> for HezeBeaconBlockBody<P> {
+    fn attester_slashings(&self) -> &ProgressiveList<GloasAttesterSlashing<P>> {
+        &self.attester_slashings
+    }
+}
+
 // Previously in `PostElectraBeaconBlockBody`
 pub trait BlockBodyWithExecutionRequests<P: Preset>: BeaconBlockBody<P> {
     fn execution_requests(&self) -> &ExecutionRequests<P>;
@@ -1791,12 +1893,18 @@ impl<P: Preset> BlockBodyWithExecutionRequests<P> for FuluBlindedBeaconBlockBody
 }
 
 pub trait BlockBodyWithPayloadBid<P: Preset>: BeaconBlockBody<P> {
-    fn signed_execution_payload_bid(&self) -> &SignedExecutionPayloadBid<P>;
+    fn payload_bid(&self) -> &dyn PayloadBid<P>;
 }
 
 impl<P: Preset> BlockBodyWithPayloadBid<P> for GloasBeaconBlockBody<P> {
-    fn signed_execution_payload_bid(&self) -> &SignedExecutionPayloadBid<P> {
-        &self.signed_execution_payload_bid
+    fn payload_bid(&self) -> &dyn PayloadBid<P> {
+        &self.signed_execution_payload_bid.message
+    }
+}
+
+impl<P: Preset> BlockBodyWithPayloadBid<P> for HezeBeaconBlockBody<P> {
+    fn payload_bid(&self) -> &dyn PayloadBid<P> {
+        &self.signed_execution_payload_bid.message
     }
 }
 
@@ -1807,6 +1915,76 @@ pub trait BlockBodyWithPayloadAttestations<P: Preset>: BeaconBlockBody<P> {
 impl<P: Preset> BlockBodyWithPayloadAttestations<P> for GloasBeaconBlockBody<P> {
     fn payload_attestations(&self) -> &ProgressiveList<PayloadAttestation<P>> {
         &self.payload_attestations
+    }
+}
+
+impl<P: Preset> BlockBodyWithPayloadAttestations<P> for HezeBeaconBlockBody<P> {
+    fn payload_attestations(&self) -> &ProgressiveList<PayloadAttestation<P>> {
+        &self.payload_attestations
+    }
+}
+
+/// Read-only fields shared by execution payload bids across forks.
+///
+/// Whole-bid replacement remains fork-specific because different forks may use
+/// different concrete bid containers.
+pub trait PayloadBid<P: Preset>: ExecutionPayload<P> {
+    fn parent_block_root(&self) -> H256;
+    fn prev_randao(&self) -> H256;
+    fn fee_recipient(&self) -> ExecutionAddress;
+    fn gas_limit(&self) -> Gas;
+    fn builder_index(&self) -> BuilderIndex;
+    fn slot(&self) -> Slot;
+    fn value(&self) -> Gwei;
+    fn execution_payment(&self) -> Gwei;
+    fn blob_kzg_commitments(&self) -> &ProgressiveList<KzgCommitment>;
+    fn execution_requests_root(&self) -> H256;
+}
+
+#[duplicate_item(
+    implementor;
+    [GloasExecutionPayloadBid<P>];
+    [HezeExecutionPayloadBid<P>];
+)]
+impl<P: Preset> PayloadBid<P> for implementor {
+    fn parent_block_root(&self) -> H256 {
+        self.parent_block_root
+    }
+
+    fn prev_randao(&self) -> H256 {
+        self.prev_randao
+    }
+
+    fn fee_recipient(&self) -> ExecutionAddress {
+        self.fee_recipient
+    }
+
+    fn gas_limit(&self) -> Gas {
+        self.gas_limit
+    }
+
+    fn builder_index(&self) -> BuilderIndex {
+        self.builder_index
+    }
+
+    fn slot(&self) -> Slot {
+        self.slot
+    }
+
+    fn value(&self) -> Gwei {
+        self.value
+    }
+
+    fn execution_payment(&self) -> Gwei {
+        self.execution_payment
+    }
+
+    fn blob_kzg_commitments(&self) -> &ProgressiveList<KzgCommitment> {
+        &self.blob_kzg_commitments
+    }
+
+    fn execution_requests_root(&self) -> H256 {
+        self.execution_requests_root
     }
 }
 
@@ -1951,7 +2129,12 @@ impl<P: Preset> ExecutionPayload<P> for DenebExecutionPayloadHeader<P> {
     }
 }
 
-impl<P: Preset> ExecutionPayload<P> for ExecutionPayloadBid<P> {
+#[duplicate_item(
+    implementor                               to_header_body;
+    [GloasExecutionPayloadBid<P>]             [self.clone().into()];
+    [HezeExecutionPayloadBid<P>]              [execution_payload_header_from_heze_bid(self)];
+)]
+impl<P: Preset> ExecutionPayload<P> for implementor {
     fn block_hash(&self) -> ExecutionBlockHash {
         self.block_hash
     }
@@ -1969,8 +2152,31 @@ impl<P: Preset> ExecutionPayload<P> for ExecutionPayloadBid<P> {
     }
 
     fn to_header(&self) -> CombinedExecutionPayloadHeader<P> {
-        self.clone().into()
+        to_header_body
     }
+}
+
+fn execution_payload_header_from_heze_bid<P: Preset>(
+    bid: &HezeExecutionPayloadBid<P>,
+) -> CombinedExecutionPayloadHeader<P> {
+    // Combined Heze phase dispatch is added with the Heze transition implementation.
+    // Until then, project the bid to the pre-Heze payload-header surface used by shared callers.
+    GloasExecutionPayloadBid {
+        parent_block_hash: bid.parent_block_hash,
+        parent_block_root: bid.parent_block_root,
+        block_hash: bid.block_hash,
+        prev_randao: bid.prev_randao,
+        fee_recipient: bid.fee_recipient,
+        gas_limit: bid.gas_limit,
+        builder_index: bid.builder_index,
+        slot: bid.slot,
+        value: bid.value,
+        execution_payment: bid.execution_payment,
+        blob_kzg_commitments: bid.blob_kzg_commitments.clone(),
+        execution_requests_root: bid.execution_requests_root,
+        phantom: PhantomData,
+    }
+    .into()
 }
 
 pub trait PostCapellaExecutionPayload<P: Preset>: ExecutionPayload<P> {

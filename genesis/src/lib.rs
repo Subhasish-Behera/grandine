@@ -62,7 +62,7 @@ use types::{
         primitives::{DepositIndex, ExecutionBlockHash, H256, UnixSeconds},
     },
     preset::Preset,
-    traits::{BeaconState as _, PostGloasBeaconState},
+    traits::BeaconState as _,
 };
 
 pub struct Incremental<'config, P: Preset> {
@@ -339,10 +339,10 @@ enum GenesisTriggerError {
 /// <https://github.com/ethereum/consensus-specs/blob/2fa396f67df35df236b6aa6fe714a59ee1032dc8/specs/phase0/beacon-chain.md#genesis-block>
 #[must_use]
 pub fn beacon_block<P: Preset>(genesis_state: &BeaconState<P>) -> SignedBeaconBlock<P> {
-    let execution_payload_bid = genesis_state
-        .post_gloas()
-        .map(PostGloasBeaconState::latest_execution_payload_bid)
-        .cloned();
+    let execution_payload_bid = match genesis_state {
+        BeaconState::Gloas(state) => Some(state.latest_execution_payload_bid.clone()),
+        _ => None,
+    };
     beacon_block_internal(
         genesis_state.phase(),
         genesis_state.hash_tree_root(),

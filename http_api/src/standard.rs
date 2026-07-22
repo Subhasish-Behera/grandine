@@ -3571,7 +3571,7 @@ pub async fn validator_block_v4<P: Preset, W: Wait>(
     let self_built = validator_block
         .value
         .payload_bid()
-        .is_some_and(|bid| bid.builder_index == BUILDER_INDEX_SELF_BUILD);
+        .is_some_and(|bid| bid.builder_index() == BUILDER_INDEX_SELF_BUILD);
 
     let payload_included = include_payload && self_built;
 

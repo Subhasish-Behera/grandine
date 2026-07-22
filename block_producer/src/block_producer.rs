@@ -1360,9 +1360,9 @@ impl<P: Preset, W: Wait> BlockBuildContext<P, W> {
                 } else {
                     // TODO: (gloas): select from received bids based on proposer preference
                     let parent_block_hash = if snapshot.should_build_on_full(state.slot()) {
-                        state.latest_execution_payload_bid().block_hash
+                        state.latest_execution_payload_bid().block_hash()
                     } else {
-                        state.latest_execution_payload_bid().parent_block_hash
+                        state.latest_execution_payload_bid().parent_hash()
                     };
 
                     let selected_bid =
@@ -2027,7 +2027,7 @@ impl<P: Preset, W: Wait> BlockBuildContext<P, W> {
                     )?;
 
                     gloas::get_expected_withdrawals(&state_copy)?.0
-                } else if state.latest_execution_payload_bid().block_hash
+                } else if state.latest_execution_payload_bid().block_hash()
                     == state.latest_block_hash()
                 {
                     debug_with_peers!(
@@ -2142,9 +2142,9 @@ impl<P: Preset, W: Wait> BlockBuildContext<P, W> {
             if snapshot.should_build_on_full(state.slot())
                 || chain_config.phase_at_slot::<P>(parent_slot) < Phase::Gloas
             {
-                parent_bid.block_hash
+                parent_bid.block_hash()
             } else {
-                parent_bid.parent_block_hash
+                parent_bid.parent_hash()
             }
         } else if let Some(state) = state.post_capella() {
             state.latest_execution_payload_header().block_hash()

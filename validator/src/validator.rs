@@ -1120,14 +1120,14 @@ impl<P: Preset, W: Wait + Sync> Validator<P, W> {
                 let parent_beacon_block_root = beacon_block.message().parent_root();
 
                 if let Some(payload_bid) = beacon_block.payload_bid()
-                    && payload_bid.builder_index != BUILDER_INDEX_SELF_BUILD
+                    && payload_bid.builder_index() != BUILDER_INDEX_SELF_BUILD
                 {
                     info_with_peers!(
                         "validator {} proposing beacon block with root {:?} in slot {} using builder {}",
                         proposer_index,
                         beacon_block_root,
                         slot_head.slot(),
-                        payload_bid.builder_index
+                        payload_bid.builder_index()
                     );
                 } else {
                     info_with_peers!(
@@ -1144,7 +1144,7 @@ impl<P: Preset, W: Wait + Sync> Validator<P, W> {
 
                 let self_built = block
                     .payload_bid()
-                    .is_some_and(|bid| bid.builder_index == BUILDER_INDEX_SELF_BUILD);
+                    .is_some_and(|bid| bid.builder_index() == BUILDER_INDEX_SELF_BUILD);
 
                 if (slot_head.phase() < Phase::Gloas || self_built)
                     && let Some(blobs) = block_blobs
