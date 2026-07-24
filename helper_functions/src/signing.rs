@@ -36,9 +36,12 @@ use types::{
         },
         containers::{
             AggregateAndProof as GloasAggregateAndProof, BeaconBlock as GloasBeaconBlock,
-            BuilderDepositMessage, ExecutionPayloadBid, ExecutionPayloadEnvelope,
-            PayloadAttestationData, ProposerPreferences,
+            BuilderDepositMessage, ExecutionPayloadBid as GloasExecutionPayloadBid,
+            ExecutionPayloadEnvelope, PayloadAttestationData, ProposerPreferences,
         },
+    },
+    heze::containers::{
+        BeaconBlock as HezeBeaconBlock, ExecutionPayloadBid as HezeExecutionPayloadBid,
     },
     phase0::{
         consts::{
@@ -353,6 +356,15 @@ impl<P: Preset> SignForSingleFork<P> for GloasBeaconBlock<P> {
     }
 }
 
+impl<P: Preset> SignForSingleFork<P> for HezeBeaconBlock<P> {
+    const DOMAIN_TYPE: DomainType = DOMAIN_BEACON_PROPOSER;
+    const SIGNATURE_KIND: SignatureKind = SignatureKind::Block;
+
+    fn epoch(&self) -> Epoch {
+        misc::compute_epoch_at_slot::<P>(self.slot)
+    }
+}
+
 impl<P: Preset> SignForSingleFork<P> for CombinedBeaconBlock<P> {
     const DOMAIN_TYPE: DomainType = DOMAIN_BEACON_PROPOSER;
     const SIGNATURE_KIND: SignatureKind = SignatureKind::Block;
@@ -448,6 +460,7 @@ impl<P: Preset> SignForSingleFork<P> for VoluntaryExit {
             || current_fork_version == config.electra_fork_version
             || current_fork_version == config.fulu_fork_version
             || current_fork_version == config.gloas_fork_version
+            || current_fork_version == config.heze_fork_version
         {
             let fork_version = Some(config.capella_fork_version);
             let genesis_validators_root = Some(beacon_state.genesis_validators_root());
@@ -478,7 +491,16 @@ impl<P: Preset> SignForSingleFork<P> for PayloadAttestationData {
 }
 
 // <https://github.com/ethereum/consensus-specs/blob/v1.6.0-beta.0/specs/gloas/beacon-chain.md#new-verify_execution_payload_bid_signature>
-impl<P: Preset> SignForSingleFork<P> for ExecutionPayloadBid<P> {
+impl<P: Preset> SignForSingleFork<P> for GloasExecutionPayloadBid<P> {
+    const DOMAIN_TYPE: DomainType = DOMAIN_BEACON_BUILDER;
+    const SIGNATURE_KIND: SignatureKind = SignatureKind::ExecutionPayloadBid;
+
+    fn epoch(&self) -> Epoch {
+        misc::compute_epoch_at_slot::<P>(self.slot)
+    }
+}
+
+impl<P: Preset> SignForSingleFork<P> for HezeExecutionPayloadBid<P> {
     const DOMAIN_TYPE: DomainType = DOMAIN_BEACON_BUILDER;
     const SIGNATURE_KIND: SignatureKind = SignatureKind::ExecutionPayloadBid;
 

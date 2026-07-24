@@ -9,7 +9,7 @@
 //                      Update the comment at the top of `ssz::traits` if needed.
 // TODO(Grandine Team): GC unused impls for pointers.
 
-use core::{fmt::Debug, marker::PhantomData};
+use core::fmt::Debug;
 use std::sync::Arc;
 
 use bls::{AggregateSignatureBytes, SignatureBytes};
@@ -393,6 +393,7 @@ pub trait BeaconState<P: Preset>: SszHash<PackingFactor = U1> + Send + Sync {
             Self::Electra(state) => state.field,
             Self::Fulu(state) => state.field,
             Self::Gloas(state) => state.field,
+            Self::Heze(state) => state.field,
         }
     ]
     [
@@ -405,6 +406,7 @@ pub trait BeaconState<P: Preset>: SszHash<PackingFactor = U1> + Send + Sync {
             Self::Electra(state) => &state.field,
             Self::Fulu(state) => &state.field,
             Self::Gloas(state) => &state.field,
+            Self::Heze(state) => &state.field,
         }
     ]
     [
@@ -417,6 +419,7 @@ pub trait BeaconState<P: Preset>: SszHash<PackingFactor = U1> + Send + Sync {
             Self::Electra(state) => &mut state.field,
             Self::Fulu(state) => &mut state.field,
             Self::Gloas(state) => &mut state.field,
+            Self::Heze(state) => &mut state.field,
         }
     ]
     [
@@ -429,6 +432,7 @@ pub trait BeaconState<P: Preset>: SszHash<PackingFactor = U1> + Send + Sync {
             Self::Electra(state) => state.validators_mut_with_balances(),
             Self::Fulu(state) => state.validators_mut_with_balances(),
             Self::Gloas(state) => state.validators_mut_with_balances(),
+            Self::Heze(state) => state.validators_mut_with_balances(),
         }
     ]
     [
@@ -441,6 +445,7 @@ pub trait BeaconState<P: Preset>: SszHash<PackingFactor = U1> + Send + Sync {
             Self::Electra(state) => state.balances_mut_with_slashings(),
             Self::Fulu(state) => state.balances_mut_with_slashings(),
             Self::Gloas(state) => state.balances_mut_with_slashings(),
+            Self::Heze(state) => state.balances_mut_with_slashings(),
         }
     ]
     [self.post_electra()]
@@ -1132,6 +1137,7 @@ impl<P: Preset> SignedBeaconBlock<P> for CombinedSignedBeaconBlock<P> {
             Self::Electra(block) => &block.message,
             Self::Fulu(block) => &block.message,
             Self::Gloas(block) => &block.message,
+            Self::Heze(block) => &block.message,
         }
     }
 
@@ -1145,6 +1151,7 @@ impl<P: Preset> SignedBeaconBlock<P> for CombinedSignedBeaconBlock<P> {
             Self::Electra(block) => block.signature,
             Self::Fulu(block) => block.signature,
             Self::Gloas(block) => block.signature,
+            Self::Heze(block) => block.signature,
         }
     }
 }
@@ -1225,6 +1232,7 @@ pub trait BeaconBlock<P: Preset>: SszHash<PackingFactor = U1> {
             Self::Electra(block) => block.field,
             Self::Fulu(block) => block.field,
             Self::Gloas(block) => block.field,
+            Self::Heze(block) => block.field,
         }
     ]
     [
@@ -1237,6 +1245,7 @@ pub trait BeaconBlock<P: Preset>: SszHash<PackingFactor = U1> {
             Self::Electra(block) => &block.field,
             Self::Fulu(block) => &block.field,
             Self::Gloas(block) => &block.field,
+            Self::Heze(block) => &block.field,
         }
     ];
 
@@ -2132,7 +2141,7 @@ impl<P: Preset> ExecutionPayload<P> for DenebExecutionPayloadHeader<P> {
 #[duplicate_item(
     implementor                               to_header_body;
     [GloasExecutionPayloadBid<P>]             [self.clone().into()];
-    [HezeExecutionPayloadBid<P>]              [execution_payload_header_from_heze_bid(self)];
+    [HezeExecutionPayloadBid<P>]              [self.clone().into()];
 )]
 impl<P: Preset> ExecutionPayload<P> for implementor {
     fn block_hash(&self) -> ExecutionBlockHash {
@@ -2154,29 +2163,6 @@ impl<P: Preset> ExecutionPayload<P> for implementor {
     fn to_header(&self) -> CombinedExecutionPayloadHeader<P> {
         to_header_body
     }
-}
-
-fn execution_payload_header_from_heze_bid<P: Preset>(
-    bid: &HezeExecutionPayloadBid<P>,
-) -> CombinedExecutionPayloadHeader<P> {
-    // Combined Heze phase dispatch is added with the Heze transition implementation.
-    // Until then, project the bid to the pre-Heze payload-header surface used by shared callers.
-    GloasExecutionPayloadBid {
-        parent_block_hash: bid.parent_block_hash,
-        parent_block_root: bid.parent_block_root,
-        block_hash: bid.block_hash,
-        prev_randao: bid.prev_randao,
-        fee_recipient: bid.fee_recipient,
-        gas_limit: bid.gas_limit,
-        builder_index: bid.builder_index,
-        slot: bid.slot,
-        value: bid.value,
-        execution_payment: bid.execution_payment,
-        blob_kzg_commitments: bid.blob_kzg_commitments.clone(),
-        execution_requests_root: bid.execution_requests_root,
-        phantom: PhantomData,
-    }
-    .into()
 }
 
 pub trait PostCapellaExecutionPayload<P: Preset>: ExecutionPayload<P> {

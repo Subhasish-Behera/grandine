@@ -38,8 +38,12 @@ use types::{
     gloas::{
         beacon_state::BeaconState as GloasBeaconState,
         consts::PAYLOAD_BUILDER_VERSION,
-        containers::{ExecutionPayloadBid, ExecutionRequests},
+        containers::{ExecutionPayloadBid as GloasExecutionPayloadBid, ExecutionRequests},
         primitives::BuilderIndex,
+    },
+    heze::{
+        beacon_state::BeaconState as HezeBeaconState,
+        containers::ExecutionPayloadBid as HezeExecutionPayloadBid,
     },
     phase0::{
         beacon_state::BeaconState as Phase0BeaconState,
@@ -859,7 +863,7 @@ pub fn upgrade_to_gloas<P: Preset>(
         epoch,
     };
 
-    let latest_execution_payload_bid = ExecutionPayloadBid {
+    let latest_execution_payload_bid = GloasExecutionPayloadBid {
         block_hash: latest_execution_payload_header.block_hash,
         gas_limit: latest_execution_payload_header.gas_limit,
         execution_requests_root: ExecutionRequests::<P>::default().hash_tree_root(),
@@ -935,6 +939,151 @@ pub fn upgrade_to_gloas<P: Preset>(
     onboard_builders(config, pubkey_cache, &mut post_state)?;
 
     Ok(post_state)
+}
+
+#[must_use]
+#[expect(clippy::too_many_lines)]
+pub fn upgrade_to_heze<P: Preset>(config: &Config, pre: GloasBeaconState<P>) -> HezeBeaconState<P> {
+    let epoch = accessors::get_current_epoch(&pre);
+
+    let GloasBeaconState {
+        genesis_time,
+        genesis_validators_root,
+        slot,
+        fork,
+        latest_block_header,
+        block_roots,
+        state_roots,
+        historical_roots,
+        eth1_data,
+        eth1_data_votes,
+        eth1_deposit_index,
+        validators,
+        balances,
+        randao_mixes,
+        slashings,
+        previous_epoch_participation,
+        current_epoch_participation,
+        justification_bits,
+        previous_justified_checkpoint,
+        current_justified_checkpoint,
+        finalized_checkpoint,
+        inactivity_scores,
+        current_sync_committee,
+        next_sync_committee,
+        latest_block_hash,
+        next_withdrawal_index,
+        next_withdrawal_validator_index,
+        historical_summaries,
+        deposit_requests_start_index,
+        deposit_balance_to_consume,
+        exit_balance_to_consume,
+        earliest_exit_epoch,
+        consolidation_balance_to_consume,
+        earliest_consolidation_epoch,
+        pending_deposits,
+        pending_partial_withdrawals,
+        pending_consolidations,
+        proposer_lookahead,
+        builders,
+        next_withdrawal_builder_index,
+        execution_payload_availability,
+        builder_pending_payments,
+        builder_pending_withdrawals,
+        latest_execution_payload_bid,
+        payload_expected_withdrawals,
+        ptc_window,
+        cache,
+    } = pre;
+
+    let fork = Fork {
+        previous_version: fork.current_version,
+        current_version: config.heze_fork_version,
+        epoch,
+    };
+
+    let GloasExecutionPayloadBid {
+        parent_block_hash,
+        parent_block_root,
+        block_hash,
+        prev_randao,
+        fee_recipient,
+        gas_limit,
+        builder_index,
+        slot: bid_slot,
+        value,
+        execution_payment,
+        blob_kzg_commitments,
+        execution_requests_root,
+        phantom: _,
+    } = latest_execution_payload_bid;
+
+    let latest_execution_payload_bid = HezeExecutionPayloadBid {
+        parent_block_hash,
+        parent_block_root,
+        block_hash,
+        prev_randao,
+        fee_recipient,
+        gas_limit,
+        builder_index,
+        slot: bid_slot,
+        value,
+        execution_payment,
+        blob_kzg_commitments,
+        execution_requests_root,
+        // > [New in Heze:EIP7805]
+        inclusion_list_bits: BitVector::default(),
+    };
+
+    HezeBeaconState {
+        genesis_time,
+        genesis_validators_root,
+        slot,
+        fork,
+        latest_block_header,
+        block_roots,
+        state_roots,
+        historical_roots,
+        eth1_data,
+        eth1_data_votes,
+        eth1_deposit_index,
+        validators,
+        balances,
+        randao_mixes,
+        slashings,
+        previous_epoch_participation,
+        current_epoch_participation,
+        justification_bits,
+        previous_justified_checkpoint,
+        current_justified_checkpoint,
+        finalized_checkpoint,
+        inactivity_scores,
+        current_sync_committee,
+        next_sync_committee,
+        latest_block_hash,
+        next_withdrawal_index,
+        next_withdrawal_validator_index,
+        historical_summaries,
+        deposit_requests_start_index,
+        deposit_balance_to_consume,
+        exit_balance_to_consume,
+        earliest_exit_epoch,
+        consolidation_balance_to_consume,
+        earliest_consolidation_epoch,
+        pending_deposits,
+        pending_partial_withdrawals,
+        pending_consolidations,
+        proposer_lookahead,
+        builders,
+        next_withdrawal_builder_index,
+        execution_payload_availability,
+        builder_pending_payments,
+        builder_pending_withdrawals,
+        latest_execution_payload_bid,
+        payload_expected_withdrawals,
+        ptc_window,
+        cache,
+    }
 }
 
 fn initialize_proposer_lookahead<P: Preset>(
@@ -1116,6 +1265,16 @@ mod spec_tests {
         run_gloas_case::<Minimal>(case);
     }
 
+    #[test_resources("consensus-spec-tests/tests/mainnet/heze/fork/*/*/*")]
+    fn heze_mainnet(case: Case) {
+        run_heze_case::<Mainnet>(case);
+    }
+
+    #[test_resources("consensus-spec-tests/tests/minimal/heze/fork/*/*/*")]
+    fn heze_minimal(case: Case) {
+        run_heze_case::<Minimal>(case);
+    }
+
     fn run_altair_case<P: Preset>(case: Case) {
         let pre = case.ssz_default("pre");
         let expected_post = case.ssz_default("post");
@@ -1181,6 +1340,15 @@ mod spec_tests {
 
         let actual_post = upgrade_to_gloas::<P>(&P::default_config(), &pubkey_cache, pre)
             .expect("upgrade from Fulu to Gloas should succeed");
+
+        assert_eq!(actual_post, expected_post);
+    }
+
+    fn run_heze_case<P: Preset>(case: Case) {
+        let pre = case.ssz_default("pre");
+        let expected_post = case.ssz_default("post");
+
+        let actual_post = upgrade_to_heze::<P>(&P::default_config(), pre);
 
         assert_eq!(actual_post, expected_post);
     }
