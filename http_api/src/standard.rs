@@ -78,6 +78,7 @@ use types::{
     combined::{
         Attestation, AttesterSlashing, BeaconBlock, BeaconState, DataColumnSidecar,
         SignedAggregateAndProof, SignedBeaconBlock, SignedBlindedBeaconBlock,
+        SignedExecutionPayloadBid,
     },
     config::Config as ChainConfig,
     deneb::{
@@ -91,10 +92,9 @@ use types::{
     gloas::{
         consts::BUILDER_INDEX_SELF_BUILD,
         containers::{
-            ExecutionPayloadBid, ExecutionPayloadEnvelope, PayloadAttestation,
-            PayloadAttestationData, PayloadAttestationMessage, SignedExecutionPayloadBid,
-            SignedExecutionPayloadEnvelope, SignedExecutionPayloadEnvelopeContents,
-            SignedProposerPreferences,
+            ExecutionPayloadEnvelope, PayloadAttestation, PayloadAttestationData,
+            PayloadAttestationMessage, SignedExecutionPayloadEnvelope,
+            SignedExecutionPayloadEnvelopeContents, SignedProposerPreferences,
         },
         primitives::BuilderIndex,
     },
@@ -2262,7 +2262,7 @@ pub async fn pool_attester_slashings_v2<P: Preset, W: Wait>(
                 .map(|slashing| AttesterSlashing::Phase0(slashing))
                 .collect()
         }
-        Phase::Electra | Phase::Fulu | Phase::Gloas => slashings
+        Phase::Electra | Phase::Fulu | Phase::Gloas | Phase::Heze => slashings
             .into_iter()
             .filter_map(AttesterSlashing::post_electra)
             .map(|slashing| AttesterSlashing::Electra(slashing))
@@ -3888,7 +3888,7 @@ pub async fn validator_execution_payload_bid<P: Preset, W: Wait>(
     EthPath(slot): EthPath<Slot>,
     EthPath(builder_index): EthPath<BuilderIndex>,
     headers: HeaderMap,
-) -> Result<EthResponse<ExecutionPayloadBid<P>, (), JsonOrSsz>, Error> {
+) -> Result<Response, Error> {
     let current_slot = controller.slot();
     let beacon_state = if slot == current_slot {
         controller.preprocessed_state_at_current_slot().await?
@@ -3911,7 +3911,20 @@ pub async fn validator_execution_payload_bid<P: Preset, W: Wait>(
         .get_payload_bid_from(slot, builder_index)
         .ok_or(Error::ExecutionPayloadBidNotFound)?;
 
-    Ok(EthResponse::json_or_ssz(signed_bid.message, &headers)?.version(version))
+    let response = match signed_bid {
+        SignedExecutionPayloadBid::Gloas(signed_bid) => {
+            EthResponse::json_or_ssz(signed_bid.message, &headers)?
+                .version(version)
+                .into_response()
+        }
+        SignedExecutionPayloadBid::Heze(signed_bid) => {
+            EthResponse::json_or_ssz(signed_bid.message, &headers)?
+                .version(version)
+                .into_response()
+        }
+    };
+
+    Ok(response)
 }
 
 /// `GET /eth/v1/validator/execution_payload_envelopes/{slot}/{beacon_block_root}`

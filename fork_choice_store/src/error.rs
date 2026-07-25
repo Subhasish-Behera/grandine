@@ -6,11 +6,12 @@ use thiserror::Error;
 use types::{
     PayloadExpectedWithdrawals,
     bellatrix::{containers::PowBlock, primitives::Gas},
-    combined::{Attestation, DataColumnSidecar, SignedAggregateAndProof, SignedBeaconBlock},
-    deneb::containers::BlobSidecar,
-    gloas::containers::{
-        SignedExecutionPayloadBid, SignedExecutionPayloadEnvelope, SignedProposerPreferences,
+    combined::{
+        Attestation, DataColumnSidecar, SignedAggregateAndProof, SignedBeaconBlock,
+        SignedExecutionPayloadBid,
     },
+    deneb::containers::BlobSidecar,
+    gloas::containers::{SignedExecutionPayloadEnvelope, SignedProposerPreferences},
     phase0::primitives::{Epoch, Gwei, H256, Slot, SubnetId, ValidatorIndex},
     preset::{Mainnet, Preset},
 };

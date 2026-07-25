@@ -21,7 +21,7 @@ use types::{
     altair::containers::{SignedContributionAndProof, SyncCommitteeMessage},
     combined::{
         Attestation, AttesterSlashing, DataColumnSidecar, SignedAggregateAndProof,
-        SignedBeaconBlock,
+        SignedBeaconBlock, SignedExecutionPayloadBid,
     },
     deneb::containers::{BlobIdentifier, BlobSidecar},
     fulu::{
@@ -29,8 +29,8 @@ use types::{
         primitives::ColumnIndex,
     },
     gloas::containers::{
-        PayloadAttestationMessage, PayloadEnvelopeIdentifier, SignedExecutionPayloadBid,
-        SignedExecutionPayloadEnvelope, SignedProposerPreferences,
+        PayloadAttestationMessage, PayloadEnvelopeIdentifier, SignedExecutionPayloadEnvelope,
+        SignedProposerPreferences,
     },
     nonstandard::Phase,
     phase0::{

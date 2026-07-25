@@ -609,7 +609,7 @@ impl Eth1Api {
                 })
                 .await?
             }
-            Phase::Gloas => {
+            Phase::Gloas | Phase::Heze => {
                 let _timer = self.metrics.as_ref().map(|metrics| {
                     prometheus_metrics::start_timer_vec(
                         &metrics.eth1_api_request_times,
@@ -635,7 +635,7 @@ impl Eth1Api {
             _ => {
                 // This match arm will silently match any new phases.
                 // Cause a compilation error if a new phase is added.
-                const_assert_eq!(Phase::CARDINALITY, 8);
+                const_assert_eq!(Phase::CARDINALITY, 9);
 
                 bail!(Error::PhasePreBellatrix)
             }
@@ -648,10 +648,11 @@ impl Eth1Api {
             Phase::Electra => payload_id.map(PayloadId::Electra),
             Phase::Fulu => payload_id.map(PayloadId::Fulu),
             Phase::Gloas => payload_id.map(PayloadId::Gloas),
+            Phase::Heze => payload_id.map(PayloadId::Gloas),
             _ => {
                 // This match arm will silently match any new phases.
                 // Cause a compilation error if a new phase is added.
-                const_assert_eq!(Phase::CARDINALITY, 8);
+                const_assert_eq!(Phase::CARDINALITY, 9);
 
                 bail!(Error::PhasePreBellatrix)
             }

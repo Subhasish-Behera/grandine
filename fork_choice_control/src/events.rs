@@ -20,7 +20,9 @@ use types::{
     altair::containers::SignedContributionAndProof,
     bellatrix::primitives::Gas,
     capella::{containers::SignedBlsToExecutionChange, primitives::WithdrawalIndex},
-    combined::{Attestation, AttesterSlashing, DataColumnSidecar},
+    combined::{
+        Attestation, AttesterSlashing, DataColumnSidecar, SignedExecutionPayloadBid,
+    },
     deneb::{
         containers::BlobSidecar,
         primitives::{BlobIndex, KzgCommitment, VersionedHash},
@@ -28,9 +30,7 @@ use types::{
     electra::containers::SingleAttestation,
     fulu::primitives::ColumnIndex,
     gloas::{
-        containers::{
-            PayloadAttestationMessage, SignedExecutionPayloadBid, SignedProposerPreferences,
-        },
+        containers::{PayloadAttestationMessage, SignedProposerPreferences},
         primitives::{BuilderIndex, PayloadStatus},
     },
     nonstandard::Phase,

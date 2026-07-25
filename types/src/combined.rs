@@ -107,7 +107,8 @@ use crate::{
             LightClientOptimisticUpdate as GloasLightClientOptimisticUpdate,
             LightClientUpdate as GloasLightClientUpdate,
             SignedAggregateAndProof as GloasSignedAggregateAndProof,
-            SignedBeaconBlock as GloasSignedBeaconBlock, SignedExecutionPayloadBid,
+            SignedBeaconBlock as GloasSignedBeaconBlock,
+            SignedExecutionPayloadBid as GloasSignedExecutionPayloadBid,
         },
     },
     heze::{
@@ -115,6 +116,7 @@ use crate::{
         containers::{
             BeaconBlock as HezeBeaconBlock, ExecutionPayloadBid as HezeExecutionPayloadBid,
             SignedBeaconBlock as HezeSignedBeaconBlock,
+            SignedExecutionPayloadBid as HezeSignedExecutionPayloadBid,
         },
     },
     nonstandard::Phase,
@@ -1043,8 +1045,13 @@ impl<P: Preset> BeaconBlock<P> {
             return self;
         };
 
-        match &mut self {
-            Self::Gloas(block) => block.body.signed_execution_payload_bid = payload_bid,
+        match (&mut self, payload_bid) {
+            (Self::Gloas(block), SignedExecutionPayloadBid::Gloas(payload_bid)) => {
+                block.body.signed_execution_payload_bid = payload_bid;
+            }
+            (Self::Heze(block), SignedExecutionPayloadBid::Heze(payload_bid)) => {
+                block.body.signed_execution_payload_bid = payload_bid;
+            }
             _ => {
                 // This match arm will silently match any new phases.
                 // Cause a compilation error if a new phase is added.
@@ -1661,6 +1668,95 @@ pub enum ExecutionPayloadHeader<P: Preset> {
     Deneb(DenebExecutionPayloadHeader<P>),
     Gloas(ExecutionPayloadBid<P>),
     Heze(HezeExecutionPayloadBid<P>),
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, From, Deserialize, Serialize)]
+#[serde(bound = "", untagged)]
+pub enum SignedExecutionPayloadBid<P: Preset> {
+    Gloas(GloasSignedExecutionPayloadBid<P>),
+    Heze(HezeSignedExecutionPayloadBid<P>),
+}
+
+impl<P: Preset> SszSize for SignedExecutionPayloadBid<P> {
+    const SIZE: Size = Size::for_untagged_union::<{ Phase::CARDINALITY - 7 }>([
+        GloasSignedExecutionPayloadBid::<P>::SIZE,
+        HezeSignedExecutionPayloadBid::<P>::SIZE,
+    ]);
+}
+
+impl<P: Preset> SszRead<Phase> for SignedExecutionPayloadBid<P> {
+    fn from_ssz_unchecked(phase: &Phase, bytes: &[u8]) -> Result<Self, ReadError> {
+        match phase {
+            Phase::Gloas => Ok(Self::Gloas(SszReadDefault::from_ssz_default(bytes)?)),
+            Phase::Heze => Ok(Self::Heze(SszReadDefault::from_ssz_default(bytes)?)),
+            Phase::Phase0
+            | Phase::Altair
+            | Phase::Bellatrix
+            | Phase::Capella
+            | Phase::Deneb
+            | Phase::Electra
+            | Phase::Fulu => Err(ReadError::Custom {
+                message: "signed execution payload bid is not available before Gloas",
+            }),
+        }
+    }
+}
+
+impl<P: Preset> SszWrite for SignedExecutionPayloadBid<P> {
+    fn write_variable(&self, bytes: &mut Vec<u8>) -> Result<(), WriteError> {
+        match self {
+            Self::Gloas(bid) => bid.write_variable(bytes),
+            Self::Heze(bid) => bid.write_variable(bytes),
+        }
+    }
+}
+
+impl<P: Preset> SszHash for SignedExecutionPayloadBid<P> {
+    type PackingFactor = U1;
+
+    fn hash_tree_root(&self) -> H256 {
+        match self {
+            Self::Gloas(bid) => bid.hash_tree_root(),
+            Self::Heze(bid) => bid.hash_tree_root(),
+        }
+    }
+}
+
+impl<P: Preset> SignedExecutionPayloadBid<P> {
+    pub const fn phase(&self) -> Phase {
+        match self {
+            Self::Gloas(_) => Phase::Gloas,
+            Self::Heze(_) => Phase::Heze,
+        }
+    }
+
+    pub fn message(&self) -> &dyn PayloadBid<P> {
+        match self {
+            Self::Gloas(bid) => &bid.message,
+            Self::Heze(bid) => &bid.message,
+        }
+    }
+
+    pub const fn signature(&self) -> SignatureBytes {
+        match self {
+            Self::Gloas(bid) => bid.signature,
+            Self::Heze(bid) => bid.signature,
+        }
+    }
+
+    pub fn into_gloas(self) -> Option<GloasSignedExecutionPayloadBid<P>> {
+        match self {
+            Self::Gloas(bid) => Some(bid),
+            Self::Heze(_) => None,
+        }
+    }
+
+    pub fn into_heze(self) -> Option<HezeSignedExecutionPayloadBid<P>> {
+        match self {
+            Self::Gloas(_) => None,
+            Self::Heze(bid) => Some(bid),
+        }
+    }
 }
 
 impl<P: Preset> ExecutionPayloadHeader<P> {

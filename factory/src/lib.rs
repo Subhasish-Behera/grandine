@@ -34,7 +34,10 @@ use types::{
         BeaconBlock as CapellaBeaconBlock, BeaconBlockBody as CapellaBeaconBlockBody,
         ExecutionPayload as CapellaExecutionPayload,
     },
-    combined::{Attestation, BeaconBlock, BeaconState, ExecutionPayload, SignedBeaconBlock},
+    combined::{
+        Attestation, BeaconBlock, BeaconState, ExecutionPayload, SignedBeaconBlock,
+        SignedExecutionPayloadBid,
+    },
     config::Config,
     deneb::containers::{
         BeaconBlock as DenebBeaconBlock, BeaconBlockBody as DenebBeaconBlockBody,
@@ -49,8 +52,14 @@ use types::{
         consts::BUILDER_INDEX_SELF_BUILD,
         containers::{
             BeaconBlock as GloasBeaconBlock, BeaconBlockBody as GloasBeaconBlockBody,
-            ExecutionPayloadBid, ExecutionRequests, SignedExecutionPayloadBid,
+            ExecutionPayloadBid as GloasExecutionPayloadBid, ExecutionRequests,
+            SignedExecutionPayloadBid as GloasSignedExecutionPayloadBid,
         },
+    },
+    heze::containers::{
+        BeaconBlock as HezeBeaconBlock, BeaconBlockBody as HezeBeaconBlockBody,
+        ExecutionPayloadBid as HezeExecutionPayloadBid,
+        SignedExecutionPayloadBid as HezeSignedExecutionPayloadBid,
     },
     nonstandard::{AttestationEpoch, Phase, RelativeEpoch},
     phase0::{
@@ -374,25 +383,58 @@ pub fn singular_attestation<P: Preset>(
 }
 
 fn signed_execution_payload_bid<P: Preset>(
+    phase: Phase,
     state: &(impl PostGloasBeaconState<P> + ?Sized),
 ) -> SignedExecutionPayloadBid<P> {
     let prev_randao = accessors::get_randao_mix(state, accessors::get_current_epoch(state));
 
-    SignedExecutionPayloadBid {
-        message: ExecutionPayloadBid {
-            parent_block_hash: state.latest_block_hash(),
-            parent_block_root: state.latest_block_header().hash_tree_root(),
-            block_hash: ExecutionBlockHash::zero(),
-            prev_randao,
-            builder_index: BUILDER_INDEX_SELF_BUILD,
-            slot: state.slot(),
-            value: 0,
-            execution_payment: 0,
-            blob_kzg_commitments: ProgressiveList::default(),
-            execution_requests_root: ExecutionRequests::<P>::default().hash_tree_root(),
-            ..Default::default()
-        },
-        signature: SignatureBytes::empty(),
+    let parent_block_hash = state.latest_block_hash();
+    let parent_block_root = state.latest_block_header().hash_tree_root();
+    let slot = state.slot();
+    let execution_requests_root = ExecutionRequests::<P>::default().hash_tree_root();
+
+    match phase {
+        Phase::Gloas => GloasSignedExecutionPayloadBid {
+            message: GloasExecutionPayloadBid {
+                parent_block_hash,
+                parent_block_root,
+                block_hash: ExecutionBlockHash::zero(),
+                prev_randao,
+                builder_index: BUILDER_INDEX_SELF_BUILD,
+                slot,
+                value: 0,
+                execution_payment: 0,
+                blob_kzg_commitments: ProgressiveList::default(),
+                execution_requests_root,
+                ..Default::default()
+            },
+            signature: SignatureBytes::empty(),
+        }
+        .into(),
+        Phase::Heze => HezeSignedExecutionPayloadBid {
+            message: HezeExecutionPayloadBid {
+                parent_block_hash,
+                parent_block_root,
+                block_hash: ExecutionBlockHash::zero(),
+                prev_randao,
+                builder_index: BUILDER_INDEX_SELF_BUILD,
+                slot,
+                value: 0,
+                execution_payment: 0,
+                blob_kzg_commitments: ProgressiveList::default(),
+                execution_requests_root,
+                ..Default::default()
+            },
+            signature: SignatureBytes::empty(),
+        }
+        .into(),
+        Phase::Phase0
+        | Phase::Altair
+        | Phase::Bellatrix
+        | Phase::Capella
+        | Phase::Deneb
+        | Phase::Electra
+        | Phase::Fulu => unreachable!("post-Gloas state has a pre-Gloas phase"),
     }
 }
 
@@ -439,7 +481,7 @@ pub fn execution_payload<P: Preset>(
             ..CapellaExecutionPayload::default()
         }
         .into(),
-        Phase::Deneb | Phase::Electra | Phase::Fulu | Phase::Gloas => DenebExecutionPayload {
+        Phase::Deneb | Phase::Electra | Phase::Fulu | Phase::Gloas | Phase::Heze => DenebExecutionPayload {
             parent_hash,
             prev_randao,
             timestamp,
@@ -519,7 +561,7 @@ fn block<P: Preset>(
 
     let signed_execution_payload_bid = advanced_state
         .post_gloas()
-        .map(signed_execution_payload_bid);
+        .map(|state| signed_execution_payload_bid(advanced_state.phase(), state));
 
     let without_state_root = match advanced_state.phase() {
         Phase::Phase0 => BeaconBlock::from(Hc::new(Phase0BeaconBlock {
@@ -639,6 +681,22 @@ fn block<P: Preset>(
                 deposits: deposits.into(),
                 sync_aggregate,
                 ..GloasBeaconBlockBody::default()
+            },
+        }))
+        .with_signed_execution_payload_bid(signed_execution_payload_bid),
+        Phase::Heze => BeaconBlock::from(Hc::new(HezeBeaconBlock {
+            slot,
+            proposer_index,
+            parent_root,
+            state_root: H256::zero(),
+            body: HezeBeaconBlockBody {
+                randao_reveal,
+                eth1_data,
+                graffiti,
+                attestations: gloas_attestations.try_into()?,
+                deposits: deposits.into(),
+                sync_aggregate,
+                ..HezeBeaconBlockBody::default()
             },
         }))
         .with_signed_execution_payload_bid(signed_execution_payload_bid),

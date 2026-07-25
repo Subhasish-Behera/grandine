@@ -37,7 +37,7 @@ use types::{
     },
     preset::{
         AltairPreset, BellatrixPreset, CapellaPreset, DenebPreset, ElectraPreset, FuluPreset,
-        GloasPreset, Phase0Preset, Preset,
+        GloasPreset, HezePreset, Phase0Preset, Preset,
     },
 };
 
@@ -61,6 +61,8 @@ pub struct FullConfig {
     fulu_preset: FuluPreset,
     #[serde(flatten)]
     gloas_preset: GloasPreset,
+    #[serde(flatten)]
+    heze_preset: HezePreset,
     #[serde(flatten)]
     config: Arc<Config>,
 
@@ -213,6 +215,7 @@ impl FullConfig {
             electra_preset: ElectraPreset::new::<P>(),
             fulu_preset: FuluPreset::new::<P>(),
             gloas_preset: GloasPreset::new::<P>(),
+            heze_preset: HezePreset::new::<P>(),
 
             // Phase 0 miscellaneous beacon chain constants
             base_rewards_per_epoch: BASE_REWARDS_PER_EPOCH,

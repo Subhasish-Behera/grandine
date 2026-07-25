@@ -20,11 +20,14 @@ use thiserror::Error;
 use tracing::instrument;
 use typenum::Unsigned as _;
 use types::{
-    combined::{BeaconState, DataColumnSidecar, SignedAggregateAndProof, SignedBeaconBlock},
+    combined::{
+        BeaconState, DataColumnSidecar, SignedAggregateAndProof, SignedBeaconBlock,
+        SignedExecutionPayloadBid,
+    },
     deneb::containers::{BlobIdentifier, BlobSidecar},
     fulu::{containers::DataColumnIdentifier, primitives::ColumnIndex},
     gloas::{
-        containers::{SignedExecutionPayloadBid, SignedExecutionPayloadEnvelope},
+        containers::SignedExecutionPayloadEnvelope,
         primitives::{BuilderIndex, PayloadStatus as ExecutionPayloadStatus},
     },
     nonstandard::{PayloadStatus, Phase, RelativeEpoch, WithStatus},
