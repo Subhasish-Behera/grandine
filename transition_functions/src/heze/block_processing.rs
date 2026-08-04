@@ -1323,6 +1323,12 @@ mod spec_tests {
     };
 
     use super::*;
+    use crate::{
+        fulu,
+        gloas::execution_payload_processing::{
+            process_builder_deposit_request, process_builder_exit_request,
+        },
+    };
 
     macro_rules! processing_tests {
         (
@@ -1378,6 +1384,46 @@ mod spec_tests {
                 }
             }
         };
+    }
+
+    processing_tests! {
+        process_deposit_request,
+        |_, _, state, deposit_request, _| fulu::process_deposit_request(state, deposit_request),
+        "deposit_request",
+        "consensus-spec-tests/tests/mainnet/heze/operations/deposit_request/*/*",
+        "consensus-spec-tests/tests/minimal/heze/operations/deposit_request/*/*",
+    }
+
+    processing_tests! {
+        process_withdrawal_request,
+        |config, _, state, withdrawal_request, _| electra::process_withdrawal_request(config, state, withdrawal_request),
+        "withdrawal_request",
+        "consensus-spec-tests/tests/mainnet/heze/operations/withdrawal_request/*/*",
+        "consensus-spec-tests/tests/minimal/heze/operations/withdrawal_request/*/*",
+    }
+
+    processing_tests! {
+        process_consolidation_request,
+        |config, _, state, consolidation_request, _| electra::process_consolidation_request(config, state, consolidation_request),
+        "consolidation_request",
+        "consensus-spec-tests/tests/mainnet/heze/operations/consolidation_request/*/*",
+        "consensus-spec-tests/tests/minimal/heze/operations/consolidation_request/*/*",
+    }
+
+    processing_tests! {
+        process_builder_deposit_request,
+        |config, pubkey_cache, state, builder_deposit_request, _| process_builder_deposit_request(config, pubkey_cache, state, builder_deposit_request),
+        "builder_deposit_request",
+        "consensus-spec-tests/tests/mainnet/heze/operations/builder_deposit_request/*/*",
+        "consensus-spec-tests/tests/minimal/heze/operations/builder_deposit_request/*/*",
+    }
+
+    processing_tests! {
+        process_builder_exit_request,
+        |config, _, state, builder_exit_request, _| process_builder_exit_request(config, state, builder_exit_request),
+        "builder_exit_request",
+        "consensus-spec-tests/tests/mainnet/heze/operations/builder_exit_request/*/*",
+        "consensus-spec-tests/tests/minimal/heze/operations/builder_exit_request/*/*",
     }
 
     // Test files for `process_block_header` are named `block.*` and contain `BeaconBlock`s.
