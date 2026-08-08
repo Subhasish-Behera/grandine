@@ -731,6 +731,7 @@ mod tests {
             Phase::Electra,
             Phase::Fulu,
             Phase::Gloas,
+            Phase::Heze,
         ];
 
         assert_eq!(expected_order.len(), Phase::CARDINALITY);
