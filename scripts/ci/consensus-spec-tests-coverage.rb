@@ -21,7 +21,7 @@ IGNORED_GLOBS = %w[
   tests/*/*/ssz_static/PartialDataColumnHeader/*/*/*.{ssz_snappy,yaml}
   tests/*/*/ssz_static/PartialDataColumnPartsMetadata/*/*/*.{ssz_snappy,yaml}
   tests/*/*/ssz_static/PartialDataColumnSidecar/*/*/*.{ssz_snappy,yaml}
-  tests/*/heze/{finality,fork_choice,sanity,transition}/**/*.{ssz_snappy,yaml}
+  tests/*/heze/{finality,fork_choice,sanity}/**/*.{ssz_snappy,yaml}
   tests/*/*/fast_confirmation/*/*/*/*.{ssz_snappy,yaml}
   tests/general/phase0/ssz_generic/compatible_unions/*/*/*.{ssz_snappy,yaml}
   tests/*/*/networking/*/pyspec_tests/*/*.{ssz_snappy,yaml}

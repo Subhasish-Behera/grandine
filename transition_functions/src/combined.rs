@@ -1212,6 +1212,8 @@ mod spec_tests {
         ["consensus-spec-tests/tests/minimal/fulu/transition/*/*/*"]      [fulu_minimal_transition]      [Minimal];
         ["consensus-spec-tests/tests/mainnet/gloas/transition/*/*/*"]     [gloas_mainnet_transition]      [Mainnet];
         ["consensus-spec-tests/tests/minimal/gloas/transition/*/*/*"]     [gloas_minimal_transition]      [Minimal];
+        ["consensus-spec-tests/tests/mainnet/heze/transition/*/*/*"]      [heze_mainnet_transition]       [Mainnet];
+        ["consensus-spec-tests/tests/minimal/heze/transition/*/*/*"]      [heze_minimal_transition]       [Minimal];
     )]
     #[test_resources(glob)]
     fn function_name(case: Case) {
