@@ -12,6 +12,7 @@ pub const ENGINE_FORKCHOICE_UPDATED_V1: &str = "engine_forkchoiceUpdatedV1";
 pub const ENGINE_FORKCHOICE_UPDATED_V2: &str = "engine_forkchoiceUpdatedV2";
 pub const ENGINE_FORKCHOICE_UPDATED_V3: &str = "engine_forkchoiceUpdatedV3";
 pub const ENGINE_FORKCHOICE_UPDATED_V4: &str = "engine_forkchoiceUpdatedV4";
+pub const ENGINE_FORKCHOICE_UPDATED_V5: &str = "engine_forkchoiceUpdatedV5";
 pub const ENGINE_GET_CLIENT_VERSION_V1: &str = "engine_getClientVersionV1";
 pub const ENGINE_GET_EL_BLOBS_V1: &str = "engine_getBlobsV1";
 pub const ENGINE_GET_EL_BLOBS_V2: &str = "engine_getBlobsV2";
@@ -26,12 +27,14 @@ pub const ENGINE_NEW_PAYLOAD_V2: &str = "engine_newPayloadV2";
 pub const ENGINE_NEW_PAYLOAD_V3: &str = "engine_newPayloadV3";
 pub const ENGINE_NEW_PAYLOAD_V4: &str = "engine_newPayloadV4";
 pub const ENGINE_NEW_PAYLOAD_V5: &str = "engine_newPayloadV5";
+pub const ENGINE_NEW_PAYLOAD_V6: &str = "engine_newPayloadV6";
 
 pub const CAPABILITIES: &[&str] = &[
     ENGINE_FORKCHOICE_UPDATED_V1,
     ENGINE_FORKCHOICE_UPDATED_V2,
     ENGINE_FORKCHOICE_UPDATED_V3,
     ENGINE_FORKCHOICE_UPDATED_V4,
+    ENGINE_FORKCHOICE_UPDATED_V5,
     ENGINE_GET_CLIENT_VERSION_V1,
     ENGINE_GET_EL_BLOBS_V1,
     ENGINE_GET_EL_BLOBS_V2,
@@ -46,4 +49,5 @@ pub const CAPABILITIES: &[&str] = &[
     ENGINE_NEW_PAYLOAD_V3,
     ENGINE_NEW_PAYLOAD_V4,
     ENGINE_NEW_PAYLOAD_V5,
+    ENGINE_NEW_PAYLOAD_V6,
 ];

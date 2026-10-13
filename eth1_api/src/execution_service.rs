@@ -5,7 +5,7 @@ use dedicated_executor::DedicatedExecutor;
 use derive_more::Constructor;
 use either::Either;
 use execution_engine::{
-    ExecutionServiceMessage, ForkChoiceUpdatedResponse, PayloadAttributes, PayloadStatusV1,
+    ExecutionServiceMessage, ForkChoiceUpdatedResponse, PayloadAttributes, PayloadStatus,
 };
 use fork_choice_control::Wait;
 use futures::{
@@ -200,7 +200,7 @@ impl<P: Preset, W: Wait> ExecutionService<P, W> {
         beacon_block_root: H256,
         payload: ExecutionPayload<P>,
         params: Option<ExecutionPayloadParams<P>>,
-    ) -> Result<PayloadStatusV1> {
+    ) -> Result<PayloadStatus> {
         let block_number = payload.block_number();
         let block_hash = payload.block_hash();
         let response = self.api.new_payload(payload, params).await?;

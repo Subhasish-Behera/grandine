@@ -110,6 +110,7 @@ use crate::{
             SignedBeaconBlock as GloasSignedBeaconBlock,
             SignedExecutionPayloadBid as GloasSignedExecutionPayloadBid,
         },
+        primitives::Transaction as GloasTransaction,
     },
     heze::{
         beacon_state::BeaconState as HezeBeaconState,
@@ -1805,6 +1806,13 @@ pub enum ExecutionPayloadParams<P: Preset> {
         versioned_hashes: Vec<VersionedHash>,
         parent_beacon_block_root: H256,
         execution_requests: GloasExecutionRequests<P>,
+    },
+    // See <https://github.com/ethereum/execution-apis/pull/609>.
+    Heze {
+        versioned_hashes: Vec<VersionedHash>,
+        parent_beacon_block_root: H256,
+        execution_requests: GloasExecutionRequests<P>,
+        inclusion_list_transactions: Vec<GloasTransaction<P>>,
     },
 }
 

@@ -3,7 +3,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use execution_engine::{
     PayloadAttributes, PayloadAttributesV1, PayloadAttributesV2, PayloadAttributesV3,
-    PayloadAttributesV4, WithdrawalV1,
+    PayloadAttributesV4, PayloadAttributesV5, WithdrawalV1,
 };
 use fork_choice_store::{ChainLink, PayloadPresence, Storage, Store};
 use helper_functions::misc;
@@ -1144,6 +1144,7 @@ pub enum CombinedPayloadAttributesEventData {
     Electra(PayloadAttributesEventDataV3),
     Fulu(PayloadAttributesEventDataV3),
     Gloas(PayloadAttributesEventDataV4),
+    Heze(PayloadAttributesEventDataV4),
 }
 
 #[derive(Clone, Copy, Debug, Serialize)]
@@ -1294,6 +1295,31 @@ impl<P: Preset> From<PayloadAttributesV4<P>> for PayloadAttributesEventDataV4 {
     }
 }
 
+impl<P: Preset> From<PayloadAttributesV5<P>> for PayloadAttributesEventDataV4 {
+    fn from(payload_attributes: PayloadAttributesV5<P>) -> Self {
+        let PayloadAttributesV5 {
+            timestamp,
+            prev_randao,
+            suggested_fee_recipient,
+            withdrawals,
+            parent_beacon_block_root,
+            slot_number,
+            target_gas_limit,
+            inclusion_list_transactions: _,
+        } = payload_attributes;
+
+        Self {
+            timestamp,
+            prev_randao,
+            suggested_fee_recipient,
+            withdrawals: withdrawals.into_iter().map(Into::into).collect::<Vec<_>>(),
+            parent_beacon_block_root,
+            slot_number,
+            target_gas_limit,
+        }
+    }
+}
+
 impl<P: Preset> From<PayloadAttributes<P>> for CombinedPayloadAttributesEventData {
     fn from(payload_attributes: PayloadAttributes<P>) -> Self {
         match payload_attributes {
@@ -1314,6 +1340,9 @@ impl<P: Preset> From<PayloadAttributes<P>> for CombinedPayloadAttributesEventDat
             }
             PayloadAttributes::Gloas(payload_attributes_v4) => {
                 Self::Gloas(payload_attributes_v4.into())
+            }
+            PayloadAttributes::Heze(payload_attributes_v5) => {
+                Self::Heze(payload_attributes_v5.into())
             }
         }
     }

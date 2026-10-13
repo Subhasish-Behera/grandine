@@ -30,7 +30,7 @@ use clock::{Tick, TickKind};
 use eth2_libp2p::GossipId;
 use execution_engine::{
     EngineGetBlobsParams, EngineGetBlobsV1Params, EngineGetBlobsV2Params, ExecutionEngine,
-    PayloadStatusV1,
+    PayloadStatus as EnginePayloadStatus,
 };
 use fork_choice_store::{
     AggregateAndProofAction, ApplyBlockChanges, ApplyTickChanges, AttestationAction,
@@ -129,7 +129,7 @@ pub struct Mutator<P: Preset, E, W, TS, PS, LS, NS, SS, VS> {
     // `Mutator.delayed_until_payload` is needed mainly to run optimistic sync test cases, but the
     // problem it solves can occur in normal operation as well. The execution layer may finish
     // validating the payload before the fork choice store processes the block containing it.
-    delayed_until_payload: HashMap<ExecutionBlockHash, Vec<(PayloadStatusV1, Slot)>>,
+    delayed_until_payload: HashMap<ExecutionBlockHash, Vec<(EnginePayloadStatus, Slot)>>,
     delayed_until_state: HashMap<(H256, Slot), Delayed<P>>,
     // The specification doesn't explicitly state it, but `Store.checkpoint_states` is effectively a
     // cache, as its contents can be recomputed at any time using data from other fields.
@@ -532,11 +532,36 @@ where
 
                         self.execution_payload_envelope_by_root(head.block_root)?
                             .map(|envelope| {
-                                params = Some(ExecutionPayloadParams::Gloas {
-                                    versioned_hashes,
-                                    parent_beacon_block_root: head.block.message().parent_root(),
-                                    execution_requests: envelope.message.execution_requests.clone(),
-                                });
+                                let parent_beacon_block_root = head.block.message().parent_root();
+                                let execution_requests =
+                                    envelope.message.execution_requests.clone();
+
+                                params = if head.block.phase() >= Phase::Heze {
+                                    // TODO(heze): pass the inclusion list transactions the envelope
+                                    // was validated with instead of `Vec::new()`.
+                                    // `engine_newPayloadV6` checks only the list in this call, so
+                                    // an empty list makes a `VALID` payload report
+                                    // `inclusionListSatisfied: true`.
+                                    //
+                                    // The EL keeps the list only for an `ACCEPTED` payload, and
+                                    // only `engine_forkchoiceUpdatedV5` uses the kept list; nothing
+                                    // is kept for `SYNCING`. Resend the exact list from envelope
+                                    // validation (keep it per block root): re-reading the store can
+                                    // give a different set if more lists were validated since.
+                                    // See <https://github.com/ethereum/execution-apis/blob/bf20b4083284e677db19e7f3871bd669b88354a6/src/engine/bogota.md#engine_newpayloadv6>.
+                                    Some(ExecutionPayloadParams::Heze {
+                                        versioned_hashes,
+                                        parent_beacon_block_root,
+                                        execution_requests,
+                                        inclusion_list_transactions: Vec::new(),
+                                    })
+                                } else {
+                                    Some(ExecutionPayloadParams::Gloas {
+                                        versioned_hashes,
+                                        parent_beacon_block_root,
+                                        execution_requests,
+                                    })
+                                };
 
                                 envelope.message.payload.clone().into()
                             })
@@ -3022,7 +3047,7 @@ where
     fn handle_notified_forkchoice_update_result(
         &mut self,
         wait_group: &W,
-        payload_status: &PayloadStatusV1,
+        payload_status: &EnginePayloadStatus,
     ) {
         let Some(latest_valid_hash) = payload_status.latest_valid_hash else {
             return;
@@ -3043,7 +3068,7 @@ where
         wait_group: &W,
         beacon_block_root: H256,
         execution_block_hash: ExecutionBlockHash,
-        payload_status: PayloadStatusV1,
+        payload_status: EnginePayloadStatus,
     ) {
         if !self.store.contains_block(beacon_block_root) {
             self.delay_payload_status_until_block(beacon_block_root, payload_status);
@@ -4236,7 +4261,7 @@ where
     fn delay_payload_status_until_block(
         &mut self,
         beacon_block_root: H256,
-        payload_status: PayloadStatusV1,
+        payload_status: EnginePayloadStatus,
     ) {
         debug_with_peers!(
             "payload status handling delayed until block \
