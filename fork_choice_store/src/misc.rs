@@ -1298,6 +1298,7 @@ pub enum InclusionListAction<P: Preset> {
 #[derive(Debug)]
 pub enum InclusionListOrigin {
     Gossip(GossipId),
+    Own,
 }
 
 impl InclusionListOrigin {
@@ -1305,6 +1306,7 @@ impl InclusionListOrigin {
     pub fn gossip_id(self) -> Option<GossipId> {
         match self {
             Self::Gossip(gossip_id) => Some(gossip_id),
+            Self::Own => None,
         }
     }
 
@@ -1312,6 +1314,7 @@ impl InclusionListOrigin {
     pub const fn peer_id(&self) -> Option<PeerId> {
         match self {
             Self::Gossip(gossip_id) => Some(gossip_id.source),
+            Self::Own => None,
         }
     }
 
@@ -1319,6 +1322,7 @@ impl InclusionListOrigin {
     pub const fn verify_signatures(&self) -> bool {
         match self {
             Self::Gossip(_) => true,
+            Self::Own => false,
         }
     }
 

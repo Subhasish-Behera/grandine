@@ -27,7 +27,7 @@ use types::{
         BeaconBlock as GloasBeaconBlock, ExecutionPayloadEnvelope, PayloadAttestationData,
         ProposerPreferences,
     },
-    heze::containers::BeaconBlock as HezeBeaconBlock,
+    heze::containers::{BeaconBlock as HezeBeaconBlock, InclusionList},
     phase0::{
         containers::{
             AttestationData, BeaconBlock as Phase0BeaconBlock, BeaconBlockHeader, Fork,
@@ -75,6 +75,7 @@ pub enum SigningMessage<'block, P: Preset> {
     Attestation(AttestationData),
     BeaconBlock(SigningBlock<'block, P>),
     ExecutionPayloadEnvelope(&'block ExecutionPayloadEnvelope<P>),
+    InclusionList(InclusionList<P>),
     RandaoReveal {
         #[serde(with = "serde_utils::string_or_native")]
         epoch: Epoch,

@@ -30,6 +30,7 @@ impl<'block, P: Preset> SigningRequest<'block, P> {
             SigningMessage::Attestation(_) => MessageType::Attestation,
             SigningMessage::BeaconBlock { .. } => MessageType::BlockV2,
             SigningMessage::ExecutionPayloadEnvelope(_) => MessageType::ExecutionPayloadEnvelope,
+            SigningMessage::InclusionList(_) => MessageType::InclusionList,
             SigningMessage::RandaoReveal { .. } => MessageType::RandaoReveal,
             SigningMessage::PayloadAttestation(_) => MessageType::PayloadAttestation,
             SigningMessage::SyncCommitteeMessage { .. } => MessageType::SyncCommitteeMessage,
@@ -66,6 +67,7 @@ enum MessageType {
     Attestation,
     BlockV2,
     ExecutionPayloadEnvelope,
+    InclusionList,
     RandaoReveal,
     PayloadAttestation,
     SyncCommitteeMessage,
@@ -83,6 +85,8 @@ pub struct SigningResponse {
 
 #[cfg(test)]
 mod tests {
+    use types::{heze::containers::InclusionList, preset::Mainnet};
+
     use super::*;
 
     // This exists mainly to ensure `MessageType::BlockV2` is renamed correctly.
@@ -96,6 +100,7 @@ mod tests {
                 "ATTESTATION",
                 "BLOCK_V2",
                 "EXECUTION_PAYLOAD_ENVELOPE",
+                "INCLUSION_LIST",
                 "RANDAO_REVEAL",
                 "PAYLOAD_ATTESTATION",
                 "SYNC_COMMITTEE_MESSAGE",
@@ -106,5 +111,18 @@ mod tests {
                 "PROPOSER_PREFERENCES",
             ],
         );
+    }
+
+    #[test]
+    fn inclusion_list_request_is_serialized_correctly() {
+        let request = SigningRequest::new(
+            SigningMessage::InclusionList(InclusionList::<Mainnet>::default()),
+            H256::zero(),
+            None,
+        );
+        let request = serde_json::to_value(request).expect("signing request should serialize");
+
+        assert_eq!(request["type"], "INCLUSION_LIST");
+        assert!(request.get("inclusion_list").is_some());
     }
 }

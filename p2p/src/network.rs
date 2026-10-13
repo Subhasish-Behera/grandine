@@ -67,6 +67,7 @@ use types::{
     gloas::containers::{
         PayloadAttestationMessage, SignedExecutionPayloadEnvelope, SignedProposerPreferences,
     },
+    heze::containers::SignedInclusionList,
     nonstandard::{CustodyMode, Phase, RelativeEpoch, StorageMode, WithStatus},
     phase0::{
         consts::{FAR_FUTURE_EPOCH, GENESIS_EPOCH},
@@ -615,6 +616,9 @@ impl<P: Preset, W: Wait> Network<P, W> {
                         ValidatorToP2p::PublishProposerPreferences(signed_preferences) => {
                             self.publish_proposer_preferences(signed_preferences);
                         }
+                        ValidatorToP2p::PublishInclusionList(signed_inclusion_list) => {
+                            self.publish_inclusion_list(signed_inclusion_list);
+                        }
                         ValidatorToP2p::UpdateDataColumnSubnets(custody_group_count) => {
                             self.update_data_column_subnets(custody_group_count);
                         }
@@ -1004,6 +1008,16 @@ impl<P: Preset, W: Wait> Network<P, W> {
         } else {
             self.publish(message);
         }
+    }
+
+    fn publish_inclusion_list(&self, signed_inclusion_list: Arc<SignedInclusionList<P>>) {
+        trace_with_peers!(
+            "publishing inclusion list: (validator_index: {}, slot: {})",
+            signed_inclusion_list.message.validator_index,
+            signed_inclusion_list.message.slot,
+        );
+
+        self.publish(PubsubMessage::InclusionList(signed_inclusion_list));
     }
 
     fn publish_aggregate_and_proof(&self, aggregate_and_proof: Arc<SignedAggregateAndProof<P>>) {

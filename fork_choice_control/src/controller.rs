@@ -291,6 +291,10 @@ where
         .send(&self.mutator_tx)
     }
 
+    pub fn on_own_inclusion_list(&self, signed_inclusion_list: Arc<SignedInclusionList<P>>) {
+        self.spawn_inclusion_list_task(signed_inclusion_list, InclusionListOrigin::Own);
+    }
+
     #[instrument(
         parent = None,
         skip_all

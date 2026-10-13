@@ -58,7 +58,7 @@ use rayon::iter::{IntoParallelIterator as _, ParallelIterator as _};
 use signer::{Signer, SigningMessage, SigningTriple, Snapshot};
 use slasher::{SlasherToValidator, ValidatorToSlasher};
 use slashing_protection::SlashingProtector;
-use ssz::{BitList, ContiguousList, ReadError};
+use ssz::{BitList, ContiguousList, ProgressiveList, ReadError};
 use static_assertions::assert_not_impl_any;
 use std_ext::ArcExt as _;
 use tap::{Conv as _, Pipe as _};
@@ -89,6 +89,7 @@ use types::{
             SignedExecutionPayloadEnvelope, SignedProposerPreferences,
         },
     },
+    heze::containers::{InclusionList, SignedInclusionList},
     nonstandard::{
         CustodyMode, KzgProofs, OwnAttestation, Phase, SyncCommitteeEpoch, WithBlobsAndMev,
         WithStatus,
@@ -111,6 +112,7 @@ use crate::{
     messages::{ApiToValidator, InternalMessage},
     misc::{Aggregator, SignedBeaconBlockOrBlockRoot, SyncCommitteeMember},
     own_beacon_committee_members::{BeaconCommitteeMember, OwnBeaconCommitteeMembers},
+    own_il_committee_members::OwnILCommitteeMembers,
     own_ptc_members::{OwnPTCMembers, PTCMember},
     own_sync_committee_subscriptions::OwnSyncCommitteeSubscriptions,
     slot_head::SlotHead,
@@ -168,6 +170,7 @@ pub struct Validator<P: Preset, W: Wait> {
     own_singular_attestations: OnceCell<Vec<OwnAttestation<P>>>,
     own_sync_committee_members: OnceCell<Vec<SyncCommitteeMember>>,
     own_sync_committee_subscriptions: OwnSyncCommitteeSubscriptions<P>,
+    own_il_committee_members: Arc<OwnILCommitteeMembers>,
     own_ptc_members: Arc<OwnPTCMembers>,
     own_payload_attestations: OnceCell<Vec<PayloadAttestationMessage>>,
     published_own_sync_committee_messages_for: Option<SlotHead<P>>,
@@ -239,6 +242,7 @@ impl<P: Preset, W: Wait + Sync> Validator<P, W> {
             signer.clone_arc(),
         ));
 
+        let own_il_committee_members = Arc::new(OwnILCommitteeMembers::new(signer.clone_arc()));
         let own_ptc_members = Arc::new(OwnPTCMembers::new(signer.clone_arc()));
 
         Self {
@@ -257,6 +261,7 @@ impl<P: Preset, W: Wait + Sync> Validator<P, W> {
             own_singular_attestations: OnceCell::new(),
             own_sync_committee_members: OnceCell::new(),
             own_sync_committee_subscriptions: OwnSyncCommitteeSubscriptions::default(),
+            own_il_committee_members,
             own_ptc_members,
             own_payload_attestations: OnceCell::new(),
             published_own_sync_committee_messages_for: None,
@@ -853,6 +858,12 @@ impl<P: Preset, W: Wait + Sync> Validator<P, W> {
                         .or(slot_head.as_ref()),
                 )
                 .await;
+            }
+            TickKind::AggregateSecond => {
+                // Own inclusion lists. `AggregateSecond` (6.75s) is the first tick after the slot's
+                // payload is due (6s) and leaves ~1.25s before the inclusion list deadline
+                // (`INCLUSION_LIST_DUE_BPS`, ~8s) for the EL call, signing and propagation.
+                self.produce_and_publish_inclusion_lists(&slot_head).await;
             }
             TickKind::PayloadAttest => {
                 // TODO(Gloas): review and fix
@@ -1961,6 +1972,162 @@ impl<P: Preset, W: Wait + Sync> Validator<P, W> {
         Ok(())
     }
 
+    /// <https://github.com/ethereum/consensus-specs/blob/v1.7.0-beta.1/specs/heze/validator.md#inclusion-list-proposal>
+    #[expect(clippy::too_many_lines)]
+    #[instrument(level = "debug", skip_all, fields(slot = slot_head.slot()))]
+    async fn produce_and_publish_inclusion_lists(&self, slot_head: &SlotHead<P>) {
+        if slot_head.beacon_state.phase() < Phase::Heze {
+            return;
+        }
+
+        // TODO(heze): Wait for the slot's payload to become the EL head (`forkchoiceUpdated`)
+        // before asking the EL; without it the EL may return transactions that payload includes.
+        let slot = slot_head.slot();
+        let epoch = misc::compute_epoch_at_slot::<P>(slot);
+        let Some(dependent_root) = self
+            .controller
+            .shuffling_dependent_root(slot_head.beacon_block_root, epoch)
+        else {
+            warn_with_peers!(
+                "failed to compute shuffling dependent root for inclusion-list duty in slot {slot}"
+            );
+            return;
+        };
+
+        let Some(own_members) = self
+            .own_il_committee_members
+            .get_or_init_at_slot(&slot_head.beacon_state, dependent_root, slot)
+            .await
+        else {
+            return;
+        };
+
+        if own_members.is_empty() {
+            return;
+        }
+
+        let block_producer = self.block_producer.clone_arc();
+        let chain_config = self.chain_config.clone_arc();
+        let controller = self.controller.clone_arc();
+        let p2p_tx = self.p2p_tx.clone();
+        let signer = self.signer.clone_arc();
+        let state = slot_head.beacon_state.clone_arc();
+
+        tokio::spawn(async move {
+            let transactions = match block_producer.get_inclusion_list().await {
+                Ok(transactions) => transactions,
+                Err(error) => {
+                    warn_with_peers!(
+                        "failed to fetch inclusion-list transactions for slot {slot}: {error:?}"
+                    );
+                    return;
+                }
+            };
+
+            if transactions.is_empty() {
+                debug_with_peers!(
+                    "not producing inclusion lists in slot {slot}: execution client returned no transactions"
+                );
+                return;
+            }
+
+            if transactions
+                .iter()
+                .any(|transaction| transaction.as_bytes().is_empty())
+            {
+                warn_with_peers!(
+                    "not producing inclusion lists in slot {slot}: execution client returned an empty transaction"
+                );
+                return;
+            }
+
+            let transactions_size = transactions
+                .iter()
+                .map(|transaction| transaction.as_bytes().len())
+                .sum::<usize>();
+
+            let maximum = chain_config.max_transactions_bytes_per_inclusion_list;
+
+            if transactions_size > maximum {
+                warn_with_peers!(
+                    "not producing inclusion lists in slot {slot}: transaction bytes {transactions_size} exceed maximum {maximum}"
+                );
+                return;
+            }
+
+            let transactions = match ProgressiveList::try_from_iter(transactions) {
+                Ok(transactions) => transactions,
+                Err(error) => {
+                    warn_with_peers!(
+                        "failed to construct inclusion-list transactions for slot {slot}: {error:?}"
+                    );
+                    return;
+                }
+            };
+
+            let inclusion_lists = own_members
+                .iter()
+                .copied()
+                .map(|member| {
+                    (
+                        member.public_key,
+                        InclusionList {
+                            slot,
+                            validator_index: member.validator_index,
+                            dependent_root,
+                            transactions: transactions.clone(),
+                        },
+                    )
+                })
+                .collect_vec();
+
+            let triples = inclusion_lists
+                .iter()
+                .map(|(public_key, inclusion_list)| SigningTriple {
+                    message: SigningMessage::InclusionList(inclusion_list.clone()),
+                    signing_root: inclusion_list.signing_root(&chain_config, state.as_ref()),
+                    public_key: *public_key,
+                })
+                .collect_vec();
+
+            let signer_snapshot = signer.load();
+            let signatures = match signer_snapshot
+                .sign_triples_without_slashing_protection(triples, Some(state.as_ref().into()))
+                .await
+            {
+                Ok(signatures) => signatures,
+                Err(error) => {
+                    warn_with_peers!("failed to sign inclusion lists for slot {slot}: {error:?}");
+                    return;
+                }
+            };
+
+            if controller.slot() != slot {
+                debug_with_peers!(
+                    "not publishing inclusion lists for stale slot {slot}; current slot is {}",
+                    controller.slot(),
+                );
+                return;
+            }
+
+            for ((_, inclusion_list), signature) in inclusion_lists.into_iter().zip(signatures) {
+                debug_with_peers!(
+                    "broadcasting inclusion list for validator {} in slot {}",
+                    inclusion_list.validator_index,
+                    inclusion_list.slot,
+                );
+
+                let signed_inclusion_list = Arc::new(SignedInclusionList {
+                    message: inclusion_list,
+                    signature: signature.into(),
+                });
+
+                controller.on_own_inclusion_list(signed_inclusion_list.clone_arc());
+                ValidatorToP2p::PublishInclusionList(signed_inclusion_list).send(&p2p_tx);
+            }
+        });
+    }
+
     #[instrument(level = "debug", skip_all)]
     async fn attest_payload_early(&self, wait_group: &W, head: ChainLink<P>) {
         let Some(last_tick) = self.last_tick else {
@@ -2549,6 +2716,7 @@ impl<P: Preset, W: Wait + Sync> Validator<P, W> {
         let current_epoch = misc::compute_epoch_at_slot::<P>(current_slot);
         let own_members = self.own_beacon_committee_members.clone_arc();
         let own_ptc_members = self.own_ptc_members.clone_arc();
+        let own_il_committee_members = self.own_il_committee_members.clone_arc();
         let slashing_protector = self.slashing_protector.clone_arc();
 
         self.dedicated_executor_low_priority
@@ -2560,6 +2728,7 @@ impl<P: Preset, W: Wait + Sync> Validator<P, W> {
                 let up_to_slot = misc::compute_start_slot_at_epoch::<P>(current_epoch);
                 own_members.prune(up_to_slot).await;
                 own_ptc_members.prune(up_to_slot).await;
+                own_il_committee_members.prune(up_to_slot).await;
                 Ok::<_, AnyhowError>(())
             })
             .detach()
@@ -3017,6 +3186,13 @@ impl<P: Preset, W: Wait + Sync> Validator<P, W> {
                 &type_name,
                 "own_ptc_members",
                 self.own_ptc_members.len(),
+            );
+
+            metrics.set_collection_length(
+                module_path!(),
+                &type_name,
+                "own_il_committee_members",
+                self.own_il_committee_members.len(),
             );
 
             self.block_producer.track_collection_metrics().await;

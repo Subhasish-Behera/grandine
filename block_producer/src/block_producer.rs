@@ -88,6 +88,7 @@ use types::{
             ExecutionRequests as GloasExecutionRequests, PayloadAttestation,
             SignedExecutionPayloadBid as GloasSignedExecutionPayloadBid,
         },
+        primitives::Transaction,
     },
     heze::containers::{
         BeaconBlock as HezeBeaconBlock, BeaconBlockBody as HezeBeaconBlockBody,
@@ -192,6 +193,19 @@ impl<P: Preset, W: Wait> BlockProducer<P, W> {
             proposer_index,
             options,
         }
+    }
+
+    /// Fetch fresh inclusion-list transactions directly from the execution engine.
+    ///
+    /// TODO(heze): If production becomes payload-envelope-driven, wait for the corresponding
+    /// `engine_newPayload` and `engine_forkchoiceUpdated` calls before querying; envelope
+    /// acceptance currently only queues those calls, so an immediate query may still see the
+    /// previous execution head and return transactions the payload already includes.
+    pub async fn get_inclusion_list(&self) -> Result<Vec<Transaction<P>>> {
+        self.producer_context
+            .execution_engine
+            .get_inclusion_list()
+            .await
     }
 
     pub async fn add_new_attester_slashing(&self, attester_slashing: AttesterSlashing<P>) {

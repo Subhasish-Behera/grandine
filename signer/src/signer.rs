@@ -360,6 +360,7 @@ impl Snapshot {
                 SigningMessage::AggregationSlot { .. }
                 | SigningMessage::AggregateAndProof(_)
                 | SigningMessage::ExecutionPayloadEnvelope(_)
+                | SigningMessage::InclusionList(_)
                 | SigningMessage::RandaoReveal { .. }
                 | SigningMessage::SyncCommitteeMessage { .. }
                 | SigningMessage::SyncAggregatorSelectionData(_)
