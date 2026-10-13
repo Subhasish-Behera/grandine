@@ -67,7 +67,7 @@ use types::{
             Builder, BuilderExitRequest, CombinedPayloadAttestation, ExecutionRequests,
             SignedExecutionPayloadEnvelope, SignedProposerPreferences,
         },
-        primitives::{BuilderIndex, PayloadStatus as ExecutionPayloadStatus},
+        primitives::{BuilderIndex, PayloadStatus as ExecutionPayloadStatus, Transaction},
     },
     nonstandard::{
         BlobSidecarWithId, DataColumnSidecarWithId, PayloadStatus, Phase, StorageMode, WithStatus,
@@ -95,6 +95,7 @@ use crate::{
     data_column_cache::DataColumnCache,
     error::Error,
     execution_payload_envelope_cache::ExecutionPayloadEnvelopeCache,
+    inclusion_list_store::InclusionListStore,
     misc::{
         AggregateAndProofAction, AggregateAndProofOrigin, ApplyBlockChanges, ApplyTickChanges,
         AttestationAction, AttestationItem, AttestationOrigin, AttestationValidationError,
@@ -210,6 +211,7 @@ pub struct Store<P: Preset, S: Storage<P>> {
     payload_vote: HashMap<H256, BitVector<P::PtcSize>>,
     payload_timeliness_vote: HashMap<H256, BitVector<P::PtcSize>>,
     payload_data_availability_vote: HashMap<H256, BitVector<P::PtcSize>>,
+    payload_inclusion_list_satisfaction: HashMap<H256, bool>,
     // TODO(Grandine Team): Process current slot attestations incrementally to speed up
     //                      `Store::apply_tick`. Update the comment to match the new design.
     //
@@ -294,6 +296,7 @@ pub struct Store<P: Preset, S: Storage<P>> {
     storage: Arc<S>,
     data_column_cache: DataColumnCache<P>,
     execution_payload_envelope_cache: ExecutionPayloadEnvelopeCache<P>,
+    inclusion_list_store: InclusionListStore<P>,
     rejected_block_roots: HashSet<H256>,
     finished_initial_forward_sync: bool,
     finished_back_sync: bool,
@@ -392,6 +395,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
             payload_vote: HashMap::new(),
             payload_timeliness_vote: HashMap::new(),
             payload_data_availability_vote: HashMap::new(),
+            payload_inclusion_list_satisfaction: HashMap::new(),
             current_slot_attestations: vector![],
             execution_payload_locations: hashmap! {},
             aggregate_and_proof_supersets: Arc::new(AggregateAndProofSupersets::new()),
@@ -412,6 +416,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
             storage,
             data_column_cache: DataColumnCache::default(),
             execution_payload_envelope_cache: ExecutionPayloadEnvelopeCache::default(),
+            inclusion_list_store: InclusionListStore::new(),
             rejected_block_roots: HashSet::default(),
             finished_initial_forward_sync,
             finished_back_sync,
@@ -1068,6 +1073,14 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
             return false;
         }
 
+        if self
+            .chain_link(block_root)
+            .is_some_and(|chain_link| chain_link.block.phase() >= Phase::Heze)
+            && !self.is_payload_inclusion_list_satisfied(block_root)
+        {
+            return false;
+        }
+
         let proposer_root = self.proposer_boost_root;
 
         if proposer_root.is_zero()
@@ -1097,6 +1110,93 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
     // > ``on_execution_payload_envelope``.
     pub fn is_payload_verified(&self, block_root: H256) -> bool {
         self.payloads.contains(&block_root)
+    }
+
+    /// [`record_payload_inclusion_list_satisfaction`](https://github.com/ethereum/consensus-specs/blob/v1.7.0-beta.1/specs/heze/fork-choice.md#new-record_payload_inclusion_list_satisfaction)
+    ///
+    /// Records whether the payload for `block_root` satisfied the inclusion list constraints, as
+    /// reported by the execution engine. Only concrete verdicts returned for `VALID` payloads are
+    /// stored. They are never re-derived from inclusion lists, so pruning cannot change them.
+    pub fn record_payload_inclusion_list_satisfaction(
+        &mut self,
+        block_root: H256,
+        satisfied: bool,
+    ) {
+        if self
+            .payload_inclusion_list_satisfaction
+            .insert(block_root, satisfied)
+            != Some(satisfied)
+        {
+            // IL satisfaction participates in `should_extend_payload`, so changing it can change
+            // the fork-choice head even when the execution payload status itself did not change.
+            self.update_head_segment_id();
+        }
+    }
+
+    /// Spec <https://github.com/ethereum/consensus-specs/blob/v1.7.0-beta.1/specs/heze/fork-choice.md#new-is_payload_inclusion_list_satisfied>.
+    ///
+    /// Optimistic payloads count as satisfied and invalid ones do not. A valid payload without a
+    /// recorded verdict keeps its optimistic `true`: an Engine response that validates a head also
+    /// marks its ancestors valid, without verdicts for them.
+    #[must_use]
+    pub fn is_payload_inclusion_list_satisfied(&self, block_root: H256) -> bool {
+        if !self.is_payload_verified(block_root) {
+            return false;
+        }
+
+        let Some(chain_link) = self.chain_link(block_root) else {
+            return false;
+        };
+
+        if chain_link.is_optimistic() {
+            return true;
+        }
+
+        if chain_link.is_invalid() {
+            return false;
+        }
+
+        self.payload_inclusion_list_satisfaction
+            .get(&block_root)
+            .copied()
+            .unwrap_or(true)
+    }
+
+    /// Inclusion list transactions the payload for `state` must satisfy: the lists of slot
+    /// `state.slot - 1` on the branch of `state` (spec `get_inclusion_list_transactions`, called
+    /// with `Slot(state.slot - 1)` from both `record_payload_inclusion_list_satisfaction` and
+    /// `prepare_execution_payload`). Returns empty if the dependent root cannot be derived, so a
+    /// derivation error never blocks the payload.
+    #[must_use]
+    pub fn inclusion_list_transactions_for_payload(
+        &self,
+        state: &impl BeaconStateTrait<P>,
+        only_timely: bool,
+    ) -> Vec<Transaction<P>> {
+        let slot = state.slot().saturating_sub(1);
+
+        let Ok(dependent_root) =
+            Self::inclusion_list_dependent_root(state, slot).inspect_err(|error| {
+                warn_with_peers!(
+                    "unable to derive inclusion list dependent root for payload transactions \
+                 (IL slot: {slot}, state slot: {}); using empty requirements: {error:?}",
+                    state.slot(),
+                );
+            })
+        else {
+            return Vec::new();
+        };
+
+        self.inclusion_list_store
+            .get_inclusion_list_transactions(slot, dependent_root, only_timely)
+    }
+
+    fn inclusion_list_dependent_root(state: &impl BeaconStateTrait<P>, slot: Slot) -> Result<H256> {
+        let epoch = misc::compute_epoch_at_slot::<P>(slot);
+
+        let dependent_slot = misc::compute_shuffling_dependent_slot::<P>(epoch);
+
+        accessors::get_block_root_at_slot(state, dependent_slot)
     }
 
     // > Return whether the execution payload envelope for the beacon block with
@@ -4178,11 +4278,14 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         let execution_requests = envelope.message.execution_requests.clone();
 
         let params = if state.phase() >= Phase::Heze {
+            // The engine checks the payload against the timely inclusion lists and reports
+            // `inclusionListSatisfied`.
             Some(ExecutionPayloadParams::Heze {
                 versioned_hashes,
                 parent_beacon_block_root,
                 execution_requests,
-                inclusion_list_transactions: Vec::new(),
+                inclusion_list_transactions: self
+                    .inclusion_list_transactions_for_payload(&state, true),
             })
         } else {
             Some(ExecutionPayloadParams::Gloas {
@@ -5422,6 +5525,13 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
             *block_root == last_finalized_root
                 || self.unfinalized_locations.contains_key(block_root)
         });
+        self.payload_inclusion_list_satisfaction
+            .retain(|block_root, _| {
+                *block_root == last_finalized_root
+                    || self.unfinalized_locations.contains_key(block_root)
+            });
+        // Keeps more than the spec's `MIN_SLOTS_FOR_INCLUSION_LISTS_REQUESTS` retention.
+        self.inclusion_list_store.prune_before(finalized_slot);
         self.accepted_blob_sidecars
             .retain(|(slot, _, _), _| finalized_slot <= *slot);
         self.accepted_data_column_sidecars
