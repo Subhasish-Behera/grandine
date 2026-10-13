@@ -36,6 +36,17 @@ pub struct SignedInclusionList<P: Preset> {
     pub signature: SignatureBytes,
 }
 
+// Not a spec container. Identifies one validator's inclusion list for a slot
+// and dependent root, as known to a node requesting it by committee index.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Serialize)]
+pub struct InclusionListIdentifier {
+    #[serde(with = "serde_utils::string_or_native")]
+    pub slot: Slot,
+    pub dependent_root: H256,
+    #[serde(with = "serde_utils::string_or_native")]
+    pub validator_index: ValidatorIndex,
+}
+
 #[derive(Clone, PartialEq, Eq, Debug, Default, Deserialize, Serialize, Ssz)]
 #[serde(bound = "", deny_unknown_fields)]
 #[ssz(stable(active = [1; 13]))]

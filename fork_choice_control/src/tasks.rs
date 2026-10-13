@@ -12,8 +12,8 @@ use fork_choice_store::{
     AggregateAndProofOrigin, AttestationItem, AttestationOrigin, AttesterSlashingOrigin,
     BlobSidecarOrigin, BlockAction, BlockItem, BlockOrigin, DataColumnSidecarAction,
     DataColumnSidecarOrigin, ExecutionPayloadBidOrigin, ExecutionPayloadEnvelopeAction,
-    ExecutionPayloadEnvelopeOrigin, PayloadAttestationItem, PayloadAttestationOrigin,
-    ProposerPreferencesOrigin, StateCacheProcessor, Store,
+    ExecutionPayloadEnvelopeOrigin, InclusionListOrigin, PayloadAttestationItem,
+    PayloadAttestationOrigin, ProposerPreferencesOrigin, StateCacheProcessor, Store,
 };
 use futures::channel::mpsc::Sender as MultiSender;
 use helper_functions::{
@@ -35,6 +35,7 @@ use types::{
     deneb::containers::{BlobIdentifier, BlobSidecar},
     fulu::containers::DataColumnIdentifier,
     gloas::containers::{SignedExecutionPayloadEnvelope, SignedProposerPreferences},
+    heze::containers::SignedInclusionList,
     nonstandard::{RelativeEpoch, ValidationOutcome},
     phase0::{
         containers::Checkpoint,
@@ -827,6 +828,39 @@ impl<P: Preset, W> Run for ProposerPreferencesTask<P, W> {
             wait_group,
             result,
             origin,
+        }
+        .send(&mutator_tx);
+    }
+}
+
+pub struct InclusionListTask<P: Preset, W> {
+    pub store_snapshot: Arc<Store<P, Storage<P>>>,
+    pub mutator_tx: Sender<MutatorMessage<P, W>>,
+    pub wait_group: W,
+    pub signed_inclusion_list: Arc<SignedInclusionList<P>>,
+    pub origin: InclusionListOrigin,
+}
+
+impl<P: Preset, W> Run for InclusionListTask<P, W> {
+    #[instrument(skip_all, level = "debug", name = "InclusionListTask::run")]
+    fn run(self) {
+        let Self {
+            store_snapshot,
+            mutator_tx,
+            wait_group,
+            signed_inclusion_list,
+            origin,
+        } = self;
+
+        let inclusion_list_identifier = signed_inclusion_list.as_ref().into();
+
+        let result = store_snapshot.validate_inclusion_list(signed_inclusion_list, &origin);
+
+        MutatorMessage::InclusionList {
+            wait_group,
+            result,
+            origin,
+            inclusion_list_identifier,
         }
         .send(&mutator_tx);
     }

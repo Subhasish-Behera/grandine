@@ -69,6 +69,7 @@ use types::{
         },
         primitives::{BuilderIndex, PayloadStatus as ExecutionPayloadStatus, Transaction},
     },
+    heze::containers::SignedInclusionList,
     nonstandard::{
         BlobSidecarWithId, DataColumnSidecarWithId, PayloadStatus, Phase, StorageMode, WithStatus,
     },
@@ -104,10 +105,11 @@ use crate::{
         DataAvailabilityPolicy, DataColumnSidecarAction, DataColumnSidecarOrigin, Difference,
         DifferenceAtLocation, Differences, DissolvedDifference, ExecutionPayloadBidAction,
         ExecutionPayloadBidOrigin, ExecutionPayloadEnvelopeAction, ExecutionPayloadEnvelopeOrigin,
-        LatestMessage, Location, PartialAttestationAction, PartialBlockAction, PayloadAction,
-        PayloadAttestationAction, PayloadAttestationItem, PayloadAttestationValidationError,
-        PayloadPresence, ProposerPreferencesAction, ProposerPreferencesOrigin, Score, SegmentId,
-        Storage, UnfinalizedBlock, ValidAttestation, ValidPayloadAttestation,
+        InclusionListAction, InclusionListOrigin, LatestMessage, Location,
+        PartialAttestationAction, PartialBlockAction, PayloadAction, PayloadAttestationAction,
+        PayloadAttestationItem, PayloadAttestationValidationError, PayloadPresence,
+        ProposerPreferencesAction, ProposerPreferencesOrigin, Score, SegmentId, Storage,
+        UnfinalizedBlock, ValidAttestation, ValidPayloadAttestation,
     },
     segment::{Position, Segment},
     state_cache_processor::StateCacheProcessor,
@@ -290,6 +292,9 @@ pub struct Store<P: Preset, S: Storage<P>> {
     accepted_execution_payload_envelopes: HashSet<(Slot, H256, BuilderIndex)>,
     accepted_proposer_preferences:
         HashMap<(H256, Slot, ValidatorIndex), Arc<SignedProposerPreferences>>,
+    // `Seen.inclusion_list_counts`, for the "first or second valid message" gossip rule.
+    // Spec <https://github.com/ethereum/consensus-specs/blob/v1.7.0-beta.1/specs/heze/p2p-interface.md#modified-seen>.
+    accepted_inclusion_list_counts: HashMap<(Slot, H256, ValidatorIndex), usize>,
     builder_circuit_breaker: BuilderCircuitBreaker,
     blob_cache: BlobCache<P>,
     state_cache: Arc<StateCacheProcessor<P>>,
@@ -405,6 +410,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
             accepted_payload_bids: HashMap::default(),
             accepted_execution_payload_envelopes: HashSet::default(),
             accepted_proposer_preferences: HashMap::default(),
+            accepted_inclusion_list_counts: HashMap::default(),
             builder_circuit_breaker: BuilderCircuitBreaker::new(
                 store_config.builder_circuit_breaker,
                 anchor_slot,
@@ -1189,6 +1195,14 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
 
         self.inclusion_list_store
             .get_inclusion_list_transactions(slot, dependent_root, only_timely)
+    }
+
+    #[must_use]
+    pub fn is_inclusion_list_timely(&self, slot: Slot) -> bool {
+        // TODO(heze): Tick-based, so the cutoff is 7.5s instead of the spec's 8.0s (the deadline
+        // falls inside the 7.5s-8.25s tick). Exact 8.0s needs the time in milliseconds.
+        slot == self.slot()
+            && self.is_before_due_bps_deadline(self.chain_config.inclusion_list_due_bps)
     }
 
     fn inclusion_list_dependent_root(state: &impl BeaconStateTrait<P>, slot: Slot) -> Result<H256> {
@@ -2759,6 +2773,143 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         }
 
         Ok(ProposerPreferencesAction::Accept(signed_preferences))
+    }
+
+    #[expect(clippy::too_many_lines)]
+    pub fn validate_inclusion_list(
+        &self,
+        signed_inclusion_list: Arc<SignedInclusionList<P>>,
+        origin: &InclusionListOrigin,
+    ) -> Result<InclusionListAction<P>> {
+        let message = &signed_inclusion_list.message;
+        let message_slot = message.slot;
+        let validator_index = message.validator_index;
+        let dependent_root = message.dependent_root;
+        let current_slot = self.slot();
+
+        let transactions_size = message
+            .transactions
+            .iter()
+            .map(|transaction| transaction.as_bytes().len())
+            .sum::<usize>();
+
+        // [IGNORE] This is the first or second valid message from this validator
+        if self
+            .accepted_inclusion_list_counts
+            .get(&(message_slot, dependent_root, validator_index))
+            .is_some_and(|count| *count >= 2)
+        {
+            return Ok(InclusionListAction::Ignore);
+        }
+
+        // [IGNORE] The inclusion list's slot is for the current slot
+        if message_slot != current_slot {
+            return Ok(InclusionListAction::Ignore);
+        }
+
+        // [IGNORE] The size of inclusion list transactions must be non-empty
+        //
+        // The size is the total byte length, so a list of only empty transactions is ignored
+        // here, not rejected below.
+        if transactions_size == 0 {
+            return Ok(InclusionListAction::Ignore);
+        }
+
+        // [REJECT] The size of inclusion list transactions must not exceed the maximum size
+        let maximum = self.chain_config.max_transactions_bytes_per_inclusion_list;
+
+        ensure!(
+            transactions_size <= maximum,
+            Error::<P>::InclusionListTransactionsTooLarge {
+                signed_inclusion_list,
+                maximum,
+                actual: transactions_size,
+            },
+        );
+
+        // [REJECT] Every transaction must be non-empty
+        ensure!(
+            message
+                .transactions
+                .iter()
+                .all(|transaction| !transaction.as_bytes().is_empty()),
+            Error::<P>::InclusionListTransactionEmpty {
+                signed_inclusion_list,
+            },
+        );
+
+        // [IGNORE] The dependent block has been seen (via gossip or non-gossip sources)
+        // (MAY be queued until block is retrieved)
+        //
+        // TODO(heze): queue the list until the dependent block is retrieved instead of dropping
+        // it, like `ProposerPreferencesAction::DelayUntilBlock` and its
+        // `PendingProposerPreferences` retry.
+        let Some(dependent_chain_link) = self.chain_link(dependent_root) else {
+            return Ok(InclusionListAction::Ignore);
+        };
+
+        let message_epoch = misc::compute_epoch_at_slot::<P>(message_slot);
+        let lookahead_epoch = message_epoch.saturating_sub(P::MinSeedLookahead::U64);
+        let lookahead_start_slot = misc::compute_start_slot_at_epoch::<P>(lookahead_epoch);
+
+        // [REJECT] The dependent block's slot is not after the shuffling dependent slot
+        ensure!(
+            dependent_chain_link.slot()
+                <= misc::compute_shuffling_dependent_slot::<P>(message_epoch),
+            Error::<P>::InvalidInclusionListDependentRoot {
+                signed_inclusion_list,
+            },
+        );
+
+        // [IGNORE] The dependent block is a possible dependent block for the committee lookahead
+        if !self.is_valid_dependent_root(dependent_chain_link, lookahead_start_slot) {
+            return Ok(InclusionListAction::Ignore);
+        }
+
+        // See <https://github.com/ethereum/consensus-specs/pull/5602>.
+        // See <https://github.com/ethereum/consensus-specs/pull/5721>.
+        let Ok(state) = self.state_cache.state_at_slot(
+            &self.pubkey_cache,
+            self,
+            dependent_root,
+            lookahead_start_slot,
+        ) else {
+            return Ok(InclusionListAction::Ignore);
+        };
+
+        let Ok(committee) = accessors::get_inclusion_list_committee(&state, message_slot) else {
+            return Ok(InclusionListAction::Ignore);
+        };
+
+        // [REJECT] The includer is a member of the committee
+        ensure!(
+            committee.iter().any(|&index| index == validator_index),
+            Error::<P>::InclusionListValidatorNotInCommittee {
+                signed_inclusion_list,
+            },
+        );
+
+        if origin.verify_signatures() {
+            // [REJECT] The signature is valid
+            ensure!(
+                predicates::is_valid_inclusion_list_signature(
+                    &self.chain_config,
+                    &self.pubkey_cache,
+                    &state,
+                    &signed_inclusion_list,
+                ),
+                Error::<P>::InvalidInclusionListSignature {
+                    signed_inclusion_list,
+                },
+            );
+        }
+
+        let is_timely = self.is_inclusion_list_timely(message_slot);
+
+        Ok(InclusionListAction::Accept {
+            signed_inclusion_list,
+            is_timely,
+        })
     }
 
     #[expect(clippy::too_many_lines)]
@@ -5000,6 +5151,32 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
             .insert((dependent_root, slot, validator_index), signed_preferences);
     }
 
+    pub fn apply_inclusion_list(
+        &mut self,
+        signed_inclusion_list: Arc<SignedInclusionList<P>>,
+        is_timely: bool,
+        is_from_gossip: bool,
+    ) {
+        let message = &signed_inclusion_list.message;
+
+        // Only lists received over gossip count toward the "first or second valid message" rule.
+        if is_from_gossip {
+            let count = self
+                .accepted_inclusion_list_counts
+                .entry((
+                    message.slot,
+                    message.dependent_root,
+                    message.validator_index,
+                ))
+                .or_default();
+
+            *count = count.saturating_add(1);
+        }
+
+        self.inclusion_list_store
+            .process_inclusion_list(signed_inclusion_list, is_timely);
+    }
+
     pub fn apply_data_column_sidecar(&mut self, data_sidecar: Arc<DataColumnSidecar<P>>) {
         if let Some(data_sidecar) = data_sidecar.pre_gloas() {
             let block_header = data_sidecar.signed_block_header.message;
@@ -5545,6 +5722,8 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
             .retain(|(slot, _, _)| finalized_slot <= *slot);
         self.accepted_proposer_preferences
             .retain(|(_, slot, _), _| finalized_slot <= *slot);
+        self.accepted_inclusion_list_counts
+            .retain(|(slot, _, _), _| finalized_slot <= *slot);
         self.sidecars_construction_started
             .retain_sync(|_, slot| finalized_slot <= *slot);
         self.delayed_block_at_slot

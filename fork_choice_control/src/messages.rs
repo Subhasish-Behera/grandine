@@ -13,7 +13,7 @@ use fork_choice_store::{
     AttesterSlashingOrigin, BlobSidecarAction, BlobSidecarOrigin, BlockAction, BlockOrigin,
     ChainLink, DataColumnSidecarAction, DataColumnSidecarOrigin, ExecutionPayloadBidAction,
     ExecutionPayloadBidOrigin, ExecutionPayloadEnvelopeAction, ExecutionPayloadEnvelopeOrigin,
-    ProposerPreferencesAction, ProposerPreferencesOrigin,
+    InclusionListAction, InclusionListOrigin, ProposerPreferencesAction, ProposerPreferencesOrigin,
 };
 use logging::debug_with_peers;
 use serde::Serialize;
@@ -25,6 +25,7 @@ use types::{
     deneb::containers::BlobIdentifier,
     fulu::{containers::DataColumnIdentifier, primitives::ColumnIndex},
     gloas::containers::{PayloadAttestationMessage, PayloadEnvelopeIdentifier},
+    heze::containers::InclusionListIdentifier,
     phase0::{
         containers::Checkpoint,
         primitives::{ExecutionBlockHash, H256, Slot, ValidatorIndex},
@@ -84,6 +85,12 @@ pub enum MutatorMessage<P: Preset, W> {
     BackSyncStatus {
         wait_group: W,
         is_back_synced: bool,
+    },
+    InclusionList {
+        wait_group: W,
+        result: Result<InclusionListAction<P>>,
+        origin: InclusionListOrigin,
+        inclusion_list_identifier: InclusionListIdentifier,
     },
     Block {
         wait_group: W,

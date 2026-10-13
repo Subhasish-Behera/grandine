@@ -1,13 +1,13 @@
 //! Received inclusion lists.
 //!
 //! Model: `(slot, dependent_root) -> validator_index -> entry` (the list and whether it arrived
-//! timely), plus the equivocators per key. Equivocators are left out of every read.
+//! timely), plus the equivocators per key. The first list per validator is kept; a differing later
+//! one marks the validator an equivocator, and equivocators are left out of every read.
 //!
-//! It is a field of `Store`. Entries below the finalized slot are pruned when finalization
-//! advances.
+//! It is a field of `Store` and is changed by the mutator. Entries below the finalized slot
+//! are pruned when finalization advances.
 //!
 //! In the spec this is the single global `InclusionListStore`; here it lives in `Store`.
-#![allow(dead_code)]
 
 use std::{
     collections::{HashMap, HashSet},
@@ -50,6 +50,39 @@ impl<P: Preset> InclusionListStore<P> {
     #[must_use]
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// [`process_inclusion_list`](https://github.com/ethereum/consensus-specs/blob/v1.7.0-beta.1/specs/heze/inclusion-list.md#new-process_inclusion_list)
+    pub fn process_inclusion_list(
+        &mut self,
+        signed_inclusion_list: Arc<SignedInclusionList<P>>,
+        timely: bool,
+    ) {
+        let slot = signed_inclusion_list.message.slot;
+        let key = (slot, signed_inclusion_list.message.dependent_root);
+        let validator_index = signed_inclusion_list.message.validator_index;
+
+        if let Some(stored) = self
+            .inclusion_lists
+            .get(&key)
+            .and_then(|by_validator| by_validator.get(&validator_index))
+        {
+            if stored.signed_inclusion_list.message != signed_inclusion_list.message {
+                self.equivocators
+                    .entry(key)
+                    .or_default()
+                    .insert(validator_index);
+            }
+            return;
+        }
+
+        self.inclusion_lists.entry(key).or_default().insert(
+            validator_index,
+            InclusionListEntry {
+                signed_inclusion_list,
+                timely,
+            },
+        );
     }
 
     /// [`get_inclusion_list_transactions`](https://github.com/ethereum/consensus-specs/blob/v1.7.0-beta.1/specs/heze/inclusion-list.md#new-get_inclusion_list_transactions)

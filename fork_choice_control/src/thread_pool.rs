@@ -28,11 +28,11 @@ use crate::{
         BlockAttestationsTask, BlockPayloadAttestationsTask, BlockTask, BlockVerifyForGossipTask,
         CacheDepositSignaturesTask, CheckpointStateTask, DataColumnSidecarTask,
         ExecutionPayloadBidTask, ExecutionPayloadEnvelopeTask,
-        ExecutionPayloadEnvelopeVerifyForGossipTask, PayloadAttestationBatchTask,
-        PayloadAttestationTask, PersistBlobSidecarsTask, PersistDataColumnSidecarsTask,
-        PersistExecutionPayloadEnvelopesTask, PersistPubkeyCacheTask, PreprocessStateTask,
-        ProposerPreferencesTask, PruneStateCacheTask, RetryDataColumnSidecarTask, Run,
-        StateAtSlotCacheFlushTask,
+        ExecutionPayloadEnvelopeVerifyForGossipTask, InclusionListTask,
+        PayloadAttestationBatchTask, PayloadAttestationTask, PersistBlobSidecarsTask,
+        PersistDataColumnSidecarsTask, PersistExecutionPayloadEnvelopesTask,
+        PersistPubkeyCacheTask, PreprocessStateTask, ProposerPreferencesTask, PruneStateCacheTask,
+        RetryDataColumnSidecarTask, Run, StateAtSlotCacheFlushTask,
     },
     wait::Wait,
 };
@@ -161,6 +161,7 @@ enum LowPriorityTask<P: Preset, W> {
     PayloadAttestation(PayloadAttestationTask<P, W>),
     PayloadAttestationBatch(PayloadAttestationBatchTask<P, W>),
     ProposerPreferences(ProposerPreferencesTask<P, W>),
+    InclusionList(InclusionListTask<P, W>),
     PersistBlobSidecarsTask(PersistBlobSidecarsTask<P, W>),
     PersistPubkeyCacheTask(PersistPubkeyCacheTask<P, W>),
     CacheDepositSignaturesTask(CacheDepositSignaturesTask<P, W>),
@@ -182,6 +183,7 @@ impl<P: Preset, W> Run for LowPriorityTask<P, W> {
             Self::PayloadAttestation(task) => task.run(),
             Self::PayloadAttestationBatch(task) => task.run(),
             Self::ProposerPreferences(task) => task.run(),
+            Self::InclusionList(task) => task.run(),
             Self::PersistBlobSidecarsTask(task) => task.run(),
             Self::PersistPubkeyCacheTask(task) => task.run(),
             Self::CacheDepositSignaturesTask(task) => task.run(),
@@ -288,6 +290,12 @@ impl<P: Preset, E, W> Spawn<P, E, W> for PayloadAttestationBatchTask<P, W> {
 }
 
 impl<P: Preset, E, W> Spawn<P, E, W> for ProposerPreferencesTask<P, W> {
+    fn spawn(self, critical: &mut Critical<P, E, W>) {
+        critical.low_priority_tasks.push_back(self.into())
+    }
+}
+
+impl<P: Preset, E, W> Spawn<P, E, W> for InclusionListTask<P, W> {
     fn spawn(self, critical: &mut Critical<P, E, W>) {
         critical.low_priority_tasks.push_back(self.into())
     }

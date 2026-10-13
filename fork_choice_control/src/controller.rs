@@ -24,8 +24,8 @@ use execution_engine::{ExecutionEngine, PayloadStatus};
 use fork_choice_store::{
     AggregateAndProofOrigin, AttestationItem, AttestationOrigin, AttesterSlashingOrigin,
     BlobSidecarOrigin, BlockItem, BlockOrigin, DataColumnSidecarOrigin, ExecutionPayloadBidOrigin,
-    ExecutionPayloadEnvelopeOrigin, PayloadAttestationItem, PayloadAttestationOrigin,
-    ProposerPreferencesOrigin, StateCacheProcessor, Store, StoreConfig,
+    ExecutionPayloadEnvelopeOrigin, InclusionListOrigin, PayloadAttestationItem,
+    PayloadAttestationOrigin, ProposerPreferencesOrigin, StateCacheProcessor, Store, StoreConfig,
 };
 use futures::channel::{mpsc::Sender as MultiSender, oneshot::Sender as OneshotSender};
 use genesis::AnchorCheckpointProvider;
@@ -48,6 +48,7 @@ use types::{
     gloas::containers::{
         PayloadAttestationMessage, SignedExecutionPayloadEnvelope, SignedProposerPreferences,
     },
+    heze::containers::SignedInclusionList,
     nonstandard::{ValidationOutcome, ValidationOutcomeWithReason},
     phase0::{
         containers::Checkpoint,
@@ -75,8 +76,8 @@ use crate::{
         AggregateAndProofTask, AttestationTask, AttesterSlashingTask, BlobSidecarTask, BlockTask,
         BlockVerifyForGossipTask, DataColumnSidecarTask, ExecutionPayloadBidTask,
         ExecutionPayloadEnvelopeTask, ExecutionPayloadEnvelopeVerifyForGossipTask,
-        PayloadAttestationBatchTask, PayloadAttestationTask, ProposerPreferencesTask,
-        StateAtSlotCacheFlushTask,
+        InclusionListTask, PayloadAttestationBatchTask, PayloadAttestationTask,
+        ProposerPreferencesTask, StateAtSlotCacheFlushTask,
     },
     thread_pool::{Spawn, ThreadPool},
     unbounded_sink::UnboundedSink,
@@ -457,6 +458,17 @@ where
             signed_preferences,
             origin: ProposerPreferencesOrigin::Gossip(gossip_id),
         })
+    }
+
+    pub fn on_gossip_inclusion_list(
+        &self,
+        signed_inclusion_list: Arc<SignedInclusionList<P>>,
+        gossip_id: GossipId,
+    ) {
+        self.spawn_inclusion_list_task(
+            signed_inclusion_list,
+            InclusionListOrigin::Gossip(gossip_id),
+        );
     }
 
     pub fn on_own_proposer_preferences(&self, signed_preferences: Arc<SignedProposerPreferences>) {
@@ -1042,6 +1054,20 @@ where
             processing_timings: ProcessingTimings::new(),
             metrics: self.metrics.clone(),
             tracing_span: Span::current(),
+        })
+    }
+
+    fn spawn_inclusion_list_task(
+        &self,
+        signed_inclusion_list: Arc<SignedInclusionList<P>>,
+        origin: InclusionListOrigin,
+    ) {
+        self.spawn(InclusionListTask {
+            store_snapshot: self.owned_store_snapshot(),
+            mutator_tx: self.owned_mutator_tx(),
+            wait_group: self.owned_wait_group(),
+            signed_inclusion_list,
+            origin,
         })
     }
 
