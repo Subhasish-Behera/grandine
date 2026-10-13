@@ -16,7 +16,7 @@ use types::{
 
 use crate::{
     EngineGetBlobsParams, ExecutionServiceMessage,
-    types::{PayloadAttributes, PayloadId, PayloadStatusV1},
+    types::{PayloadAttributes, PayloadId, PayloadStatus},
 };
 
 pub trait ExecutionEngine<P: Preset> {
@@ -46,7 +46,7 @@ pub trait ExecutionEngine<P: Preset> {
         block_root: H256,
         payload: ExecutionPayload<P>,
         params: Option<ExecutionPayloadParams<P>>,
-        sender: Option<Sender<Result<PayloadStatusV1>>>,
+        sender: Option<Sender<Result<PayloadStatus>>>,
     ) -> Result<()>;
 
     /// [`get_pow_block`](https://github.com/ethereum/consensus-specs/blob/1bfefe301da592375e2e02f65849a96aadec1936/specs/bellatrix/fork-choice.md#get_pow_block)
@@ -92,7 +92,7 @@ impl<P: Preset, E: ExecutionEngine<P>> ExecutionEngine<P> for &E {
         beacon_block_root: H256,
         payload: ExecutionPayload<P>,
         params: Option<ExecutionPayloadParams<P>>,
-        sender: Option<Sender<Result<PayloadStatusV1>>>,
+        sender: Option<Sender<Result<PayloadStatus>>>,
     ) -> Result<()> {
         (*self).notify_new_payload(beacon_block_root, payload, params, sender)
     }
@@ -143,7 +143,7 @@ impl<P: Preset, E: ExecutionEngine<P>> ExecutionEngine<P> for Arc<E> {
         beacon_block_root: H256,
         payload: ExecutionPayload<P>,
         params: Option<ExecutionPayloadParams<P>>,
-        sender: Option<Sender<Result<PayloadStatusV1>>>,
+        sender: Option<Sender<Result<PayloadStatus>>>,
     ) -> Result<()> {
         self.as_ref()
             .notify_new_payload(beacon_block_root, payload, params, sender)
@@ -203,7 +203,7 @@ impl<P: Preset, E: ExecutionEngine<P>> ExecutionEngine<P> for Mutex<E> {
         beacon_block_root: H256,
         payload: ExecutionPayload<P>,
         params: Option<ExecutionPayloadParams<P>>,
-        sender: Option<Sender<Result<PayloadStatusV1>>>,
+        sender: Option<Sender<Result<PayloadStatus>>>,
     ) -> Result<()> {
         self.lock()
             .expect("execution engine mutex is poisoned")
@@ -252,7 +252,7 @@ impl<P: Preset> ExecutionEngine<P> for NullExecutionEngine {
         _beacon_block_root: H256,
         _payload: ExecutionPayload<P>,
         _params: Option<ExecutionPayloadParams<P>>,
-        _sender: Option<Sender<Result<PayloadStatusV1>>>,
+        _sender: Option<Sender<Result<PayloadStatus>>>,
     ) -> Result<()> {
         Ok(())
     }
@@ -301,7 +301,7 @@ impl<P: Preset> ExecutionEngine<P> for MockExecutionEngine<P> {
         _beacon_block_root: H256,
         _payload: ExecutionPayload<P>,
         _params: Option<ExecutionPayloadParams<P>>,
-        _sender: Option<Sender<Result<PayloadStatusV1>>>,
+        _sender: Option<Sender<Result<PayloadStatus>>>,
     ) -> Result<()> {
         ensure!(self.execution_valid, Error);
         Ok(())

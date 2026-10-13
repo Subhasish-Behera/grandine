@@ -5,7 +5,7 @@ use derive_more::Constructor;
 use either::Either;
 use execution_engine::{
     EngineGetBlobsParams, ExecutionEngine, ExecutionServiceMessage, PayloadAttributes, PayloadId,
-    PayloadStatusV1,
+    PayloadStatus,
 };
 use futures::channel::{mpsc::UnboundedSender, oneshot::Sender};
 use logging::{info_with_peers, warn_with_peers};
@@ -66,7 +66,7 @@ impl<P: Preset> ExecutionEngine<P> for Eth1ExecutionEngine<P> {
         beacon_block_root: H256,
         payload: ExecutionPayload<P>,
         params: Option<ExecutionPayloadParams<P>>,
-        sender: Option<Sender<Result<PayloadStatusV1>>>,
+        sender: Option<Sender<Result<PayloadStatus>>>,
     ) -> Result<()> {
         ExecutionServiceMessage::NotifyNewPayload {
             beacon_block_root,

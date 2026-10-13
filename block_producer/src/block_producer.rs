@@ -15,7 +15,7 @@ use dedicated_executor::{DedicatedExecutor, Job};
 use eth1_api::{ApiController, ClientVersions, Eth1ExecutionEngine, WithClientVersions};
 use execution_engine::{
     ExecutionEngine as _, PayloadAttributes, PayloadAttributesV1, PayloadAttributesV2,
-    PayloadAttributesV3, PayloadAttributesV4, PayloadId,
+    PayloadAttributesV3, PayloadAttributesV4, PayloadAttributesV5, PayloadId,
 };
 use features::Feature;
 use fork_choice_control::Wait;
@@ -2262,7 +2262,7 @@ impl<P: Preset, W: Wait> BlockBuildContext<P, W> {
                     .map_into()
                     .pipe(ContiguousList::try_from_iter)?;
 
-                PayloadAttributes::Gloas(PayloadAttributesV4 {
+                PayloadAttributes::Heze(PayloadAttributesV5 {
                     timestamp,
                     prev_randao,
                     suggested_fee_recipient,
@@ -2270,6 +2270,7 @@ impl<P: Preset, W: Wait> BlockBuildContext<P, W> {
                     parent_beacon_block_root: state.latest_block_header().hash_tree_root(),
                     slot_number: state.slot(),
                     target_gas_limit,
+                    inclusion_list_transactions: ContiguousList::default(),
                 })
             }
         };

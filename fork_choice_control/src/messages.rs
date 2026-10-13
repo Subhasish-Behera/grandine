@@ -7,7 +7,7 @@ use std::{
 use anyhow::Result;
 use clock::Tick;
 use eth2_libp2p::{GossipId, PeerId};
-use execution_engine::PayloadStatusV1;
+use execution_engine::PayloadStatus;
 use fork_choice_store::{
     AggregateAndProofOrigin, AttestationAction, AttestationItem, AttestationValidationError,
     AttesterSlashingOrigin, BlobSidecarAction, BlobSidecarOrigin, BlockAction, BlockOrigin,
@@ -192,13 +192,13 @@ pub enum MutatorMessage<P: Preset, W> {
     },
     NotifiedForkChoiceUpdate {
         wait_group: W,
-        payload_status: PayloadStatusV1,
+        payload_status: PayloadStatus,
     },
     NotifiedNewPayload {
         wait_group: W,
         beacon_block_root: H256,
         execution_block_hash: ExecutionBlockHash,
-        payload_status: PayloadStatusV1,
+        payload_status: PayloadStatus,
     },
     // Dropping `Controller.mutator_tx` is not enough to stop the mutator thread because `Mutator`
     // itself keeps a sender in `Mutator.mutator_tx` for spawning tasks.

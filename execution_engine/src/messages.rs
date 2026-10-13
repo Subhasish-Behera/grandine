@@ -9,7 +9,7 @@ use types::{
     preset::Preset,
 };
 
-use crate::{EngineGetBlobsParams, PayloadAttributes, PayloadId, PayloadStatusV1};
+use crate::{EngineGetBlobsParams, PayloadAttributes, PayloadId, PayloadStatus};
 
 pub enum ExecutionServiceMessage<P: Preset> {
     ExchangeCapabilities,
@@ -25,7 +25,7 @@ pub enum ExecutionServiceMessage<P: Preset> {
         beacon_block_root: H256,
         payload: Box<ExecutionPayload<P>>,
         params: Option<ExecutionPayloadParams<P>>,
-        sender: Option<Sender<Result<PayloadStatusV1>>>,
+        sender: Option<Sender<Result<PayloadStatus>>>,
     },
     Stop,
 }

@@ -10,7 +10,7 @@ use execution_engine::{
     EngineGetPayloadV3Response, EngineGetPayloadV4Response, EngineGetPayloadV5Response,
     EngineGetPayloadV6Response, ExecutionPayloadV1, ExecutionPayloadV2, ExecutionPayloadV3,
     ExecutionPayloadV4, ForkChoiceStateV1, ForkChoiceUpdatedResponse, PayloadAttributes, PayloadId,
-    PayloadStatusV1, RawExecutionRequests,
+    PayloadStatus, PayloadStatusV1, PayloadStatusV2, RawExecutionRequests,
 };
 use futures::{Future, channel::mpsc::UnboundedSender};
 use logging::warn_with_peers;
@@ -45,10 +45,11 @@ use crate::{
     endpoints::{ClientVersions, Endpoint, Endpoints},
     eth1_api::{
         ENGINE_FORKCHOICE_UPDATED_V1, ENGINE_FORKCHOICE_UPDATED_V2, ENGINE_FORKCHOICE_UPDATED_V3,
-        ENGINE_FORKCHOICE_UPDATED_V4, ENGINE_GET_EL_BLOBS_V1, ENGINE_GET_EL_BLOBS_V2,
-        ENGINE_GET_PAYLOAD_V1, ENGINE_GET_PAYLOAD_V2, ENGINE_GET_PAYLOAD_V3, ENGINE_GET_PAYLOAD_V4,
-        ENGINE_GET_PAYLOAD_V5, ENGINE_GET_PAYLOAD_V6, ENGINE_NEW_PAYLOAD_V1, ENGINE_NEW_PAYLOAD_V2,
-        ENGINE_NEW_PAYLOAD_V3, ENGINE_NEW_PAYLOAD_V4, ENGINE_NEW_PAYLOAD_V5,
+        ENGINE_FORKCHOICE_UPDATED_V4, ENGINE_FORKCHOICE_UPDATED_V5, ENGINE_GET_EL_BLOBS_V1,
+        ENGINE_GET_EL_BLOBS_V2, ENGINE_GET_PAYLOAD_V1, ENGINE_GET_PAYLOAD_V2,
+        ENGINE_GET_PAYLOAD_V3, ENGINE_GET_PAYLOAD_V4, ENGINE_GET_PAYLOAD_V5, ENGINE_GET_PAYLOAD_V6,
+        ENGINE_NEW_PAYLOAD_V1, ENGINE_NEW_PAYLOAD_V2, ENGINE_NEW_PAYLOAD_V3, ENGINE_NEW_PAYLOAD_V4,
+        ENGINE_NEW_PAYLOAD_V5, ENGINE_NEW_PAYLOAD_V6,
     },
     eth1_block::Eth1Block,
 };
@@ -258,12 +259,12 @@ impl Eth1Api {
         &self,
         payload: ExecutionPayload<P>,
         params: Option<ExecutionPayloadParams<P>>,
-    ) -> Result<PayloadStatusV1> {
+    ) -> Result<PayloadStatus> {
         match (payload, params) {
             (ExecutionPayload::Bellatrix(payload), None) => {
                 let payload_v1 = ExecutionPayloadV1::from(payload);
                 let params = vec![serde_json::to_value(payload_v1)?];
-                self.execute(
+                self.execute::<PayloadStatusV1>(
                     ENGINE_NEW_PAYLOAD_V1,
                     params,
                     Some(ENGINE_NEW_PAYLOAD_TIMEOUT),
@@ -271,11 +272,12 @@ impl Eth1Api {
                 )
                 .await
                 .map(WithClientVersions::result)
+                .map(Into::into)
             }
             (ExecutionPayload::Capella(payload), None) => {
                 let payload_v2 = ExecutionPayloadV2::from(payload);
                 let params = vec![serde_json::to_value(payload_v2)?];
-                self.execute(
+                self.execute::<PayloadStatusV1>(
                     ENGINE_NEW_PAYLOAD_V2,
                     params,
                     Some(ENGINE_NEW_PAYLOAD_TIMEOUT),
@@ -283,6 +285,7 @@ impl Eth1Api {
                 )
                 .await
                 .map(WithClientVersions::result)
+                .map(Into::into)
             }
             (
                 ExecutionPayload::Deneb(payload),
@@ -297,7 +300,7 @@ impl Eth1Api {
                     serde_json::to_value(versioned_hashes)?,
                     serde_json::to_value(parent_beacon_block_root)?,
                 ];
-                self.execute(
+                self.execute::<PayloadStatusV1>(
                     ENGINE_NEW_PAYLOAD_V3,
                     params,
                     Some(ENGINE_NEW_PAYLOAD_TIMEOUT),
@@ -305,6 +308,7 @@ impl Eth1Api {
                 )
                 .await
                 .map(WithClientVersions::result)
+                .map(Into::into)
             }
             (
                 ExecutionPayload::Deneb(payload),
@@ -324,7 +328,7 @@ impl Eth1Api {
                     serde_json::to_value(raw_execution_requests)?,
                 ];
 
-                self.execute(
+                self.execute::<PayloadStatusV1>(
                     ENGINE_NEW_PAYLOAD_V4,
                     params,
                     Some(ENGINE_NEW_PAYLOAD_TIMEOUT),
@@ -332,6 +336,7 @@ impl Eth1Api {
                 )
                 .await
                 .map(WithClientVersions::result)
+                .map(Into::into)
             }
             (
                 ExecutionPayload::Gloas(payload),
@@ -351,7 +356,7 @@ impl Eth1Api {
                     serde_json::to_value(raw_execution_requests)?,
                 ];
 
-                self.execute(
+                self.execute::<PayloadStatusV1>(
                     ENGINE_NEW_PAYLOAD_V5,
                     params,
                     Some(ENGINE_NEW_PAYLOAD_TIMEOUT),
@@ -359,6 +364,39 @@ impl Eth1Api {
                 )
                 .await
                 .map(WithClientVersions::result)
+                .map(Into::into)
+            }
+            // Heze reuses the Gloas execution payload; the response status carries
+            // `inclusionListSatisfied`.
+            (
+                ExecutionPayload::Gloas(payload),
+                Some(ExecutionPayloadParams::Heze {
+                    versioned_hashes,
+                    parent_beacon_block_root,
+                    execution_requests,
+                    inclusion_list_transactions,
+                }),
+            ) => {
+                let payload_v4 = ExecutionPayloadV4::from(payload);
+                let raw_execution_requests = RawExecutionRequests::try_from(execution_requests)?;
+
+                let params = vec![
+                    serde_json::to_value(payload_v4)?,
+                    serde_json::to_value(versioned_hashes)?,
+                    serde_json::to_value(parent_beacon_block_root)?,
+                    serde_json::to_value(raw_execution_requests)?,
+                    serde_json::to_value(inclusion_list_transactions)?,
+                ];
+
+                self.execute::<PayloadStatusV2>(
+                    ENGINE_NEW_PAYLOAD_V6,
+                    params,
+                    Some(ENGINE_NEW_PAYLOAD_TIMEOUT),
+                    None,
+                )
+                .await
+                .map(WithClientVersions::result)
+                .map(Into::into)
             }
             _ => bail!(Error::InvalidParameters),
         }
@@ -397,12 +435,9 @@ impl Eth1Api {
             serde_json::to_value(payload_attributes)?,
         ];
 
-        let RawForkChoiceUpdatedResponse {
-            payload_id,
-            payload_status,
-        } = match phase {
-            Phase::Bellatrix => {
-                self.execute(
+        let (payload_status, payload_id) = match phase {
+            Phase::Bellatrix => self
+                .execute::<RawForkChoiceUpdatedResponse<PayloadStatusV1>>(
                     ENGINE_FORKCHOICE_UPDATED_V1,
                     params,
                     Some(ENGINE_FORKCHOICE_UPDATED_TIMEOUT),
@@ -410,9 +445,9 @@ impl Eth1Api {
                 )
                 .await?
                 .result
-            }
-            Phase::Capella => {
-                self.execute(
+                .into_common_parts(),
+            Phase::Capella => self
+                .execute::<RawForkChoiceUpdatedResponse<PayloadStatusV1>>(
                     ENGINE_FORKCHOICE_UPDATED_V2,
                     params,
                     Some(ENGINE_FORKCHOICE_UPDATED_TIMEOUT),
@@ -420,9 +455,9 @@ impl Eth1Api {
                 )
                 .await?
                 .result
-            }
-            Phase::Deneb | Phase::Electra | Phase::Fulu => {
-                self.execute(
+                .into_common_parts(),
+            Phase::Deneb | Phase::Electra | Phase::Fulu => self
+                .execute::<RawForkChoiceUpdatedResponse<PayloadStatusV1>>(
                     ENGINE_FORKCHOICE_UPDATED_V3,
                     params,
                     Some(ENGINE_FORKCHOICE_UPDATED_TIMEOUT),
@@ -430,9 +465,9 @@ impl Eth1Api {
                 )
                 .await?
                 .result
-            }
-            Phase::Gloas | Phase::Heze => {
-                self.execute(
+                .into_common_parts(),
+            Phase::Gloas => self
+                .execute::<RawForkChoiceUpdatedResponse<PayloadStatusV1>>(
                     ENGINE_FORKCHOICE_UPDATED_V4,
                     params,
                     Some(ENGINE_FORKCHOICE_UPDATED_TIMEOUT),
@@ -440,7 +475,17 @@ impl Eth1Api {
                 )
                 .await?
                 .result
-            }
+                .into_common_parts(),
+            Phase::Heze => self
+                .execute::<RawForkChoiceUpdatedResponse<PayloadStatusV2>>(
+                    ENGINE_FORKCHOICE_UPDATED_V5,
+                    params,
+                    Some(ENGINE_FORKCHOICE_UPDATED_TIMEOUT),
+                    None,
+                )
+                .await?
+                .result
+                .into_common_parts(),
             _ => {
                 // This match arm will silently match any new phases.
                 // Cause a compilation error if a new phase is added.
@@ -456,7 +501,8 @@ impl Eth1Api {
             Phase::Deneb => payload_id.map(PayloadId::Deneb),
             Phase::Electra => payload_id.map(PayloadId::Electra),
             Phase::Fulu => payload_id.map(PayloadId::Fulu),
-            Phase::Gloas | Phase::Heze => payload_id.map(PayloadId::Gloas),
+            Phase::Gloas => payload_id.map(PayloadId::Gloas),
+            Phase::Heze => payload_id.map(PayloadId::Gloas),
             _ => {
                 // This match arm will silently match any new phases.
                 // Cause a compilation error if a new phase is added.
@@ -680,9 +726,15 @@ impl Eth1Api {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RawForkChoiceUpdatedResponse {
-    payload_status: PayloadStatusV1,
+struct RawForkChoiceUpdatedResponse<T> {
+    payload_status: T,
     payload_id: Option<H64>,
+}
+
+impl<T: Into<PayloadStatus>> RawForkChoiceUpdatedResponse<T> {
+    fn into_common_parts(self) -> (PayloadStatus, Option<H64>) {
+        (self.payload_status.into(), self.payload_id)
+    }
 }
 
 #[derive(Debug, Error)]
@@ -1190,12 +1242,13 @@ mod tests {
             .new_payload::<Mainnet>(default_payload(), None)
             .await?;
 
-        let expected_status = PayloadStatusV1 {
+        let expected_status = PayloadStatus {
             status: PayloadValidationStatus::Valid,
             latest_valid_hash: Some(H256(hex!(
                 "0da76c72389ffe8b8bef1266213dd0dc4bf7030293913bfd69869cb349b13d35"
             ))),
             validation_error: None,
+            inclusion_list_satisfied: None,
         };
 
         assert_eq!(actual_status, expected_status);
@@ -1243,12 +1296,13 @@ mod tests {
             .new_payload::<Mainnet>(default_payload(), None)
             .await?;
 
-        let expected_status = PayloadStatusV1 {
+        let expected_status = PayloadStatus {
             status: PayloadValidationStatus::Invalid,
             latest_valid_hash: Some(H256(hex!(
                 "5669a0cec34c19c288b9db210ea180d11ad3d92975234bdc769610b5fa4d7f80"
             ))),
             validation_error: None,
+            inclusion_list_satisfied: None,
         };
 
         assert_eq!(actual_status, expected_status);

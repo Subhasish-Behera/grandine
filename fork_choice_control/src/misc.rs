@@ -5,7 +5,7 @@ use anyhow::Result;
 use clock::Tick;
 use derivative::Derivative;
 use eth2_libp2p::GossipId;
-use execution_engine::PayloadStatusV1;
+use execution_engine::PayloadStatus;
 use fork_choice_store::{
     AggregateAndProofAction, AggregateAndProofOrigin, AttestationAction, AttestationItem,
     AttestationValidationError, BlobSidecarOrigin, BlockItem, BlockOrigin, ChainLink,
@@ -41,7 +41,7 @@ pub struct Delayed<P: Preset> {
     pub blocks: Vec<PendingBlock<P>>,
     pub unverified_blocks: Vec<PendingBlock<P>>,
     // There can only be one payload status per block
-    pub payload_status: Option<(PayloadStatusV1, Slot)>,
+    pub payload_status: Option<(PayloadStatus, Slot)>,
     pub aggregates: Vec<PendingAggregateAndProof<P>>,
     pub attestations: Vec<PendingAttestation<P>>,
     pub payload_attestations: Vec<PayloadAttestationItem<P>>,

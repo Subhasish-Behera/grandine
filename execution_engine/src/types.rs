@@ -667,6 +667,24 @@ pub struct PayloadAttributesV4<P: Preset> {
     pub target_gas_limit: Gas,
 }
 
+/// [`PayloadAttributesV5`](https://github.com/ethereum/execution-apis/blob/bf20b4083284e677db19e7f3871bd669b88354a6/src/engine/bogota.md#payloadattributesv5)
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase", bound = "")]
+pub struct PayloadAttributesV5<P: Preset> {
+    #[serde(with = "serde_utils::prefixed_hex_quantity")]
+    pub timestamp: UnixSeconds,
+    pub prev_randao: H256,
+    pub suggested_fee_recipient: ExecutionAddress,
+    pub withdrawals: ContiguousList<WithdrawalV1, P::MaxWithdrawalsPerPayload>,
+    pub parent_beacon_block_root: H256,
+    #[serde(with = "serde_utils::prefixed_hex_quantity")]
+    pub slot_number: Slot,
+    #[serde(with = "serde_utils::prefixed_hex_quantity")]
+    pub target_gas_limit: Gas,
+    pub inclusion_list_transactions:
+        ContiguousList<GloasTransaction<P>, P::MaxTransactionsPerPayload>,
+}
+
 /// [`engine_getPayloadV1` response](https://github.com/ethereum/execution-apis/blob/b7c5d3420e00648f456744d121ffbd929862924d/src/engine/paris.md#response-2).
 pub type EngineGetPayloadV1Response<P> = ExecutionPayloadV1<P>;
 
@@ -876,6 +894,7 @@ pub enum PayloadAttributes<P: Preset> {
     Electra(PayloadAttributesV3<P>),
     Fulu(PayloadAttributesV3<P>),
     Gloas(PayloadAttributesV4<P>),
+    Heze(PayloadAttributesV5<P>),
 }
 
 impl<P: Preset> PayloadAttributes<P> {
@@ -888,6 +907,7 @@ impl<P: Preset> PayloadAttributes<P> {
             Self::Electra(_) => Phase::Electra,
             Self::Fulu(_) => Phase::Fulu,
             Self::Gloas(_) => Phase::Gloas,
+            Self::Heze(_) => Phase::Heze,
         }
     }
 }
@@ -900,6 +920,17 @@ pub struct PayloadStatusV1 {
     pub status: PayloadValidationStatus,
     pub latest_valid_hash: Option<ExecutionBlockHash>,
     pub validation_error: Option<String>,
+}
+
+/// [`PayloadStatusV2`](https://github.com/ethereum/execution-apis/blob/bf20b4083284e677db19e7f3871bd669b88354a6/src/engine/bogota.md#payloadstatusv2)
+#[derive(Clone, PartialEq, Eq, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(Serialize))]
+pub struct PayloadStatusV2 {
+    pub status: PayloadValidationStatus,
+    pub latest_valid_hash: Option<ExecutionBlockHash>,
+    pub validation_error: Option<String>,
+    pub inclusion_list_satisfied: Option<bool>,
 }
 
 /// [`WithdrawalV1`](https://github.com/ethereum/execution-apis/blob/b7c5d3420e00648f456744d121ffbd929862924d/src/engine/shanghai.md#withdrawalv1)
@@ -982,7 +1013,7 @@ impl PayloadValidationStatus {
 /// [`engine_forkchoiceUpdated` response](https://github.com/ethereum/execution-apis/blob/b7c5d3420e00648f456744d121ffbd929862924d/src/engine/paris.md#response-1)
 #[derive(Debug)]
 pub struct ForkChoiceUpdatedResponse {
-    pub payload_status: PayloadStatusV1,
+    pub payload_status: PayloadStatus,
     pub payload_id: Option<PayloadId>,
 }
 
@@ -1005,17 +1036,19 @@ pub struct PayloadStatusWithBlockHash {
 
 // `PayloadStatusV1` is deserialized from data containing keys in `camelCase`,
 // whereas `consensus-spec-tests` and `grandine-snapshot-tests` use `snake_case`.
-#[derive(Deserialize, Debug)]
+// Also the common type for `PayloadStatusV1`/`V2` responses (with `inclusion_list_satisfied`).
+#[derive(Clone, PartialEq, Eq, Deserialize, Debug)]
 #[serde(deny_unknown_fields)]
 pub struct PayloadStatus {
-    status: PayloadValidationStatus,
-    latest_valid_hash: Option<ExecutionBlockHash>,
-    validation_error: Option<String>,
+    pub status: PayloadValidationStatus,
+    pub latest_valid_hash: Option<ExecutionBlockHash>,
+    pub validation_error: Option<String>,
+    pub inclusion_list_satisfied: Option<bool>,
 }
 
-impl From<PayloadStatus> for PayloadStatusV1 {
-    fn from(payload_status: PayloadStatus) -> Self {
-        let PayloadStatus {
+impl From<PayloadStatusV1> for PayloadStatus {
+    fn from(payload_status: PayloadStatusV1) -> Self {
+        let PayloadStatusV1 {
             status,
             latest_valid_hash,
             validation_error,
@@ -1025,6 +1058,25 @@ impl From<PayloadStatus> for PayloadStatusV1 {
             status,
             latest_valid_hash,
             validation_error,
+            inclusion_list_satisfied: None,
+        }
+    }
+}
+
+impl From<PayloadStatusV2> for PayloadStatus {
+    fn from(payload_status: PayloadStatusV2) -> Self {
+        let PayloadStatusV2 {
+            status,
+            latest_valid_hash,
+            validation_error,
+            inclusion_list_satisfied,
+        } = payload_status;
+
+        Self {
+            status,
+            latest_valid_hash,
+            validation_error,
+            inclusion_list_satisfied,
         }
     }
 }
@@ -1583,6 +1635,31 @@ mod tests {
 
         assert_eq!(
             serde_json::from_value::<PayloadStatusV1>(json.clone())?,
+            payload_status,
+        );
+        assert_eq!(serde_json::to_value(payload_status)?, json);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_payload_status_v2_round_trip() -> Result<()> {
+        let json = json!({
+            "status": "VALID",
+            "latestValidHash": null,
+            "validationError": null,
+            "inclusionListSatisfied": true,
+        });
+
+        let payload_status = PayloadStatusV2 {
+            status: PayloadValidationStatus::Valid,
+            latest_valid_hash: None,
+            validation_error: None,
+            inclusion_list_satisfied: Some(true),
+        };
+
+        assert_eq!(
+            serde_json::from_value::<PayloadStatusV2>(json.clone())?,
             payload_status,
         );
         assert_eq!(serde_json::to_value(payload_status)?, json);

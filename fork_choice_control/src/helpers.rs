@@ -7,7 +7,7 @@ use crossbeam_utils::sync::WaitGroup;
 use eth2_libp2p::GossipId;
 use execution_engine::{
     EngineGetBlobsParams, EngineGetBlobsV1Params, EngineGetBlobsV2Params, ExecutionServiceMessage,
-    MockExecutionEngine, PayloadStatusV1, PayloadValidationStatus,
+    MockExecutionEngine, PayloadStatus as EnginePayloadStatus, PayloadValidationStatus,
 };
 use fork_choice_store::{AttestationItem, AttestationOrigin};
 use futures::channel::mpsc::UnboundedReceiver;
@@ -761,7 +761,7 @@ impl<P: Preset> Context<P> {
         &self,
         beacon_block_root: H256,
         block_hash: ExecutionBlockHash,
-        payload_status: PayloadStatusV1,
+        payload_status: EnginePayloadStatus,
     ) {
         self.controller()
             .on_notified_new_payload(beacon_block_root, block_hash, payload_status);
@@ -933,7 +933,7 @@ impl<P: Preset> Context<P> {
         self.on_notified_new_payload(
             block.message().hash_tree_root(),
             execution_block_hash,
-            PayloadStatusV1 {
+            EnginePayloadStatus {
                 status: PayloadValidationStatus::Valid,
                 // According to the [Engine API specification], if the payload is valid,
                 // `latest_valid_hash` must equal `execution_block_hash`.
@@ -941,6 +941,7 @@ impl<P: Preset> Context<P> {
                 // [Engine API specification]: https://github.com/ethereum/execution-apis/blob/b7c5d3420e00648f456744d121ffbd929862924d/src/engine/paris.md#payload-validation
                 latest_valid_hash: Some(execution_block_hash),
                 validation_error: None,
+                inclusion_list_satisfied: None,
             },
         );
     }
@@ -953,10 +954,11 @@ impl<P: Preset> Context<P> {
         self.on_notified_new_payload(
             block.message().hash_tree_root(),
             Self::execution_block_hash(block),
-            PayloadStatusV1 {
+            EnginePayloadStatus {
                 status: PayloadValidationStatus::Invalid,
                 latest_valid_hash: latest_valid_block.map(Self::execution_block_hash),
                 validation_error: None,
+                inclusion_list_satisfied: None,
             },
         );
     }

@@ -4175,11 +4175,22 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
             .map(misc::kzg_commitment_to_versioned_hash)
             .collect();
 
-        let params = Some(ExecutionPayloadParams::Gloas {
-            versioned_hashes,
-            parent_beacon_block_root,
-            execution_requests: envelope.message.execution_requests.clone(),
-        });
+        let execution_requests = envelope.message.execution_requests.clone();
+
+        let params = if state.phase() >= Phase::Heze {
+            Some(ExecutionPayloadParams::Heze {
+                versioned_hashes,
+                parent_beacon_block_root,
+                execution_requests,
+                inclusion_list_transactions: Vec::new(),
+            })
+        } else {
+            Some(ExecutionPayloadParams::Gloas {
+                versioned_hashes,
+                parent_beacon_block_root,
+                execution_requests,
+            })
+        };
 
         let payload = envelope.message.payload.clone().into();
 

@@ -20,7 +20,7 @@ use anyhow::{Context as _, Result};
 use arc_swap::{ArcSwap, Guard};
 use clock::Tick;
 use eth2_libp2p::{GossipId, PeerId};
-use execution_engine::{ExecutionEngine, PayloadStatusV1};
+use execution_engine::{ExecutionEngine, PayloadStatus};
 use fork_choice_store::{
     AggregateAndProofOrigin, AttestationItem, AttestationOrigin, AttesterSlashingOrigin,
     BlobSidecarOrigin, BlockItem, BlockOrigin, DataColumnSidecarOrigin, ExecutionPayloadBidOrigin,
@@ -483,7 +483,7 @@ where
         })
     }
 
-    pub fn on_notified_fork_choice_update(&self, payload_status: PayloadStatusV1) {
+    pub fn on_notified_fork_choice_update(&self, payload_status: PayloadStatus) {
         MutatorMessage::NotifiedForkChoiceUpdate {
             wait_group: self.owned_wait_group(),
             payload_status,
@@ -517,7 +517,7 @@ where
         &self,
         beacon_block_root: H256,
         execution_block_hash: ExecutionBlockHash,
-        payload_status: PayloadStatusV1,
+        payload_status: PayloadStatus,
     ) {
         MutatorMessage::NotifiedNewPayload {
             wait_group: self.owned_wait_group(),
