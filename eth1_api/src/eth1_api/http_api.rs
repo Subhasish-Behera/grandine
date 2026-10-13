@@ -25,6 +25,7 @@ use types::{
     combined::{ExecutionPayload, ExecutionPayloadParams},
     config::Config,
     deneb::primitives::VersionedHash,
+    gloas::primitives::Transaction,
     nonstandard::{Phase, WithBlobsAndMev},
     phase0::primitives::{ExecutionBlockHash, ExecutionBlockNumber},
     preset::Preset,
@@ -46,10 +47,10 @@ use crate::{
     eth1_api::{
         ENGINE_FORKCHOICE_UPDATED_V1, ENGINE_FORKCHOICE_UPDATED_V2, ENGINE_FORKCHOICE_UPDATED_V3,
         ENGINE_FORKCHOICE_UPDATED_V4, ENGINE_FORKCHOICE_UPDATED_V5, ENGINE_GET_EL_BLOBS_V1,
-        ENGINE_GET_EL_BLOBS_V2, ENGINE_GET_PAYLOAD_V1, ENGINE_GET_PAYLOAD_V2,
-        ENGINE_GET_PAYLOAD_V3, ENGINE_GET_PAYLOAD_V4, ENGINE_GET_PAYLOAD_V5, ENGINE_GET_PAYLOAD_V6,
-        ENGINE_NEW_PAYLOAD_V1, ENGINE_NEW_PAYLOAD_V2, ENGINE_NEW_PAYLOAD_V3, ENGINE_NEW_PAYLOAD_V4,
-        ENGINE_NEW_PAYLOAD_V5, ENGINE_NEW_PAYLOAD_V6,
+        ENGINE_GET_EL_BLOBS_V2, ENGINE_GET_INCLUSION_LIST_V1, ENGINE_GET_PAYLOAD_V1,
+        ENGINE_GET_PAYLOAD_V2, ENGINE_GET_PAYLOAD_V3, ENGINE_GET_PAYLOAD_V4, ENGINE_GET_PAYLOAD_V5,
+        ENGINE_GET_PAYLOAD_V6, ENGINE_NEW_PAYLOAD_V1, ENGINE_NEW_PAYLOAD_V2, ENGINE_NEW_PAYLOAD_V3,
+        ENGINE_NEW_PAYLOAD_V4, ENGINE_NEW_PAYLOAD_V5, ENGINE_NEW_PAYLOAD_V6,
     },
     eth1_block::Eth1Block,
 };
@@ -58,6 +59,7 @@ const ENGINE_FORKCHOICE_UPDATED_TIMEOUT: Duration = Duration::from_secs(8);
 // In some of our setups 1 second is not enough to get blobs from the execution client
 const ENGINE_GET_BLOBS_TIMEOUT: Duration = Duration::from_secs(2);
 const ENGINE_GET_PAYLOAD_TIMEOUT: Duration = Duration::from_secs(1);
+const ENGINE_GET_INCLUSION_LIST_TIMEOUT: Duration = Duration::from_secs(1);
 const ENGINE_NEW_PAYLOAD_TIMEOUT: Duration = Duration::from_secs(8);
 
 #[expect(clippy::struct_field_names)]
@@ -178,6 +180,17 @@ impl Eth1Api {
             params,
             Some(ENGINE_GET_BLOBS_TIMEOUT),
             Some(ENGINE_GET_EL_BLOBS_V2),
+        )
+        .await
+        .map(WithClientVersions::result)
+    }
+
+    pub(crate) async fn get_inclusion_list<P: Preset>(&self) -> Result<Vec<Transaction<P>>> {
+        self.execute(
+            ENGINE_GET_INCLUSION_LIST_V1,
+            vec![],
+            Some(ENGINE_GET_INCLUSION_LIST_TIMEOUT),
+            Some(ENGINE_GET_INCLUSION_LIST_V1),
         )
         .await
         .map(WithClientVersions::result)

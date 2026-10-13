@@ -13,6 +13,7 @@ use tokio::runtime::{Builder, Handle};
 use types::{
     combined::{ExecutionPayload, ExecutionPayloadParams},
     config::Config,
+    gloas::primitives::Transaction,
     nonstandard::{Phase, TimedPowBlock, WithBlobsAndMev},
     phase0::primitives::{ExecutionBlockHash, H256},
     preset::Preset,
@@ -137,6 +138,10 @@ impl<P: Preset> ExecutionEngine<P> for Eth1ExecutionEngine<P> {
 impl<P: Preset> Eth1ExecutionEngine<P> {
     pub fn client_versions(&self) -> impl Iterator<Item = Arc<ClientVersions>> {
         self.eth1_api.client_versions()
+    }
+
+    pub async fn get_inclusion_list(&self) -> Result<Vec<Transaction<P>>> {
+        self.eth1_api.get_inclusion_list::<P>().await
     }
 
     pub async fn get_execution_payload(
