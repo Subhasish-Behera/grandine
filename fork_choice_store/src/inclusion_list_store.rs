@@ -3,7 +3,10 @@
 //! Model: `(slot, dependent_root) -> validator_index -> entry` (the list and whether it arrived
 //! timely), plus the equivocators per key. Equivocators are left out of every read.
 //!
-//! In the spec this is the single global `InclusionListStore`.
+//! It is a field of `Store`. Entries below the finalized slot are pruned when finalization
+//! advances.
+//!
+//! In the spec this is the single global `InclusionListStore`; here it lives in `Store`.
 #![allow(dead_code)]
 
 use std::{

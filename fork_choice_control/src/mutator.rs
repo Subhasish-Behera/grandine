@@ -3056,8 +3056,17 @@ where
         let old_head = self.store.head().clone();
         let head_was_optimistic = old_head.is_optimistic();
 
+        if payload_status.status.is_valid()
+            && let Some(chain_link) = self
+                .store
+                .unfinalized_chain_link_by_execution_block_hash(latest_valid_hash)
+        {
+            self.record_payload_inclusion_list_satisfaction(chain_link.block_root, payload_status);
+        }
+
         self.store_mut()
             .update_chain_payload_statuses(latest_valid_hash, None);
+
         self.update_store_snapshot();
 
         self.handle_potential_head_change(wait_group, &old_head, head_was_optimistic);
@@ -3079,6 +3088,8 @@ where
         let old_head = self.store.head().clone();
         let head_was_optimistic = old_head.is_optimistic();
         let latest_valid_hash = payload_status.latest_valid_hash;
+
+        self.record_payload_inclusion_list_satisfaction(beacon_block_root, &payload_status);
 
         let payload_action = if let Some(valid_hash) = latest_valid_hash {
             self.store_mut()
@@ -3138,6 +3149,32 @@ where
         }
 
         self.handle_potential_head_change(wait_group, &old_head, head_was_optimistic);
+    }
+
+    /// Record the concrete inclusion-list verdict returned for a valid Heze payload.
+    /// Optimistic and invalid results are derived from the chain link's payload status.
+    fn record_payload_inclusion_list_satisfaction(
+        &mut self,
+        beacon_block_root: H256,
+        payload_status: &EnginePayloadStatus,
+    ) {
+        if !payload_status.status.is_valid() {
+            return;
+        }
+
+        let is_heze = self
+            .store
+            .chain_link(beacon_block_root)
+            .is_some_and(|chain_link| chain_link.block.phase() >= Phase::Heze);
+
+        if !is_heze {
+            return;
+        }
+
+        self.store_mut().record_payload_inclusion_list_satisfaction(
+            beacon_block_root,
+            payload_status.inclusion_list_satisfied.unwrap_or(false),
+        );
     }
 
     fn handle_potential_head_change(
