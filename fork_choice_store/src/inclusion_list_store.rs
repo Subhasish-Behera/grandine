@@ -153,6 +153,68 @@ impl<P: Preset> InclusionListStore<P> {
         bits
     }
 
+    /// Stored lists of the committee members at the set positions of `indices`, for an
+    /// `InclusionListsByIndices` response. Skips equivocators and members without a stored list. A
+    /// validator filling several positions (small committees wrap around) is returned once.
+    #[must_use]
+    pub fn signed_inclusion_lists_by_indices(
+        &self,
+        committee: &InclusionListCommittee<P>,
+        slot: Slot,
+        dependent_root: H256,
+        indices: &BitVector<P::InclusionListCommitteeSize>,
+    ) -> Vec<Arc<SignedInclusionList<P>>> {
+        let key = (slot, dependent_root);
+        let Some(by_validator) = self.inclusion_lists.get(&key) else {
+            return Vec::new();
+        };
+        let equivocators = self.equivocators.get(&key);
+
+        let requested = committee
+            .iter()
+            .zip(*indices)
+            .filter(|(_, requested)| *requested)
+            .map(|(validator_index, _)| *validator_index)
+            .collect::<HashSet<_>>();
+
+        requested
+            .into_iter()
+            // > Clients SHOULD NOT respond with inclusion lists from equivocators for the requested
+            // > `slot` and `dependent_root`.
+            // Spec <https://github.com/ethereum/consensus-specs/blob/v1.7.0-beta.1/specs/heze/p2p-interface.md#inclusionlistsbyindices-v1>.
+            .filter(|validator_index| {
+                !equivocators.is_some_and(|set| set.contains(validator_index))
+            })
+            .filter_map(|validator_index| by_validator.get(&validator_index))
+            .map(|entry| Arc::clone(&entry.signed_inclusion_list))
+            .collect()
+    }
+
+    /// Committee positions worth requesting through `InclusionListsByIndices`: the member has no
+    /// stored list and is not an equivocator. Not `!get_inclusion_list_bits`, which also clears the
+    /// bits of equivocators, whose lists are never used.
+    #[must_use]
+    pub fn missing_members(
+        &self,
+        committee: &InclusionListCommittee<P>,
+        slot: Slot,
+        dependent_root: H256,
+    ) -> Vec<(usize, ValidatorIndex)> {
+        let key = (slot, dependent_root);
+        let by_validator = self.inclusion_lists.get(&key);
+        let equivocators = self.equivocators.get(&key);
+
+        committee
+            .iter()
+            .copied()
+            .enumerate()
+            .filter(|(_, validator_index)| {
+                !by_validator.is_some_and(|map| map.contains_key(validator_index))
+                    && !equivocators.is_some_and(|set| set.contains(validator_index))
+            })
+            .collect()
+    }
+
     /// [`is_inclusion_list_bits_inclusive`](https://github.com/ethereum/consensus-specs/blob/v1.7.0-beta.1/specs/heze/inclusion-list.md#new-is_inclusion_list_bits_inclusive)
     #[must_use]
     pub fn is_inclusion_list_bits_inclusive(
