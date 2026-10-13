@@ -104,6 +104,7 @@ pub mod gloas {
 
 pub mod heze {
     pub mod beacon_state;
+    pub mod consts;
     pub mod containers;
 
     mod container_impls;
@@ -113,7 +114,8 @@ pub mod heze {
 }
 
 pub use collections::{
-    PayloadExpectedWithdrawals, PendingDeposits, ProposerLookahead, Ptc, PtcWindow, Validators,
+    InclusionListCommittee, PayloadExpectedWithdrawals, PendingDeposits, ProposerLookahead, Ptc,
+    PtcWindow, Validators,
 };
 
 mod collections;

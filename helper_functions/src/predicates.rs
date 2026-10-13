@@ -27,6 +27,7 @@ use types::{
         },
         primitives::BuilderIndex,
     },
+    heze::containers::SignedInclusionList,
     nonstandard::PartialValidator,
     phase0::{
         consts::{ETH1_ADDRESS_WITHDRAWAL_PREFIX, FAR_FUTURE_EPOCH, TargetAggregatorsPerCommittee},
@@ -597,6 +598,24 @@ pub fn is_valid_builder_deposit_signature(
     pubkey_cache
         .get_or_insert(pubkey)
         .and_then(|decompressed| deposit_message.verify(config, signature, decompressed))
+        .is_ok()
+}
+
+/// [`is_valid_inclusion_list_signature`](https://github.com/ethereum/consensus-specs/blob/v1.7.0-beta.1/specs/heze/beacon-chain.md#new-is_valid_inclusion_list_signature)
+#[must_use]
+pub fn is_valid_inclusion_list_signature<P: Preset>(
+    config: &Config,
+    pubkey_cache: &PubkeyCache,
+    state: &impl BeaconState<P>,
+    signed_inclusion_list: &SignedInclusionList<P>,
+) -> bool {
+    let message = &signed_inclusion_list.message;
+
+    accessors::public_key(state, message.validator_index)
+        .and_then(|pubkey| pubkey_cache.get_or_insert(*pubkey))
+        .and_then(|decompressed| {
+            message.verify(config, state, signed_inclusion_list.signature, decompressed)
+        })
         .is_ok()
 }
 

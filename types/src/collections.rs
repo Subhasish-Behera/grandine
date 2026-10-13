@@ -108,5 +108,8 @@ pub type PayloadExpectedWithdrawals = PersistentProgressiveList<Withdrawal>;
 
 pub type Ptc<P> = ContiguousVector<ValidatorIndex, <P as Preset>::PtcSize>;
 
+pub type InclusionListCommittee<P> =
+    ContiguousVector<ValidatorIndex, <P as Preset>::InclusionListCommitteeSize>;
+
 pub type PtcWindow<P> =
     IncompletePersistentVector<Ptc<P>, PtcWindowLength<P>, UnhashedBundleSize<Ptc<P>>>;
