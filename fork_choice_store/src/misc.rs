@@ -34,6 +34,7 @@ use types::{
         },
         primitives::PayloadStatus as RawPayloadPresence,
     },
+    heze::containers::SignedInclusionList,
     nonstandard::{
         PayloadStatus, Phase, Publishable, StorageMode, ValidationOutcome,
         ValidationOutcomeWithReason,
@@ -1284,6 +1285,47 @@ pub enum ProposerPreferencesAction {
     Accept(Arc<SignedProposerPreferences>),
     Ignore(Publishable),
     DelayUntilBlock(Arc<SignedProposerPreferences>),
+}
+
+pub enum InclusionListAction<P: Preset> {
+    Accept {
+        signed_inclusion_list: Arc<SignedInclusionList<P>>,
+        is_timely: bool,
+    },
+    Ignore,
+}
+
+#[derive(Debug)]
+pub enum InclusionListOrigin {
+    Gossip(GossipId),
+}
+
+impl InclusionListOrigin {
+    #[must_use]
+    pub fn gossip_id(self) -> Option<GossipId> {
+        match self {
+            Self::Gossip(gossip_id) => Some(gossip_id),
+        }
+    }
+
+    #[must_use]
+    pub const fn peer_id(&self) -> Option<PeerId> {
+        match self {
+            Self::Gossip(gossip_id) => Some(gossip_id.source),
+        }
+    }
+
+    #[must_use]
+    pub const fn verify_signatures(&self) -> bool {
+        match self {
+            Self::Gossip(_) => true,
+        }
+    }
+
+    #[must_use]
+    pub const fn is_from_gossip(&self) -> bool {
+        matches!(self, Self::Gossip(_))
+    }
 }
 
 pub enum PartialBlockAction {

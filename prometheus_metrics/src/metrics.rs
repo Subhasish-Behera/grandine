@@ -84,6 +84,7 @@ pub struct Metrics {
     mutator_attestations: IntCounterVec,
     mutator_aggregate_and_proofs: IntCounterVec,
     mutator_execution_payload_envelopes: IntCounterVec,
+    mutator_inclusion_lists: IntCounterVec,
     mutator_payload_attestations: IntCounterVec,
     mutator_proposer_preferences: IntCounterVec,
 
@@ -462,6 +463,14 @@ impl Metrics {
                 opts!(
                     "MUTATOR_EXECUTION_PAYLOAD_ENVELOPES",
                     "Counter for different execution payload envelopes (delayed/ignored etc) for Mutator",
+                ),
+                &["type"],
+            )?,
+
+            mutator_inclusion_lists: IntCounterVec::new(
+                opts!(
+                    "MUTATOR_INCLUSION_LISTS",
+                    "Counter for different inclusion lists (accepted/ignored/rejected) for Mutator",
                 ),
                 &["type"],
             )?,
@@ -1082,6 +1091,7 @@ impl Metrics {
         default_registry.register(Box::new(self.mutator_attestations.clone()))?;
         default_registry.register(Box::new(self.mutator_aggregate_and_proofs.clone()))?;
         default_registry.register(Box::new(self.mutator_execution_payload_envelopes.clone()))?;
+        default_registry.register(Box::new(self.mutator_inclusion_lists.clone()))?;
         default_registry.register(Box::new(self.mutator_payload_attestations.clone()))?;
         default_registry.register(Box::new(self.mutator_proposer_preferences.clone()))?;
         default_registry.register(Box::new(self.block_insertion_times.clone()))?;
@@ -1484,6 +1494,20 @@ impl Metrics {
             Err(error) => {
                 warn_with_peers!(
                     "unable to register mutator execution payload envelope for {labels:?}: {error:?}"
+                )
+            }
+        }
+    }
+
+    pub fn register_mutator_inclusion_list(&self, labels: &[&str]) {
+        match self
+            .mutator_inclusion_lists
+            .get_metric_with_label_values(labels)
+        {
+            Ok(counter) => counter.inc(),
+            Err(error) => {
+                warn_with_peers!(
+                    "unable to register mutator inclusion list for {labels:?}: {error:?}"
                 )
             }
         }

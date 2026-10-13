@@ -28,6 +28,7 @@ use types::{
     gloas::containers::{
         PayloadEnvelopeIdentifier, SignedExecutionPayloadEnvelope, SignedProposerPreferences,
     },
+    heze::containers::InclusionListIdentifier,
     phase0::primitives::{Slot, ValidatorIndex},
     preset::Preset,
 };
@@ -259,6 +260,10 @@ pub enum MutatorRejectionReason {
     InvalidPayloadBid,
     InvalidPayloadAttestation,
     InvalidProposerPreferences,
+    #[strum(serialize = "invalid_inclusion_list")]
+    InvalidInclusionList {
+        inclusion_list_identifier: InclusionListIdentifier,
+    },
 }
 
 pub enum BlockBlobAvailability {

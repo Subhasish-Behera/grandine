@@ -2631,6 +2631,21 @@ impl<P: Preset, W: Wait> Network<P, W> {
                     GossipId { source, message_id },
                 );
             }
+            PubsubMessage::InclusionList(signed_inclusion_list) => {
+                if let Some(metrics) = self.metrics.as_ref() {
+                    metrics.register_gossip_object(&["inclusion_list"]);
+                }
+
+                trace_with_peers!(
+                    "received signed inclusion list as gossip: \
+                    {signed_inclusion_list:?} from {source}"
+                );
+
+                self.controller.on_gossip_inclusion_list(
+                    signed_inclusion_list,
+                    GossipId { source, message_id },
+                );
+            }
             PubsubMessage::LightClientFinalityUpdate(_) => {
                 debug_with_peers!("received light client finality update as gossip");
             }

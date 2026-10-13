@@ -38,9 +38,9 @@ use fork_choice_store::{
     BlobSidecarAction, BlobSidecarOrigin, BlockAction, BlockItem, BlockOrigin, ChainLink,
     DataColumnSidecarAction, DataColumnSidecarOrigin, Error, ExecutionPayloadBidAction,
     ExecutionPayloadBidOrigin, ExecutionPayloadEnvelopeAction, ExecutionPayloadEnvelopeOrigin,
-    PayloadAction, PayloadAttestationAction, PayloadAttestationItem, PayloadPresence,
-    ProposerPreferencesAction, ProposerPreferencesOrigin, StateCacheProcessor, Store,
-    ValidAttestation, ValidPayloadAttestation,
+    InclusionListAction, InclusionListOrigin, PayloadAction, PayloadAttestationAction,
+    PayloadAttestationItem, PayloadPresence, ProposerPreferencesAction, ProposerPreferencesOrigin,
+    StateCacheProcessor, Store, ValidAttestation, ValidPayloadAttestation,
 };
 use futures::channel::{mpsc::Sender as MultiSender, oneshot::Sender as OneshotSender};
 use helper_functions::{accessors, misc, predicates, verifier::NullVerifier};
@@ -62,6 +62,7 @@ use types::{
     deneb::containers::{BlobIdentifier, BlobSidecar},
     fulu::{containers::DataColumnIdentifier, primitives::ColumnIndex},
     gloas::containers::{PayloadEnvelopeIdentifier, SignedExecutionPayloadEnvelope},
+    heze::containers::InclusionListIdentifier,
     nonstandard::{
         PayloadStatus, Phase, RelativeEpoch, ValidationOutcome, ValidationOutcomeWithReason,
     },
@@ -402,6 +403,15 @@ where
                 } => {
                     self.store_mut().override_finalized_checkpoint(checkpoint);
                     self.update_store_snapshot();
+                    drop(wait_group);
+                }
+                MutatorMessage::InclusionList {
+                    wait_group,
+                    result,
+                    origin,
+                    inclusion_list_identifier,
+                } => {
+                    self.handle_inclusion_list(result, origin, inclusion_list_identifier);
                     drop(wait_group);
                 }
                 MutatorMessage::Stop { save_to_storage } => {
@@ -2812,6 +2822,69 @@ where
         }
 
         self.apply_payload_attestations(wait_group, accepted);
+    }
+
+    fn handle_inclusion_list(
+        &mut self,
+        result: Result<InclusionListAction<P>>,
+        origin: InclusionListOrigin,
+        inclusion_list_identifier: InclusionListIdentifier,
+    ) {
+        let is_from_gossip = origin.is_from_gossip();
+        let gossip_id = origin.gossip_id();
+
+        match result {
+            Ok(InclusionListAction::Accept {
+                signed_inclusion_list,
+                is_timely,
+            }) => {
+                if let Some(metrics) = self.metrics.as_ref() {
+                    metrics.register_mutator_inclusion_list(&["accepted"]);
+                }
+
+                trace_with_peers!(
+                    "inclusion list accepted (validator_index: {}, slot: {}, timely: {})",
+                    signed_inclusion_list.message.validator_index,
+                    signed_inclusion_list.message.slot,
+                    is_timely,
+                );
+
+                if let Some(gossip_id) = gossip_id {
+                    self.send_to_p2p(P2pMessage::Accept(gossip_id));
+                }
+
+                self.store_mut().apply_inclusion_list(
+                    signed_inclusion_list,
+                    is_timely,
+                    is_from_gossip,
+                );
+
+                self.update_store_snapshot();
+            }
+            Ok(InclusionListAction::Ignore) => {
+                if let Some(metrics) = self.metrics.as_ref() {
+                    metrics.register_mutator_inclusion_list(&["ignored"]);
+                }
+
+                if let Some(gossip_id) = gossip_id {
+                    self.send_to_p2p(P2pMessage::Ignore(gossip_id));
+                }
+            }
+            Err(error) => {
+                if let Some(metrics) = self.metrics.as_ref() {
+                    metrics.register_mutator_inclusion_list(&["rejected"]);
+                }
+
+                warn_with_peers!("inclusion list rejected (error: {error:?})");
+
+                self.send_to_p2p(P2pMessage::Reject(
+                    gossip_id,
+                    MutatorRejectionReason::InvalidInclusionList {
+                        inclusion_list_identifier,
+                    },
+                ));
+            }
+        }
     }
 
     fn handle_proposer_preferences(

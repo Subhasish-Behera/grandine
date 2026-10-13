@@ -12,6 +12,7 @@ use types::{
     },
     deneb::containers::BlobSidecar,
     gloas::containers::{SignedExecutionPayloadEnvelope, SignedProposerPreferences},
+    heze::containers::SignedInclusionList,
     phase0::primitives::{Epoch, H256, Slot, SubnetId, ValidatorIndex},
     preset::{Mainnet, Preset},
 };
@@ -274,6 +275,34 @@ pub enum Error<P: Preset> {
     ExecutionPayloadWithdrawalsHashMismatch {
         envelope: Arc<SignedExecutionPayloadEnvelope<P>>,
         expected: Box<PayloadExpectedWithdrawals>,
+    },
+    #[error(
+        "inclusion list transactions exceed the maximum total size \
+         (inclusion_list: {signed_inclusion_list:?}, maximum: {maximum}, actual: {actual})"
+    )]
+    InclusionListTransactionsTooLarge {
+        signed_inclusion_list: Arc<SignedInclusionList<P>>,
+        maximum: usize,
+        actual: usize,
+    },
+    #[error("inclusion list contains an empty transaction: {signed_inclusion_list:?}")]
+    InclusionListTransactionEmpty {
+        signed_inclusion_list: Arc<SignedInclusionList<P>>,
+    },
+    #[error("inclusion list has invalid dependent root: {signed_inclusion_list:?}")]
+    InvalidInclusionListDependentRoot {
+        signed_inclusion_list: Arc<SignedInclusionList<P>>,
+    },
+    #[error(
+        "inclusion list validator is not in the committee \
+         (inclusion_list: {signed_inclusion_list:?})"
+    )]
+    InclusionListValidatorNotInCommittee {
+        signed_inclusion_list: Arc<SignedInclusionList<P>>,
+    },
+    #[error("inclusion list has invalid signature: {signed_inclusion_list:?}")]
+    InvalidInclusionListSignature {
+        signed_inclusion_list: Arc<SignedInclusionList<P>>,
     },
     #[error("proposer preferences has invalid proposal slot: {signed_preferences:?}")]
     InvalidProposerPreferencesProposalSlot {
