@@ -1197,6 +1197,82 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
             .get_inclusion_list_transactions(slot, dependent_root, only_timely)
     }
 
+    /// The `inclusion_list_bits` of the self-built bid.
+    ///
+    /// Spec <https://github.com/ethereum/consensus-specs/blob/v1.7.0-beta.1/specs/heze/builder.md#constructing-the-signedexecutionpayloadbid>.
+    #[must_use]
+    pub fn inclusion_list_bits_for_payload(
+        &self,
+        state: &impl BeaconStateTrait<P>,
+        only_timely: bool,
+    ) -> BitVector<P::InclusionListCommitteeSize> {
+        let slot = state.slot().saturating_sub(1);
+
+        let Ok(committee) = accessors::get_inclusion_list_committee(state, slot) else {
+            return BitVector::default();
+        };
+
+        let Ok(dependent_root) =
+            Self::inclusion_list_dependent_root(state, slot).inspect_err(|error| {
+                warn_with_peers!(
+                    "unable to derive inclusion list dependent root for payload bits \
+                 (IL slot: {slot}, state slot: {}); using empty bits: {error:?}",
+                    state.slot(),
+                );
+            })
+        else {
+            return BitVector::default();
+        };
+
+        self.inclusion_list_store.get_inclusion_list_bits(
+            &committee,
+            slot,
+            dependent_root,
+            only_timely,
+        )
+    }
+
+    /// Whether `payload_bid.inclusion_list_bits` covers this node's view of the lists of slot
+    /// `bid.slot - 1`. Pre-Heze bids, and a committee or dependent root that cannot be derived,
+    /// are counted as inclusive.
+    #[must_use]
+    pub fn is_payload_bid_inclusion_list_inclusive(
+        &self,
+        payload_bid: &SignedExecutionPayloadBid<P>,
+        state: &impl BeaconStateTrait<P>,
+        only_timely: bool,
+    ) -> bool {
+        let SignedExecutionPayloadBid::Heze(heze_bid) = payload_bid else {
+            return true;
+        };
+
+        let slot = heze_bid.message.slot.saturating_sub(1);
+
+        let Ok(committee) = accessors::get_inclusion_list_committee(state, slot) else {
+            return true;
+        };
+
+        let Ok(dependent_root) =
+            Self::inclusion_list_dependent_root(state, slot).inspect_err(|error| {
+                warn_with_peers!(
+                    "unable to derive inclusion list dependent root for bid inclusivity \
+                 (IL slot: {slot}, state slot: {}); treating bid as inclusive: {error:?}",
+                    state.slot(),
+                );
+            })
+        else {
+            return true;
+        };
+
+        self.inclusion_list_store.is_inclusion_list_bits_inclusive(
+            &committee,
+            slot,
+            dependent_root,
+            &heze_bid.message.inclusion_list_bits,
+            only_timely,
+        )
+    }
+
     #[must_use]
     pub fn is_inclusion_list_timely(&self, slot: Slot) -> bool {
         // TODO(heze): Tick-based, so the cutoff is 7.5s instead of the spec's 8.0s (the deadline
@@ -2643,6 +2719,13 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
             if parent_payload_exits_builder {
                 return Ok(ExecutionPayloadBidAction::Ignore("builder may exit"));
             }
+        }
+
+        // > The bid's inclusion list bits is inclusive
+        if !self.is_payload_bid_inclusion_list_inclusive(&payload_bid, state.as_ref(), true) {
+            return Ok(ExecutionPayloadBidAction::Ignore(
+                "`bid.inclusion_list_bits` is not inclusive of the node's inclusion list view",
+            ));
         }
 
         if origin.verify_signatures() {

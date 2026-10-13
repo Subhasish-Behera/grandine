@@ -14,8 +14,10 @@ use std::{
     sync::Arc,
 };
 
-use ssz::SszHash as _;
+use ssz::{BitVector, SszHash as _};
+use typenum::Unsigned as _;
 use types::{
+    InclusionListCommittee,
     gloas::primitives::Transaction,
     heze::containers::SignedInclusionList,
     phase0::primitives::{H256, Slot, ValidatorIndex},
@@ -119,6 +121,53 @@ impl<P: Preset> InclusionListStore<P> {
         }
 
         transactions
+    }
+
+    /// [`get_inclusion_list_bits`](https://github.com/ethereum/consensus-specs/blob/v1.7.0-beta.1/specs/heze/inclusion-list.md#new-get_inclusion_list_bits)
+    #[must_use]
+    pub fn get_inclusion_list_bits(
+        &self,
+        committee: &InclusionListCommittee<P>,
+        slot: Slot,
+        dependent_root: H256,
+        only_timely: bool,
+    ) -> BitVector<P::InclusionListCommitteeSize> {
+        let key = (slot, dependent_root);
+        let Some(by_validator) = self.inclusion_lists.get(&key) else {
+            return BitVector::default();
+        };
+        let equivocators = self.equivocators.get(&key);
+        let mut bits = BitVector::default();
+
+        for (position, &validator_index) in committee.into_iter().enumerate() {
+            let should_set = by_validator.get(&validator_index).is_some_and(|entry| {
+                (!only_timely || entry.timely)
+                    && !equivocators.is_some_and(|set| set.contains(&validator_index))
+            });
+
+            if should_set {
+                bits.set(position, true);
+            }
+        }
+
+        bits
+    }
+
+    /// [`is_inclusion_list_bits_inclusive`](https://github.com/ethereum/consensus-specs/blob/v1.7.0-beta.1/specs/heze/inclusion-list.md#new-is_inclusion_list_bits_inclusive)
+    #[must_use]
+    pub fn is_inclusion_list_bits_inclusive(
+        &self,
+        committee: &InclusionListCommittee<P>,
+        slot: Slot,
+        dependent_root: H256,
+        inclusion_list_bits: &BitVector<P::InclusionListCommitteeSize>,
+        only_timely: bool,
+    ) -> bool {
+        let local = self.get_inclusion_list_bits(committee, slot, dependent_root, only_timely);
+
+        (0..P::InclusionListCommitteeSize::USIZE).all(|position| {
+            local.get(position) != Some(true) || inclusion_list_bits.get(position) == Some(true)
+        })
     }
 
     /// Deletes every entry whose slot is below `floor`. The spec's minimum retention, from

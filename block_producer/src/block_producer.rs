@@ -2046,7 +2046,11 @@ impl<P: Preset, W: Wait> BlockBuildContext<P, W> {
                     execution_payment: 0,
                     blob_kzg_commitments,
                     execution_requests_root,
-                    inclusion_list_bits: BitVector::default(),
+                    inclusion_list_bits: self
+                        .producer_context
+                        .controller
+                        .snapshot()
+                        .inclusion_list_bits_for_payload(self.beacon_state.as_ref(), false),
                 },
                 signature: SignatureBytes::empty(),
             }
@@ -2284,7 +2288,12 @@ impl<P: Preset, W: Wait> BlockBuildContext<P, W> {
                     parent_beacon_block_root: state.latest_block_header().hash_tree_root(),
                     slot_number: state.slot(),
                     target_gas_limit,
-                    inclusion_list_transactions: ContiguousList::default(),
+                    inclusion_list_transactions: self
+                        .producer_context
+                        .controller
+                        .snapshot()
+                        .inclusion_list_transactions_for_payload(state, false)
+                        .pipe(ContiguousList::try_from_iter)?,
                 })
             }
         };
@@ -2480,6 +2489,16 @@ impl<P: Preset, W: Wait> BlockBuildContext<P, W> {
 
         let bid = snapshot
             .selectable_payload_bids(state, state.slot(), parent_block_hash, self.head_block_root)
+            // > The `bid.inclusion_list_bits` must satisfy `is_inclusion_list_bits_inclusive(...,
+            // > only_timely=False)`
+            // Spec <https://github.com/ethereum/consensus-specs/blob/v1.7.0-beta.1/specs/heze/validator.md#signed-execution-payload-bid>.
+            .filter(|bid| {
+                snapshot.is_payload_bid_inclusion_list_inclusive(
+                    bid,
+                    self.beacon_state.as_ref(),
+                    false,
+                )
+            })
             .max_by_key(|bid| bid.message().value())?;
 
         // The bid value is what the builder pays the proposer for the slot, so it is comparable to
