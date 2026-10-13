@@ -15,6 +15,7 @@ use helper_functions::{accessors, misc};
 use itertools::Itertools as _;
 use pubkey_cache::PubkeyCache;
 use serde::Serialize;
+use ssz::BitVector;
 use std_ext::ArcExt;
 use thiserror::Error;
 use tracing::instrument;
@@ -29,7 +30,7 @@ use types::{
     gloas::{
         consts::PAYLOAD_STATUS_FULL,
         containers::SignedExecutionPayloadEnvelope,
-        primitives::{BuilderIndex, PayloadStatus as ExecutionPayloadStatus},
+        primitives::{BuilderIndex, PayloadStatus as ExecutionPayloadStatus, Transaction},
     },
     nonstandard::{PayloadStatus, Phase, RelativeEpoch, WithStatus},
     phase0::{
@@ -37,7 +38,7 @@ use types::{
         primitives::{Epoch, ExecutionBlockHash, Gwei, H256, Slot, UnixSeconds},
     },
     preset::Preset,
-    traits::{BeaconState as _, PostGloasBeaconState, SignedBeaconBlock as _},
+    traits::{BeaconState as BeaconStateTrait, PostGloasBeaconState, SignedBeaconBlock as _},
 };
 
 use crate::{
@@ -1264,6 +1265,37 @@ impl<P: Preset> Snapshot<'_, P> {
     #[must_use]
     pub fn should_build_on_full(&self, slot: Slot) -> bool {
         self.store_snapshot.should_build_on_full(slot)
+    }
+
+    #[must_use]
+    pub fn inclusion_list_transactions_for_payload(
+        &self,
+        state: &impl BeaconStateTrait<P>,
+        only_timely: bool,
+    ) -> Vec<Transaction<P>> {
+        self.store_snapshot
+            .inclusion_list_transactions_for_payload(state, only_timely)
+    }
+
+    #[must_use]
+    pub fn inclusion_list_bits_for_payload(
+        &self,
+        state: &impl BeaconStateTrait<P>,
+        only_timely: bool,
+    ) -> BitVector<P::InclusionListCommitteeSize> {
+        self.store_snapshot
+            .inclusion_list_bits_for_payload(state, only_timely)
+    }
+
+    #[must_use]
+    pub fn is_payload_bid_inclusion_list_inclusive(
+        &self,
+        payload_bid: &SignedExecutionPayloadBid<P>,
+        state: &impl BeaconStateTrait<P>,
+        only_timely: bool,
+    ) -> bool {
+        self.store_snapshot
+            .is_payload_bid_inclusion_list_inclusive(payload_bid, state, only_timely)
     }
 
     #[must_use]
