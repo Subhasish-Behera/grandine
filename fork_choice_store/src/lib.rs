@@ -101,6 +101,7 @@ mod builder_circuit_breaker;
 mod data_column_cache;
 mod error;
 mod execution_payload_envelope_cache;
+mod inclusion_list_store;
 mod misc;
 mod segment;
 mod state_cache_processor;
