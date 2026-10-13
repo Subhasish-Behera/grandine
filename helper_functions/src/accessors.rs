@@ -16,7 +16,7 @@ use tap::{Pipe as _, TryConv as _};
 use try_from_iterator::TryFromIterator as _;
 use typenum::{IsGreaterOrEqual, Sub1, True, Unsigned as _};
 use types::{
-    Ptc,
+    InclusionListCommittee, Ptc,
     altair::{
         consts::{
             DOMAIN_SYNC_COMMITTEE, TIMELY_HEAD_FLAG_INDEX, TIMELY_SOURCE_FLAG_INDEX,
@@ -1091,6 +1091,29 @@ pub fn get_beacon_proposer_indices<P: Preset>(
 pub fn ptc_for_slot<P: Preset>(state: &impl BeaconState<P>, slot: Slot) -> Result<Ptc<P>> {
     let members = beacon_committees(state, slot)?.flatten();
     ptc_from_committee_members(state, slot, members)
+}
+
+/// [`get_inclusion_list_committee`](https://github.com/ethereum/consensus-specs/blob/v1.7.0-beta.1/specs/heze/beacon-chain.md#new-get_inclusion_list_committee)
+pub fn get_inclusion_list_committee<P: Preset>(
+    state: &impl BeaconState<P>,
+    slot: Slot,
+) -> Result<InclusionListCommittee<P>> {
+    let indices = beacon_committees(state, slot)?
+        .flatten()
+        .collect::<Vec<_>>();
+
+    let total = NonZeroU64::new(indices.len().try_conv::<u64>()?)
+        .ok_or(Error::NoInclusionListCommittee { slot })?;
+
+    // Wrap around when the slot has fewer than `InclusionListCommitteeSize` members.
+    InclusionListCommittee::<P>::try_from_iter((0..P::InclusionListCommitteeSize::U64).map(|i| {
+        let index = (i % total)
+            .try_conv::<usize>()
+            .expect("i % total fits in usize because it is less than indices.len()");
+
+        indices[index]
+    }))
+    .map_err(Into::into)
 }
 
 // Compute PTC for any epoch, bypassing the `relative_epoch` cache.

@@ -49,6 +49,8 @@ pub enum Error {
     NoActiveValidators,
     #[error("no committee attesters for {index} committee")]
     NoCommitteeAttesters { index: CommitteeIndex },
+    #[error("no inclusion list committee for slot {slot} (empty beacon committees)")]
+    NoInclusionListCommittee { slot: Slot },
     #[error("attestation data index is invalid for current slot (got: {index}, expected: 0)")]
     InvalidAttestationIndexForCurrentSlot { index: u64 },
     #[error("invalid phase (error: {error:})")]
@@ -109,6 +111,8 @@ pub enum SignatureKind {
     ExecutionPayloadBid,
     #[display("execution payload envelope signature")]
     ExecutionPayloadEnvelope,
+    #[display("inclusion list committee signature")]
+    InclusionListCommittee,
     #[display("collection of multiple signatures")]
     Multi,
     #[display("payload attestation signature")]

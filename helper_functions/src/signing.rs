@@ -40,8 +40,12 @@ use types::{
             ExecutionPayloadEnvelope, PayloadAttestationData, ProposerPreferences,
         },
     },
-    heze::containers::{
-        BeaconBlock as HezeBeaconBlock, ExecutionPayloadBid as HezeExecutionPayloadBid,
+    heze::{
+        consts::DOMAIN_INCLUSION_LIST_COMMITTEE,
+        containers::{
+            BeaconBlock as HezeBeaconBlock, ExecutionPayloadBid as HezeExecutionPayloadBid,
+            InclusionList as HezeInclusionList,
+        },
     },
     phase0::{
         consts::{
@@ -478,6 +482,30 @@ impl<P: Preset> SignForSingleFork<P> for VoluntaryExit {
 impl<P: Preset> SignForSingleForkAtSlot<P> for H256 {
     const DOMAIN_TYPE: DomainType = DOMAIN_SYNC_COMMITTEE;
     const SIGNATURE_KIND: SignatureKind = SignatureKind::SyncCommitteeMessage;
+}
+
+// <https://github.com/ethereum/consensus-specs/blob/v1.7.0-beta.1/specs/heze/beacon-chain.md#new-is_valid_inclusion_list_signature>
+impl<P: Preset> SignForSingleFork<P> for HezeInclusionList<P> {
+    const DOMAIN_TYPE: DomainType = DOMAIN_INCLUSION_LIST_COMMITTEE;
+    const SIGNATURE_KIND: SignatureKind = SignatureKind::InclusionListCommittee;
+
+    fn epoch(&self) -> Epoch {
+        misc::compute_epoch_at_slot::<P>(self.slot)
+    }
+
+    // See <https://github.com/ethereum/consensus-specs/pull/5721>.
+    fn signing_root(&self, config: &Config, beacon_state: &(impl BeaconState<P> + ?Sized)) -> H256 {
+        let epoch = <Self as SignForSingleFork<P>>::epoch(self);
+        let domain_type = <Self as SignForSingleFork<P>>::DOMAIN_TYPE;
+        let fork_version = config.version_at_epoch(epoch);
+        let domain = misc::compute_domain(
+            config,
+            domain_type,
+            Some(fork_version),
+            Some(beacon_state.genesis_validators_root()),
+        );
+        misc::compute_signing_root(self, domain)
+    }
 }
 
 // <https://github.com/ethereum/consensus-specs/blob/v1.6.0-beta.0/specs/gloas/beacon-chain.md#new-is_valid_indexed_payload_attestation>
