@@ -86,6 +86,9 @@ pub struct Config {
     #[serde(with = "serde_utils::string_or_native")]
     pub gloas_fork_epoch: Epoch,
     pub gloas_fork_version: Version,
+    #[serde(with = "serde_utils::string_or_native")]
+    pub heze_fork_epoch: Epoch,
+    pub heze_fork_version: Version,
 
     // Time parameters
     #[serde(with = "serde_utils::string_or_native")]
@@ -124,6 +127,9 @@ pub struct Config {
     pub payload_attestation_due_bps: u64,
     #[serde(with = "serde_utils::string_or_native")]
     pub payload_due_bps: u64,
+
+    #[serde(with = "serde_utils::string_or_native")]
+    pub inclusion_list_due_bps: u64,
 
     // Validator cycle
     #[serde(with = "serde_utils::string_or_native")]
@@ -205,6 +211,12 @@ pub struct Config {
     pub max_request_blob_sidecars_fulu: u64,
     #[serde(with = "serde_utils::string_or_native")]
     pub max_request_payloads: u64,
+    #[serde(with = "serde_utils::string_or_native")]
+    pub max_request_inclusion_list: u64,
+    #[serde(with = "serde_utils::string_or_native")]
+    pub min_slots_for_inclusion_lists_requests: u64,
+    #[serde(with = "serde_utils::string_or_native")]
+    pub max_transactions_bytes_per_inclusion_list: usize,
     pub blob_schedule: Vec<BlobScheduleEntry>,
     pub gas_limit_schedule: Vec<GasLimitScheduleEntry>,
 
@@ -279,6 +291,8 @@ impl Default for Config {
             fulu_fork_version: H32(hex!("06000000")),
             gloas_fork_epoch: FAR_FUTURE_EPOCH,
             gloas_fork_version: H32(hex!("07000000")),
+            heze_fork_epoch: FAR_FUTURE_EPOCH,
+            heze_fork_version: H32(hex!("08000000")),
 
             // Time parameters
             eth1_follow_distance: 2048,
@@ -300,6 +314,9 @@ impl Default for Config {
             contribution_due_bps_gloas: 5000,
             payload_attestation_due_bps: 7500,
             payload_due_bps: 5000,
+
+            // Heze
+            inclusion_list_due_bps: 6667,
 
             // Validator cycle
             churn_limit_quotient: nonzero!(1_u64 << 16),
@@ -347,6 +364,9 @@ impl Default for Config {
             blob_sidecar_subnet_count_electra: nonzero!(9_u64),
             max_request_blob_sidecars_fulu: 1536,
             max_request_payloads: 128,
+            max_request_inclusion_list: 16,
+            min_slots_for_inclusion_lists_requests: 1,
+            max_transactions_bytes_per_inclusion_list: 8192,
             blob_schedule: vec![],
             gas_limit_schedule: vec![],
 
@@ -461,6 +481,7 @@ impl Config {
             electra_fork_version: H32(hex!("05000001")),
             fulu_fork_version: H32(hex!("06000001")),
             gloas_fork_version: H32(hex!("07000001")),
+            heze_fork_version: H32(hex!("08000001")),
 
             // Time parameters
             eth1_follow_distance: 16,
@@ -977,6 +998,7 @@ impl Config {
             Phase::Electra => self.electra_fork_version,
             Phase::Fulu => self.fulu_fork_version,
             Phase::Gloas => self.gloas_fork_version,
+            Phase::Heze => self.heze_fork_version,
         }
     }
 
@@ -998,6 +1020,7 @@ impl Config {
             Phase::Electra => self.electra_fork_epoch,
             Phase::Fulu => self.fulu_fork_epoch,
             Phase::Gloas => self.gloas_fork_epoch,
+            Phase::Heze => self.heze_fork_epoch,
         }
     }
 
@@ -1049,7 +1072,7 @@ impl Config {
             Phase::Phase0 | Phase::Altair | Phase::Bellatrix | Phase::Capella => {
                 self.max_request_blocks
             }
-            Phase::Deneb | Phase::Electra | Phase::Fulu | Phase::Gloas => {
+            Phase::Deneb | Phase::Electra | Phase::Fulu | Phase::Gloas | Phase::Heze => {
                 self.max_request_blocks_deneb
             }
         }
@@ -1067,7 +1090,9 @@ impl Config {
             Phase::Phase0 | Phase::Altair | Phase::Bellatrix | Phase::Capella | Phase::Deneb => {
                 self.blob_sidecar_subnet_count
             }
-            Phase::Electra | Phase::Fulu | Phase::Gloas => self.blob_sidecar_subnet_count_electra,
+            Phase::Electra | Phase::Fulu | Phase::Gloas | Phase::Heze => {
+                self.blob_sidecar_subnet_count_electra
+            }
         }
     }
 
@@ -1077,7 +1102,9 @@ impl Config {
             Phase::Phase0 | Phase::Altair | Phase::Bellatrix | Phase::Capella | Phase::Deneb => {
                 self.max_blobs_per_block
             }
-            Phase::Electra | Phase::Fulu | Phase::Gloas => self.max_blobs_per_block_electra,
+            Phase::Electra | Phase::Fulu | Phase::Gloas | Phase::Heze => {
+                self.max_blobs_per_block_electra
+            }
         };
 
         self.max_request_blocks(phase).saturating_mul(
@@ -1195,7 +1222,9 @@ impl Config {
                 self.max_blobs_per_block
             }
             Phase::Electra => self.max_blobs_per_block_electra,
-            Phase::Fulu | Phase::Gloas => self.get_blob_schedule_entry(epoch).max_blobs_per_block,
+            Phase::Fulu | Phase::Gloas | Phase::Heze => {
+                self.get_blob_schedule_entry(epoch).max_blobs_per_block
+            }
         };
 
         max_blobs
@@ -1264,6 +1293,7 @@ impl Config {
             self.electra_fork_epoch,
             self.fulu_fork_epoch,
             self.gloas_fork_epoch,
+            self.heze_fork_epoch,
         ];
 
         enum_iterator::all().skip(1).zip(fields)
@@ -1280,6 +1310,7 @@ impl Config {
             &mut self.electra_fork_epoch,
             &mut self.fulu_fork_epoch,
             &mut self.gloas_fork_epoch,
+            &mut self.heze_fork_epoch,
         ];
 
         enum_iterator::all().skip(1).zip(fields)

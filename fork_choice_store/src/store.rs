@@ -2541,6 +2541,11 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
                         .message
                         .verify(&self.chain_config, &state, signed.signature, pubkey)
                 }
+                SignedExecutionPayloadBid::Heze(signed) => {
+                    signed
+                        .message
+                        .verify(&self.chain_config, &state, signed.signature, pubkey)
+                }
             };
 
             if let Err(error) = verification_result {

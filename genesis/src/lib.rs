@@ -48,7 +48,17 @@ use types::{
         beacon_state::BeaconState as GloasBeaconState,
         containers::{
             BeaconBlock as GloasBeaconBlock, BeaconBlockBody as GloasBeaconBlockBody,
-            ExecutionPayloadBid, ExecutionRequests, SignedExecutionPayloadBid,
+            ExecutionPayloadBid, ExecutionPayloadBid as GloasExecutionPayloadBid,
+            ExecutionRequests, SignedExecutionPayloadBid,
+            SignedExecutionPayloadBid as GloasSignedExecutionPayloadBid,
+        },
+    },
+    heze::{
+        beacon_state::BeaconState as HezeBeaconState,
+        containers::{
+            BeaconBlock as HezeBeaconBlock, BeaconBlockBody as HezeBeaconBlockBody,
+            ExecutionPayloadBid as HezeExecutionPayloadBid,
+            SignedExecutionPayloadBid as HezeSignedExecutionPayloadBid,
         },
     },
     nonstandard::{FinalizedCheckpoint, Phase, RelativeEpoch, WithOrigin},
@@ -91,6 +101,11 @@ impl<'config, P: Preset> Incremental<'config, P> {
             ..ExecutionPayloadBid::default()
         };
 
+        let heze_execution_payload_bid = HezeExecutionPayloadBid::<P> {
+            execution_requests_root: ExecutionRequests::<P>::default().hash_tree_root(),
+            ..HezeExecutionPayloadBid::default()
+        };
+
         let body_root = match phase {
             Phase::Phase0 => Phase0BeaconBlockBody::<P>::default().hash_tree_root(),
             Phase::Altair => AltairBeaconBlockBody::<P>::default().hash_tree_root(),
@@ -105,6 +120,14 @@ impl<'config, P: Preset> Incremental<'config, P> {
                     ..SignedExecutionPayloadBid::default()
                 },
                 ..GloasBeaconBlockBody::default()
+            }
+            .hash_tree_root(),
+            Phase::Heze => HezeBeaconBlockBody::<P> {
+                signed_execution_payload_bid: HezeSignedExecutionPayloadBid {
+                    message: heze_execution_payload_bid.clone(),
+                    ..HezeSignedExecutionPayloadBid::default()
+                },
+                ..HezeBeaconBlockBody::default()
             }
             .hash_tree_root(),
         };
@@ -174,6 +197,15 @@ impl<'config, P: Preset> Incremental<'config, P> {
                 deposit_requests_start_index: UNSET_DEPOSIT_REQUESTS_START_INDEX,
                 latest_execution_payload_bid: gloas_execution_payload_bid,
                 ..GloasBeaconState::default()
+            }
+            .into(),
+            Phase::Heze => HezeBeaconState {
+                slot,
+                fork,
+                latest_block_header,
+                deposit_requests_start_index: UNSET_DEPOSIT_REQUESTS_START_INDEX,
+                latest_execution_payload_bid: heze_execution_payload_bid,
+                ..HezeBeaconState::default()
             }
             .into(),
         };
@@ -380,7 +412,12 @@ enum GenesisTriggerError {
 #[must_use]
 pub fn beacon_block<P: Preset>(genesis_state: &BeaconState<P>) -> SignedBeaconBlock<P> {
     let execution_payload_bid = match genesis_state {
-        BeaconState::Gloas(state) => Some(state.latest_execution_payload_bid.clone()),
+        BeaconState::Gloas(state) => Some(ExecutionPayloadHeader::Gloas(
+            state.latest_execution_payload_bid.clone(),
+        )),
+        BeaconState::Heze(state) => Some(ExecutionPayloadHeader::Heze(
+            state.latest_execution_payload_bid.clone(),
+        )),
         _ => None,
     };
     beacon_block_internal(
@@ -393,7 +430,7 @@ pub fn beacon_block<P: Preset>(genesis_state: &BeaconState<P>) -> SignedBeaconBl
 fn beacon_block_internal<P: Preset>(
     phase: Phase,
     state_root: H256,
-    execution_payload_bid: Option<ExecutionPayloadBid<P>>,
+    execution_payload_bid: Option<ExecutionPayloadHeader<P>>,
 ) -> SignedBeaconBlock<P> {
     // The way the genesis block is constructed makes it possible for many parties to independently
     // produce the same block. But why does the genesis block have to exist at all? Perhaps the
@@ -410,8 +447,24 @@ fn beacon_block_internal<P: Preset>(
         Phase::Fulu => BeaconBlock::from(Hc::new(FuluBeaconBlock::default())),
         Phase::Gloas => BeaconBlock::from(Hc::new(GloasBeaconBlock {
             body: GloasBeaconBlockBody {
-                signed_execution_payload_bid: SignedExecutionPayloadBid {
-                    message: execution_payload_bid.unwrap_or_default(),
+                signed_execution_payload_bid: GloasSignedExecutionPayloadBid {
+                    message: match execution_payload_bid {
+                        Some(ExecutionPayloadHeader::Gloas(bid)) => bid,
+                        _ => GloasExecutionPayloadBid::default(),
+                    },
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        })),
+        Phase::Heze => BeaconBlock::from(Hc::new(HezeBeaconBlock {
+            body: HezeBeaconBlockBody {
+                signed_execution_payload_bid: HezeSignedExecutionPayloadBid {
+                    message: match execution_payload_bid {
+                        Some(ExecutionPayloadHeader::Heze(bid)) => bid,
+                        _ => HezeExecutionPayloadBid::default(),
+                    },
                     ..Default::default()
                 },
                 ..Default::default()
@@ -516,7 +569,7 @@ mod spec_tests {
         let expected_genesis_state = case.ssz::<_, BeaconState<Minimal>>(&config, "state");
 
         let execution_payload_header = match phase {
-            Phase::Phase0 | Phase::Altair | Phase::Gloas => {
+            Phase::Phase0 | Phase::Altair | Phase::Gloas | Phase::Heze => {
                 assert!(!case.exists("execution_payload_header"));
                 None
             }

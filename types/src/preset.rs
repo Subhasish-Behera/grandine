@@ -364,6 +364,10 @@ pub trait Preset: Copy + Eq + Ord + Hash + Default + Debug + Send + Sync + 'stat
     const MAX_ATTESTER_SLASHING_SIZE: u64 = 2_097_616;
     const MAX_SIGNED_EXECUTION_PAYLOAD_BID_SIZE: u64 = 196_932;
 
+    // Heze type-specific SSZ bounds
+    const MAX_SIGNED_EXECUTION_PAYLOAD_BID_SIZE_HEZE: u64 = 196_934;
+    const MAX_SIGNED_INCLUSION_LIST_SIZE: u64 = 41_112;
+
     /// Returns the default configuration associated with a preset.
     ///
     /// This should only be used in tests and benchmarks.
@@ -790,6 +794,15 @@ impl PresetName {
         }
     }
 
+    #[must_use]
+    pub fn heze_preset(self) -> HezePreset {
+        match self {
+            Self::Mainnet => HezePreset::new::<Mainnet>(),
+            Self::Minimal => HezePreset::new::<Minimal>(),
+            Self::Medalla => HezePreset::new::<Medalla>(),
+        }
+    }
+
     fn default_config(self) -> Config {
         match self {
             Self::Mainnet => Config::mainnet(),
@@ -1211,6 +1224,29 @@ impl GloasPreset {
     }
 }
 
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields, rename_all = "SCREAMING_SNAKE_CASE")]
+pub struct HezePreset {
+    #[serde(with = "serde_utils::string_or_native")]
+    inclusion_list_committee_size: NonZeroU64,
+    #[serde(with = "serde_utils::string_or_native")]
+    max_signed_execution_payload_bid_size_heze: u64,
+    #[serde(with = "serde_utils::string_or_native")]
+    max_signed_inclusion_list_size: u64,
+}
+
+impl HezePreset {
+    #[must_use]
+    pub fn new<P: Preset>() -> Self {
+        Self {
+            inclusion_list_committee_size: P::InclusionListCommitteeSize::non_zero(),
+            max_signed_execution_payload_bid_size_heze:
+                P::MAX_SIGNED_EXECUTION_PAYLOAD_BID_SIZE_HEZE,
+            max_signed_inclusion_list_size: P::MAX_SIGNED_INCLUSION_LIST_SIZE,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use core::ops::Deref;
@@ -1267,6 +1303,7 @@ mod tests {
                 &preset_name.electra_preset(),
                 &preset_name.fulu_preset(),
                 &preset_name.gloas_preset(),
+                &preset_name.heze_preset(),
             ];
         }
     }

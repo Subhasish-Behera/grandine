@@ -106,6 +106,8 @@ pub mod heze {
     pub mod beacon_state;
     pub mod containers;
 
+    mod container_impls;
+
     #[cfg(test)]
     mod spec_tests;
 }

@@ -89,6 +89,11 @@ use types::{
             SignedExecutionPayloadBid as GloasSignedExecutionPayloadBid,
         },
     },
+    heze::containers::{
+        BeaconBlock as HezeBeaconBlock, BeaconBlockBody as HezeBeaconBlockBody,
+        ExecutionPayloadBid as HezeExecutionPayloadBid,
+        SignedExecutionPayloadBid as HezeSignedExecutionPayloadBid,
+    },
     nonstandard::{BlockRewards, KzgProofs, Phase, WEI_IN_GWEI, WithBlobsAndMev},
     phase0::{
         consts::FAR_FUTURE_EPOCH,
@@ -537,6 +542,12 @@ impl<P: Preset, W: Wait> BlockProducer<P, W> {
                 exit,
             ),
             BeaconState::Gloas(state) => electra::validate_voluntary_exit(
+                &self.producer_context.chain_config,
+                &self.producer_context.pubkey_cache,
+                state,
+                exit,
+            ),
+            BeaconState::Heze(state) => electra::validate_voluntary_exit(
                 &self.producer_context.chain_config,
                 &self.producer_context.pubkey_cache,
                 state,
@@ -1065,7 +1076,7 @@ impl<P: Preset, W: Wait> BlockBuildContext<P, W> {
                     blob_kzg_commitments: ContiguousList::default(),
                 },
             })),
-            Phase::Electra | Phase::Fulu | Phase::Gloas => {
+            Phase::Electra | Phase::Fulu | Phase::Gloas | Phase::Heze => {
                 // Store results in a vec to preserve insertion order and thus the results of the packing algorithm
                 let mut results: Vec<(
                     AttestationData,
@@ -1216,6 +1227,51 @@ impl<P: Preset, W: Wait> BlockBuildContext<P, W> {
                                 bls_to_execution_changes: bls_to_execution_changes.into(),
                                 signed_execution_payload_bid:
                                     GloasSignedExecutionPayloadBid::default(),
+                                payload_attestations,
+                                parent_execution_requests,
+                            },
+                        }))
+                    }
+                    Phase::Heze => {
+                        let snapshot = self.producer_context.controller.snapshot();
+                        let parent_block = self.producer_context.controller.head_block();
+
+                        let payload_attestations = if parent_block.value().to_header().message.slot
+                            == misc::previous_slot(slot)
+                        {
+                            self.prepare_payload_attestations().await?.into()
+                        } else {
+                            ProgressiveList::default()
+                        };
+
+                        let parent_execution_requests = if snapshot.should_build_on_full(slot) {
+                            snapshot
+                                .cached_execution_payload_envelope_by_root(parent_root)
+                                .ok_or_else(|| anyhow!("no cached payload envelope"))
+                                .map(|payload| payload.message.execution_requests.clone())
+                                .unwrap_or_default()
+                        } else {
+                            GloasExecutionRequests::default()
+                        };
+
+                        BeaconBlock::from(Hc::new(HezeBeaconBlock {
+                            slot,
+                            proposer_index,
+                            parent_root,
+                            state_root,
+                            body: HezeBeaconBlockBody {
+                                randao_reveal,
+                                eth1_data,
+                                graffiti,
+                                proposer_slashings: proposer_slashings.into(),
+                                attester_slashings: self.prepare_attester_slashings_gloas().await,
+                                attestations: attestations.map(Into::into).into(),
+                                deposits: deposits.into(),
+                                voluntary_exits: voluntary_exits.into(),
+                                sync_aggregate,
+                                bls_to_execution_changes: bls_to_execution_changes.into(),
+                                signed_execution_payload_bid:
+                                    HezeSignedExecutionPayloadBid::default(),
                                 payload_attestations,
                                 parent_execution_requests,
                             },
@@ -1775,6 +1831,12 @@ impl<P: Preset, W: Wait> BlockBuildContext<P, W> {
                     state,
                     *voluntary_exit,
                 ),
+                BeaconState::Heze(state) => electra::validate_voluntary_exit(
+                    &self.producer_context.chain_config,
+                    &self.producer_context.pubkey_cache,
+                    state,
+                    *voluntary_exit,
+                ),
             }
             .is_ok()
         });
@@ -1956,6 +2018,25 @@ impl<P: Preset, W: Wait> BlockBuildContext<P, W> {
                 signature: SignatureBytes::empty(),
             }
             .into(),
+            Phase::Heze => HezeSignedExecutionPayloadBid {
+                message: HezeExecutionPayloadBid {
+                    parent_block_hash,
+                    parent_block_root: parent_root,
+                    block_hash,
+                    prev_randao,
+                    fee_recipient,
+                    gas_limit,
+                    builder_index: BUILDER_INDEX_SELF_BUILD,
+                    slot,
+                    value: 0,
+                    execution_payment: 0,
+                    blob_kzg_commitments,
+                    execution_requests_root,
+                    inclusion_list_bits: BitVector::default(),
+                },
+                signature: SignatureBytes::empty(),
+            }
+            .into(),
             Phase::Phase0
             | Phase::Altair
             | Phase::Bellatrix
@@ -2064,6 +2145,70 @@ impl<P: Preset, W: Wait> BlockBuildContext<P, W> {
                 })
             }
             BeaconState::Gloas(state) => {
+                let head_root = self.head_block_root;
+                let target_gas_limit = self.gas_limit()?;
+                let snapshot = self.producer_context.controller.snapshot();
+
+                let withdrawals = if snapshot.should_build_on_full(state.slot())
+                    && let Some(envelope) =
+                        snapshot.cached_execution_payload_envelope_by_root(head_root)
+                {
+                    debug_with_peers!(
+                        "applying parent execution payload from envelope for payload attributes \
+                         preparation (head slot: {}, head root: {head_root:?})",
+                        state.slot(),
+                    );
+
+                    let mut state_copy = state.clone();
+
+                    gloas::apply_parent_execution_payload(
+                        chain_config,
+                        &self.producer_context.pubkey_cache,
+                        &mut state_copy,
+                        &envelope.message.execution_requests,
+                    )?;
+
+                    gloas::get_expected_withdrawals(&state_copy)?.0
+                } else if state.latest_execution_payload_bid().block_hash()
+                    == state.latest_block_hash()
+                {
+                    debug_with_peers!(
+                        "fork boundary case for payload attributes preparation \
+                            (head slot: {}, head root: {head_root:?})",
+                        state.slot(),
+                    );
+
+                    gloas::get_expected_withdrawals(state)?.0
+                } else {
+                    debug_with_peers!(
+                        "using expected withdrawals from the beacon state for payload attributes preparation, \
+                         falling back to direct state access (head slot: {}, head root: {head_root:?})",
+                        state.slot(),
+                    );
+
+                    state
+                        .payload_expected_withdrawals()
+                        .into_iter()
+                        .copied()
+                        .collect()
+                };
+
+                let withdrawals = withdrawals
+                    .into_iter()
+                    .map_into()
+                    .pipe(ContiguousList::try_from_iter)?;
+
+                PayloadAttributes::Gloas(PayloadAttributesV4 {
+                    timestamp,
+                    prev_randao,
+                    suggested_fee_recipient,
+                    withdrawals,
+                    parent_beacon_block_root: state.latest_block_header().hash_tree_root(),
+                    slot_number: state.slot(),
+                    target_gas_limit,
+                })
+            }
+            BeaconState::Heze(state) => {
                 let head_root = self.head_block_root;
                 let target_gas_limit = self.gas_limit()?;
                 let snapshot = self.producer_context.controller.snapshot();
