@@ -289,6 +289,10 @@ pub enum Error<P: Preset> {
     InclusionListTransactionEmpty {
         signed_inclusion_list: Arc<SignedInclusionList<P>>,
     },
+    #[error("inclusion list has no transactions: {signed_inclusion_list:?}")]
+    InclusionListWithoutTransactions {
+        signed_inclusion_list: Arc<SignedInclusionList<P>>,
+    },
     #[error("inclusion list has invalid dependent root: {signed_inclusion_list:?}")]
     InvalidInclusionListDependentRoot {
         signed_inclusion_list: Arc<SignedInclusionList<P>>,

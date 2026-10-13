@@ -475,6 +475,17 @@ where
         );
     }
 
+    pub fn on_requested_inclusion_list(
+        &self,
+        signed_inclusion_list: Arc<SignedInclusionList<P>>,
+        peer_id: PeerId,
+    ) {
+        self.spawn_inclusion_list_task(
+            signed_inclusion_list,
+            InclusionListOrigin::Requested(peer_id),
+        );
+    }
+
     pub fn on_own_proposer_preferences(&self, signed_preferences: Arc<SignedProposerPreferences>) {
         self.spawn(ProposerPreferencesTask {
             store_snapshot: self.owned_store_snapshot(),

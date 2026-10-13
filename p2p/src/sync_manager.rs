@@ -42,6 +42,7 @@ use types::{
         containers::{DataColumnIdentifier, DataColumnsByRootIdentifier},
         primitives::ColumnIndex,
     },
+    heze::containers::InclusionListIdentifier,
     nonstandard::StorageMode,
     phase0::primitives::{Epoch, H256, Slot},
     preset::Preset,
@@ -80,6 +81,10 @@ const NOT_ENOUGH_PEERS_MESSAGE_COOLDOWN: Duration = Duration::from_secs(10);
 const PEER_UPDATE_COOLDOWN: Duration = Duration::from_secs(12);
 const SEQUENTIAL_REDOWNLOADS_TILL_RESET: usize = 10;
 const MAX_COLUMNS_ASSIGNED_PER_PEER: usize = 32;
+// TODO(heze): first guesses, not tuned on a network yet.
+const INCLUSION_LIST_REQUEST_TIMEOUT: Duration = Duration::from_secs(3);
+const MAX_INCLUSION_LIST_REQUESTS_PER_KEY: usize = 3;
+const MAX_TRACKED_INCLUSION_LIST_REQUESTS: usize = 1000;
 // half of `DEFAULT_DATA_COLUMNS_BY_ROOT_QUOTA`
 const MAX_COLUMNS_BY_ROOT: u64 = 8192;
 
@@ -110,6 +115,7 @@ pub struct SyncManager<P: Preset> {
     block_requests: RangeAndRootRequests<H256, P>,
     data_column_requests: RangeAndRootRequests<DataColumnIdentifier, P>,
     execution_payload_envelope_requests: RangeAndRootRequests<H256, P>,
+    inclusion_list_requests: TimedSizedCache<InclusionListIdentifier, HashSet<PeerId>>,
     last_sync_head: Slot,
     last_sync_range: Range<Slot>,
     sequential_redownloads: usize,
@@ -138,6 +144,10 @@ impl<P: Preset> SyncManager<P> {
             block_requests: RangeAndRootRequests::<H256, P>::default(),
             data_column_requests: RangeAndRootRequests::<DataColumnIdentifier, P>::default(),
             execution_payload_envelope_requests: RangeAndRootRequests::<H256, P>::default(),
+            inclusion_list_requests: TimedSizedCache::with_size_and_lifespan(
+                MAX_TRACKED_INCLUSION_LIST_REQUESTS,
+                INCLUSION_LIST_REQUEST_TIMEOUT,
+            ),
             last_sync_range: 0..0,
             last_sync_head: 0,
             sequential_redownloads: 0,
@@ -1009,6 +1019,50 @@ impl<P: Preset> SyncManager<P> {
             .add_request_by_root(block_root, peer_id)
     }
 
+    // Inclusion lists are requested by committee index, neither by range nor
+    // by root, so they are tracked per list with a lifespan of their own.
+    pub fn ready_to_request_inclusion_list(
+        &mut self,
+        identifier: &InclusionListIdentifier,
+        peer_id: PeerId,
+    ) -> bool {
+        self.inclusion_list_requests.flush();
+
+        self.inclusion_list_requests
+            .cache_get(identifier)
+            .is_none_or(|peers| {
+                peers.len() < MAX_INCLUSION_LIST_REQUESTS_PER_KEY && !peers.contains(&peer_id)
+            })
+    }
+
+    pub fn add_inclusion_list_request(
+        &mut self,
+        identifier: InclusionListIdentifier,
+        peer_id: PeerId,
+    ) -> bool {
+        self.log(
+            Level::Debug,
+            format_args!(
+                "add inclusion list request (identifier: {identifier:?}, peer_id: {peer_id})",
+            ),
+        );
+
+        self.inclusion_list_requests
+            .cache_get_or_set_with(identifier, HashSet::new)
+            .insert(peer_id)
+    }
+
+    // Lists that were not requested match no entry and are left to validation.
+    pub fn record_received_inclusion_list_response(
+        &mut self,
+        identifier: &InclusionListIdentifier,
+        peer_id: &PeerId,
+    ) {
+        if let Some(peers) = self.inclusion_list_requests.cache_get_mut(identifier) {
+            peers.remove(peer_id);
+        }
+    }
+
     pub fn add_execution_payload_envelope_request_by_range(
         &mut self,
         app_request_id: AppRequestId,
@@ -1570,6 +1624,7 @@ impl<P: Preset> SyncManager<P> {
         self.block_requests.cache_clear();
         self.data_column_requests.cache_clear();
         self.execution_payload_envelope_requests.cache_clear();
+        self.inclusion_list_requests.cache_clear();
     }
 
     pub fn track_collection_metrics(&self, metrics: &Arc<Metrics>) {
@@ -1581,6 +1636,12 @@ impl<P: Preset> SyncManager<P> {
             &type_name,
             "status_updates_cache",
             self.status_updates_cache.cache_size(),
+        );
+        metrics.set_collection_length(
+            module_path!(),
+            &type_name,
+            "inclusion_list_requests",
+            self.inclusion_list_requests.cache_size(),
         );
 
         // TODO: Differentiate

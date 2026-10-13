@@ -47,6 +47,7 @@ use transition_functions::{
 };
 use typenum::Unsigned as _;
 use types::{
+    InclusionListCommittee,
     combined::{
         Attestation, AttesterSlashing, BeaconState, DataColumnSidecar, ExecutionPayloadParams,
         SignedAggregateAndProof, SignedBeaconBlock, SignedExecutionPayloadBid,
@@ -1274,11 +1275,44 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
     }
 
     #[must_use]
+    pub fn inclusion_lists_by_indices(
+        &self,
+        slot: Slot,
+        dependent_root: H256,
+        indices: &BitVector<P::InclusionListCommitteeSize>,
+    ) -> Vec<Arc<SignedInclusionList<P>>> {
+        let Some(committee) = self.inclusion_list_committee_at(slot, dependent_root) else {
+            return Vec::new();
+        };
+
+        self.inclusion_list_store.signed_inclusion_lists_by_indices(
+            &committee,
+            slot,
+            dependent_root,
+            indices,
+        )
+    }
+
+    #[must_use]
     pub fn is_inclusion_list_timely(&self, slot: Slot) -> bool {
         // TODO(heze): Tick-based, so the cutoff is 7.5s instead of the spec's 8.0s (the deadline
         // falls inside the 7.5s-8.25s tick). Exact 8.0s needs the time in milliseconds.
         slot == self.slot()
             && self.is_before_due_bps_deadline(self.chain_config.inclusion_list_due_bps)
+    }
+
+    #[must_use]
+    pub fn missing_inclusion_list_members(
+        &self,
+        slot: Slot,
+        dependent_root: H256,
+    ) -> Vec<(usize, ValidatorIndex)> {
+        let Some(committee) = self.inclusion_list_committee_at(slot, dependent_root) else {
+            return Vec::new();
+        };
+
+        self.inclusion_list_store
+            .missing_members(&committee, slot, dependent_root)
     }
 
     fn inclusion_list_dependent_root(state: &impl BeaconStateTrait<P>, slot: Slot) -> Result<H256> {
@@ -1287,6 +1321,45 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         let dependent_slot = misc::compute_shuffling_dependent_slot::<P>(epoch);
 
         accessors::get_block_root_at_slot(state, dependent_slot)
+    }
+
+    fn inclusion_list_committee_at(
+        &self,
+        slot: Slot,
+        dependent_root: H256,
+    ) -> Option<InclusionListCommittee<P>> {
+        // An unknown dependent root is expected (another branch or pruned), so only failures on a
+        // known root are logged.
+        self.chain_link(dependent_root)?;
+
+        let lookahead_epoch =
+            misc::compute_epoch_at_slot::<P>(slot).saturating_sub(P::MinSeedLookahead::U64);
+        let lookahead_start_slot = misc::compute_start_slot_at_epoch::<P>(lookahead_epoch);
+
+        let state = self
+            .state_cache
+            .state_at_slot(
+                &self.pubkey_cache,
+                self,
+                dependent_root,
+                lookahead_start_slot,
+            )
+            .inspect_err(|error| {
+                debug_with_peers!(
+                    "unable to get state for inclusion list committee \
+                     (slot: {slot}, dependent_root: {dependent_root:?}): {error:?}"
+                );
+            })
+            .ok()?;
+
+        accessors::get_inclusion_list_committee(&state, slot)
+            .inspect_err(|error| {
+                debug_with_peers!(
+                    "unable to compute inclusion list committee \
+                     (slot: {slot}, dependent_root: {dependent_root:?}): {error:?}"
+                );
+            })
+            .ok()
     }
 
     // > Return whether the execution payload envelope for the beacon block with
@@ -2876,26 +2949,51 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
             .map(|transaction| transaction.as_bytes().len())
             .sum::<usize>();
 
-        // [IGNORE] This is the first or second valid message from this validator
-        if self
-            .accepted_inclusion_list_counts
-            .get(&(message_slot, dependent_root, validator_index))
-            .is_some_and(|count| *count >= 2)
-        {
-            return Ok(InclusionListAction::Ignore);
-        }
+        if origin.is_requested() {
+            // A list received in an `InclusionListsByIndices` response follows fork-choice
+            // `on_inclusion_list` instead of the gossip rules: req/resp exists to fetch lists missed
+            // on gossip, so it accepts the previous slot and has no gossip message counter.
 
-        // [IGNORE] The inclusion list's slot is for the current slot
-        if message_slot != current_slot {
-            return Ok(InclusionListAction::Ignore);
-        }
+            // > The transactions must be non-empty
+            ensure!(
+                !message.transactions.is_empty(),
+                Error::<P>::InclusionListWithoutTransactions {
+                    signed_inclusion_list,
+                },
+            );
 
-        // [IGNORE] The size of inclusion list transactions must be non-empty
-        //
-        // The size is the total byte length, so a list of only empty transactions is ignored
-        // here, not rejected below.
-        if transactions_size == 0 {
-            return Ok(InclusionListAction::Ignore);
+            // > The slot must be within the retention window
+            // Spec <https://github.com/ethereum/consensus-specs/blob/v1.7.0-beta.1/specs/heze/fork-choice.md?plain=1#L271-L273>.
+            //
+            // Ignored: the slot may have advanced while the response was in flight.
+            let window_end = message_slot
+                .saturating_add(self.chain_config.min_slots_for_inclusion_lists_requests);
+
+            if message_slot > current_slot || window_end < current_slot {
+                return Ok(InclusionListAction::Ignore);
+            }
+        } else {
+            // [IGNORE] This is the first or second valid message from this validator
+            if self
+                .accepted_inclusion_list_counts
+                .get(&(message_slot, dependent_root, validator_index))
+                .is_some_and(|count| *count >= 2)
+            {
+                return Ok(InclusionListAction::Ignore);
+            }
+
+            // [IGNORE] The inclusion list's slot is for the current slot
+            if message_slot != current_slot {
+                return Ok(InclusionListAction::Ignore);
+            }
+
+            // [IGNORE] The size of inclusion list transactions must be non-empty
+            //
+            // The size is the total byte length, so a list of only empty transactions is ignored
+            // here, not rejected below.
+            if transactions_size == 0 {
+                return Ok(InclusionListAction::Ignore);
+            }
         }
 
         // [REJECT] The size of inclusion list transactions must not exceed the maximum size

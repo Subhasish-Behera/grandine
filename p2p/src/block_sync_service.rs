@@ -16,7 +16,8 @@ use debug_info::HealthCheck;
 use dedicated_executor::DedicatedExecutor;
 use eth1_api::RealController;
 use eth2_libp2p::{
-    NetworkGlobals, PeerAction, PeerId, ReportSource, service::api_types::AppRequestId,
+    NetworkGlobals, PeerAction, PeerId, ReportSource, rpc::methods::InclusionListsByIndicesRequest,
+    service::api_types::AppRequestId,
 };
 use fork_choice_control::SyncMessage;
 use futures::{
@@ -30,7 +31,7 @@ use itertools::Itertools as _;
 use logging::{debug_with_peers, info_with_peers, warn_with_peers};
 use prometheus_metrics::Metrics;
 use scc::HashMap as SccHashMap;
-use ssz::{ContiguousList, SszReadDefault};
+use ssz::{BitVector, ContiguousList, SszReadDefault};
 use std_ext::ArcExt as _;
 use thiserror::Error;
 use tokio::select;
@@ -43,7 +44,8 @@ use types::{
     deneb::containers::BlobIdentifier,
     fulu::containers::{DataColumnIdentifier, DataColumnsByRootIdentifier},
     gloas::containers::PayloadEnvelopeIdentifier,
-    nonstandard::StorageMode,
+    heze::containers::{InclusionListIdentifier, SignedInclusionList},
+    nonstandard::{Phase, StorageMode},
     phase0::{
         consts::GENESIS_SLOT,
         primitives::{H256, Slot},
@@ -72,6 +74,8 @@ const MISSED_SLOTS_TO_TRIGGER_SYNC: u64 = 2;
 // that is sent but never finishes is retried on every expiry, which keeps its target permanently
 // busy and stalls every other request by range. Give up on such a batch and let it be rebuilt.
 const MAX_SYNC_BATCH_RETRIES: usize = 10;
+// Two valid differing lists already make the validator an equivocator.
+const MAX_RECEIVED_INCLUSION_LIST_VERSIONS: usize = 2;
 
 #[derive(Debug, Error)]
 #[error("ran out of request IDs")]
@@ -111,6 +115,7 @@ pub struct BlockSyncService<P: Preset> {
     received_block_roots: HashMap<H256, Slot>,
     received_data_column_sidecars: Arc<SccHashMap<DataColumnIdentifier, Slot>>,
     received_envelopes: HashMap<PayloadEnvelopeIdentifier, Slot>,
+    received_inclusion_lists: HashMap<InclusionListIdentifier, Vec<Arc<SignedInclusionList<P>>>>,
     data_dumper: Arc<DataDumper>,
     network_globals: Arc<NetworkGlobals>,
     delayed_batches: BTreeMap<Instant, Vec<SyncBatch<P>>>,
@@ -262,6 +267,7 @@ impl<P: Preset> BlockSyncService<P> {
             received_block_roots: HashMap::new(),
             received_data_column_sidecars,
             received_envelopes: HashMap::new(),
+            received_inclusion_lists: HashMap::new(),
             data_dumper,
             network_globals,
             delayed_batches: BTreeMap::new(),
@@ -339,6 +345,9 @@ impl<P: Preset> BlockSyncService<P> {
                     match message {
                         P2pToSync::Slot(slot) => {
                             self.slot = slot;
+
+                            let min_slots = self.controller.chain_config().min_slots_for_inclusion_lists_requests;
+                            self.received_inclusion_lists.retain(|identifier, _| identifier.slot.saturating_add(min_slots) >= slot);
                             self.track_collection_metrics();
 
                             if let Some(metrics) = self.metrics.as_ref() {
@@ -370,6 +379,9 @@ impl<P: Preset> BlockSyncService<P> {
                         }
                         P2pToSync::PayloadEnvelopeNeeded(block_root, peer_id) => {
                             self.request_needed_execution_payload_envelope(block_root, peer_id)?;
+                        }
+                        P2pToSync::InclusionListsNeeded(slot, dependent_root) => {
+                            self.request_needed_inclusion_lists(slot, dependent_root)?;
                         }
                         P2pToSync::BlockNotConsidered(block_root) => {
                             self.received_block_roots.remove(&block_root);
@@ -670,6 +682,15 @@ impl<P: Preset> BlockSyncService<P> {
 
                             self.received_envelopes.retain(|_, slot| *slot >= start_of_epoch);
                         }
+                        P2pToSync::RequestedInclusionList(signed_inclusion_list, peer_id) => {
+                            let identifier = InclusionListIdentifier::from(signed_inclusion_list.as_ref());
+
+                            self.sync_manager.record_received_inclusion_list_response(&identifier, &peer_id);
+
+                            if self.register_new_received_inclusion_list(&signed_inclusion_list) {
+                                self.controller.on_requested_inclusion_list(signed_inclusion_list, peer_id);
+                            }
+                        }
                         P2pToSync::BlobSidecarRejected(blob_identifier) | P2pToSync::BlobSidecarNotConsidered(blob_identifier) => {
                             // In case blob sidecar is not valid (e.g. someone spams fake blob sidecars)
                             // Grandine should not dismiss newer valid blob sidecars with the same blob identifier
@@ -680,6 +701,14 @@ impl<P: Preset> BlockSyncService<P> {
                         }
                         P2pToSync::PayloadEnvelopeRejected(payload_envelope_identifier) | P2pToSync::PayloadEnvelopeNotConsidered(payload_envelope_identifier) => {
                             self.received_envelopes.remove(&payload_envelope_identifier);
+                        }
+                        P2pToSync::InclusionListRejected(inclusion_list_identifier) => {
+                            // TODO(heze): this drops every received version, including a valid one
+                            // already accepted. Received again, that version is validated and
+                            // counted again, which can hide an equivocation until requested lists
+                            // stop counting toward the first-or-second message rule. Ignored
+                            // requested lists are not removed.
+                            self.received_inclusion_lists.remove(&inclusion_list_identifier);
                         }
                         P2pToSync::PeerCgcUpdated(peer_id) => {
                             self.sync_manager.update_peer_cgc(peer_id);
@@ -1446,6 +1475,104 @@ impl<P: Preset> BlockSyncService<P> {
         Ok(())
     }
 
+    fn request_needed_inclusion_lists(&mut self, slot: Slot, dependent_root: H256) -> Result<()> {
+        if !self.is_forward_synced {
+            return Ok(());
+        }
+
+        let chain_config = self.controller.chain_config();
+
+        if chain_config.phase_at_slot::<P>(slot) < Phase::Heze {
+            return Ok(());
+        }
+
+        // Peers only have to serve lists from `minimum_request_slot` on.
+        let current_slot = self.controller.slot();
+        let min_slots = chain_config.min_slots_for_inclusion_lists_requests;
+
+        if slot > current_slot || slot.saturating_add(min_slots) < current_slot {
+            debug_with_peers!(
+                "cannot request InclusionListsByIndices: slot {slot} is outside the serving window \
+                 (current_slot: {current_slot})"
+            );
+
+            return Ok(());
+        }
+
+        // Some `InclusionListsNeeded` messages come from `prepare_execution_payload` calls made
+        // before the inclusion list deadline. A list fetched then could still be timely, which only
+        // matters to attesters, and their view is filled by gossip up to the deadline. The proposer
+        // uses all lists, timely or not, so requests wait until the deadline has passed.
+        if self.controller.is_inclusion_list_timely(slot) {
+            debug_with_peers!(
+                "cannot request InclusionListsByIndices: inclusion lists for slot {slot} can still \
+                 arrive timely"
+            );
+
+            return Ok(());
+        }
+
+        let missing_members = self
+            .controller
+            .missing_inclusion_list_members(slot, dependent_root)
+            .into_iter()
+            .map(|(position, validator_index)| {
+                let identifier = InclusionListIdentifier {
+                    slot,
+                    dependent_root,
+                    validator_index,
+                };
+
+                (position, identifier)
+            })
+            .filter(|(_, identifier)| !self.received_inclusion_lists.contains_key(identifier))
+            .collect_vec();
+
+        if missing_members.is_empty() {
+            debug_with_peers!(
+                "cannot request InclusionListsByIndices: no missing inclusion lists for slot {slot} \
+                 (dependent_root: {dependent_root:?})"
+            );
+
+            return Ok(());
+        }
+
+        let Some(peer_id) = self.sync_manager.random_peer(false) else {
+            return Ok(());
+        };
+
+        let mut indices = BitVector::default();
+
+        // A validator filling several positions (small committees wrap around) is requested
+        // through its first position only.
+        for (position, identifier) in &missing_members {
+            if self
+                .sync_manager
+                .ready_to_request_inclusion_list(identifier, peer_id)
+                && self
+                    .sync_manager
+                    .add_inclusion_list_request(*identifier, peer_id)
+            {
+                indices.set(*position, true);
+            }
+        }
+
+        if indices.none() {
+            return Ok(());
+        }
+
+        let request = InclusionListsByIndicesRequest {
+            slot,
+            dependent_root,
+            indices,
+        };
+
+        SyncToP2p::RequestInclusionListsByIndices(self.request_id()?, peer_id, request)
+            .send(&self.sync_to_p2p_tx);
+
+        Ok(())
+    }
+
     async fn request_needed_data_columns(
         &mut self,
         data_columns_by_root: DataColumnsByRootIdentifier<P>,
@@ -1715,6 +1842,7 @@ impl<P: Preset> BlockSyncService<P> {
                 self.received_blob_sidecars.clear_async().await;
                 self.received_data_column_sidecars.clear_async().await;
                 self.received_envelopes = HashMap::new();
+                self.received_inclusion_lists = HashMap::new();
                 self.sync_direction = SyncDirection::Back;
                 self.sync_manager.cache_clear();
                 self.request_blobs_and_blocks_if_ready();
@@ -1771,6 +1899,32 @@ impl<P: Preset> BlockSyncService<P> {
             .is_none()
     }
 
+    // New unless the same validator's identical message was already received.
+    // A differing message is new too, so the store can detect the equivocation.
+    fn register_new_received_inclusion_list(
+        &mut self,
+        signed_inclusion_list: &Arc<SignedInclusionList<P>>,
+    ) -> bool {
+        let versions = self
+            .received_inclusion_lists
+            .entry(InclusionListIdentifier::from(
+                signed_inclusion_list.as_ref(),
+            ))
+            .or_default();
+
+        if versions.len() >= MAX_RECEIVED_INCLUSION_LIST_VERSIONS
+            || versions
+                .iter()
+                .any(|received| received.message == signed_inclusion_list.message)
+        {
+            return false;
+        }
+
+        versions.push(signed_inclusion_list.clone_arc());
+
+        true
+    }
+
     fn track_collection_metrics(&self) {
         if let Some(metrics) = self.metrics.as_ref() {
             let type_name = tynm::type_name::<Self>();
@@ -1801,6 +1955,13 @@ impl<P: Preset> BlockSyncService<P> {
                 &type_name,
                 "received_envelopes",
                 self.received_envelopes.len(),
+            );
+
+            metrics.set_collection_length(
+                module_path!(),
+                &type_name,
+                "received_inclusion_lists",
+                self.received_inclusion_lists.len(),
             );
         }
     }

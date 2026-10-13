@@ -32,10 +32,11 @@ use types::{
         containers::SignedExecutionPayloadEnvelope,
         primitives::{BuilderIndex, PayloadStatus as ExecutionPayloadStatus, Transaction},
     },
+    heze::containers::SignedInclusionList,
     nonstandard::{PayloadStatus, Phase, RelativeEpoch, WithStatus},
     phase0::{
         containers::Checkpoint,
-        primitives::{Epoch, ExecutionBlockHash, Gwei, H256, Slot, UnixSeconds},
+        primitives::{Epoch, ExecutionBlockHash, Gwei, H256, Slot, UnixSeconds, ValidatorIndex},
     },
     preset::Preset,
     traits::{BeaconState as BeaconStateTrait, PostGloasBeaconState, SignedBeaconBlock as _},
@@ -616,6 +617,32 @@ where
         let block_roots = self.snapshot().canonical_payload_block_roots(range)?;
 
         self.execution_payload_envelopes_by_roots(block_roots)
+    }
+
+    #[must_use]
+    pub fn inclusion_lists_by_indices(
+        &self,
+        slot: Slot,
+        dependent_root: H256,
+        indices: &BitVector<P::InclusionListCommitteeSize>,
+    ) -> Vec<Arc<SignedInclusionList<P>>> {
+        self.store_snapshot()
+            .inclusion_lists_by_indices(slot, dependent_root, indices)
+    }
+
+    #[must_use]
+    pub fn missing_inclusion_list_members(
+        &self,
+        slot: Slot,
+        dependent_root: H256,
+    ) -> Vec<(usize, ValidatorIndex)> {
+        self.store_snapshot()
+            .missing_inclusion_list_members(slot, dependent_root)
+    }
+
+    #[must_use]
+    pub fn is_inclusion_list_timely(&self, slot: Slot) -> bool {
+        self.store_snapshot().is_inclusion_list_timely(slot)
     }
 
     pub fn execution_payload_envelopes_by_roots(

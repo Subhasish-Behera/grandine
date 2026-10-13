@@ -592,6 +592,24 @@ impl<P: Preset, W: Wait + Sync> Validator<P, W> {
                 return;
             }
 
+            // The payload is built with every inclusion list of the previous
+            // slot this node has, timely or not. Ask peers for the ones it lacks.
+            // TODO(heze): lists fetched here arrive after the payload build below has started, so
+            // they reach the payload only if it is prepared again before the proposal. When, how
+            // often, and whether only on a changed inclusion list view is not decided yet.
+            if slot_head.beacon_state.phase() >= Phase::Heze {
+                let inclusion_list_slot = slot.saturating_sub(1);
+                let epoch = misc::compute_epoch_at_slot::<P>(inclusion_list_slot);
+
+                if let Some(dependent_root) = self
+                    .controller
+                    .shuffling_dependent_root(slot_head.beacon_block_root, epoch)
+                {
+                    ValidatorToP2p::InclusionListsNeeded(inclusion_list_slot, dependent_root)
+                        .send(&self.p2p_tx);
+                }
+            }
+
             let block_build_context = self.block_producer.new_build_context(
                 slot_head.beacon_state.clone_arc(),
                 slot_head.beacon_block_root,

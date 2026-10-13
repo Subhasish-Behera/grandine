@@ -8,7 +8,10 @@ use bls::PublicKeyBytes;
 use eth2_libp2p::{
     GossipId, GossipTopic, MessageAcceptance, NetworkEvent, PeerAction, PeerId, PubsubMessage,
     ReportSource, Response, Subnet, SubnetDiscovery,
-    rpc::{GoodbyeReason, InboundRequestId, RequestType, RpcErrorResponse, StatusMessage},
+    rpc::{
+        GoodbyeReason, InboundRequestId, RequestType, RpcErrorResponse, StatusMessage,
+        methods::InclusionListsByIndicesRequest,
+    },
     service::api_types::AppRequestId,
     types::{EnrForkId, GossipKind},
 };
@@ -32,7 +35,7 @@ use types::{
         PayloadAttestationMessage, PayloadEnvelopeIdentifier, SignedExecutionPayloadEnvelope,
         SignedProposerPreferences,
     },
-    heze::containers::SignedInclusionList,
+    heze::containers::{InclusionListIdentifier, SignedInclusionList},
     nonstandard::Phase,
     phase0::{
         containers::{Checkpoint, ProposerSlashing, SignedVoluntaryExit},
@@ -58,6 +61,7 @@ pub enum P2pToSync<P: Preset> {
     BlobsNeeded(Vec<BlobIdentifier>, Slot, Option<PeerId>),
     BlockNeeded(H256, Option<PeerId>),
     PayloadEnvelopeNeeded(H256, Option<PeerId>),
+    InclusionListsNeeded(Slot, H256),
     BlockNotConsidered(H256),
     DataColumnsNeeded(DataColumnsByRootIdentifier<P>, Slot),
     RequestedBlobSidecar(Arc<BlobSidecar<P>>, PeerId, AppRequestId, RPCRequestType),
@@ -79,6 +83,7 @@ pub enum P2pToSync<P: Preset> {
         AppRequestId,
         RPCRequestType,
     ),
+    RequestedInclusionList(Arc<SignedInclusionList<P>>, PeerId),
     BlobsByRangeRequestFinished(AppRequestId),
     BlocksByRangeRequestFinished(PeerId, AppRequestId),
     DataColumnsByRangeRequestFinished(AppRequestId),
@@ -92,6 +97,7 @@ pub enum P2pToSync<P: Preset> {
     DataColumnSidecarRejected(DataColumnIdentifier),
     PayloadEnvelopeNotConsidered(PayloadEnvelopeIdentifier),
     PayloadEnvelopeRejected(PayloadEnvelopeIdentifier),
+    InclusionListRejected(InclusionListIdentifier),
     DataColumnSidecarNotConsidered(DataColumnIdentifier),
     PeerCgcUpdated(PeerId),
     RequestCustodyGroupBackfill(HashSet<u64>, Slot),
@@ -180,6 +186,7 @@ pub enum SyncToP2p<P: Preset> {
     ),
     RequestExecutionPayloadEnvelopesByRange(AppRequestId, PeerId, Slot, u64),
     RequestExecutionPayloadEnvelopesByRoot(AppRequestId, PeerId, Vec<H256>),
+    RequestInclusionListsByIndices(AppRequestId, PeerId, InclusionListsByIndicesRequest<P>),
     RequestDataColumnsByRoot(AppRequestId, PeerId, Vec<DataColumnsByRootIdentifier<P>>),
     RequestPeerStatus(AppRequestId, PeerId),
     SubscribeToCoreTopics,
@@ -235,6 +242,7 @@ pub enum ValidatorToP2p<P: Preset> {
     PublishPayloadAttestation(Arc<PayloadAttestationMessage>),
     PublishProposerPreferences(Arc<SignedProposerPreferences>),
     PublishInclusionList(Arc<SignedInclusionList<P>>),
+    InclusionListsNeeded(Slot, H256),
     UpdateDataColumnSubnets(u64),
 }
 

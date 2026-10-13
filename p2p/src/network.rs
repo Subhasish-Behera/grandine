@@ -22,7 +22,7 @@ use eth2_libp2p::{
             BlobsByRangeRequest, BlobsByRootRequest, BlocksByRootRequest,
             DataColumnsByRangeRequest, DataColumnsByRootRequest,
             ExecutionPayloadEnvelopesByRangeRequest, ExecutionPayloadEnvelopesByRootRequest,
-            OldBlocksByRangeRequest, RpcErrorResponse, RpcResponse,
+            InclusionListsByIndicesRequest, OldBlocksByRangeRequest, RpcErrorResponse, RpcResponse,
         },
     },
     service::{Network as Service, api_types::AppRequestId},
@@ -532,6 +532,10 @@ impl<P: Preset, W: Wait> Network<P, W> {
                                     P2pToSync::PayloadEnvelopeRejected(payload_envelope_identifier)
                                         .send(&self.channels.p2p_to_sync_tx)
                                 }
+                                MutatorRejectionReason::InvalidInclusionList { inclusion_list_identifier } => {
+                                    P2pToSync::InclusionListRejected(inclusion_list_identifier)
+                                        .send(&self.channels.p2p_to_sync_tx)
+                                }
                                 _ => {}
                             }
 
@@ -619,6 +623,10 @@ impl<P: Preset, W: Wait> Network<P, W> {
                         ValidatorToP2p::PublishInclusionList(signed_inclusion_list) => {
                             self.publish_inclusion_list(signed_inclusion_list);
                         }
+                        ValidatorToP2p::InclusionListsNeeded(slot, dependent_root) => {
+                            P2pToSync::InclusionListsNeeded(slot, dependent_root)
+                                .send(&self.channels.p2p_to_sync_tx);
+                        }
                         ValidatorToP2p::UpdateDataColumnSubnets(custody_group_count) => {
                             self.update_data_column_subnets(custody_group_count);
                         }
@@ -662,6 +670,9 @@ impl<P: Preset, W: Wait> Network<P, W> {
                         }
                         SyncToP2p::RequestExecutionPayloadEnvelopesByRoot(request_id, peer_id, identifiers) => {
                             self.request_execution_payload_envelopes_by_root(request_id, peer_id, identifiers);
+                        }
+                        SyncToP2p::RequestInclusionListsByIndices(request_id, peer_id, request) => {
+                            self.request_inclusion_lists_by_indices(request_id, peer_id, request);
                         }
                         SyncToP2p::RequestPeerStatus(request_id, peer_id) => {
                             self.request_peer_status(request_id, peer_id);
@@ -1425,6 +1436,14 @@ impl<P: Preset, W: Wait> Network<P, W> {
                 );
                 Ok(())
             }
+            RequestType::InclusionListsByIndices(request) => {
+                self.handle_inclusion_lists_by_indices_request(
+                    peer_id,
+                    inbound_request_id,
+                    request,
+                );
+                Ok(())
+            }
             RequestType::LightClientBootstrap(_) => {
                 // TODO(Altair Light Client Sync Protocol)
                 debug_with_peers!(
@@ -1714,6 +1733,110 @@ impl<P: Preset, W: Wait> Network<P, W> {
                 .send(&network_to_service_tx);
 
                 Ok::<_, anyhow::Error>(())
+            })
+            .detach();
+    }
+
+    fn handle_inclusion_lists_by_indices_request(
+        &self,
+        peer_id: PeerId,
+        inbound_request_id: InboundRequestId,
+        request: InclusionListsByIndicesRequest<P>,
+    ) {
+        debug_with_peers!(
+            "received InclusionListsByIndices request (peer_id: {peer_id}, \
+            inbound_request_id: {inbound_request_id:?}, request: {request:?})",
+        );
+
+        let InclusionListsByIndicesRequest {
+            slot,
+            dependent_root,
+            indices,
+        } = request;
+
+        let chain_config = self.controller.chain_config();
+        let current_slot = self.controller.slot();
+
+        // > `minimum_request_slot = max(current_slot - MIN_SLOTS_FOR_INCLUSION_LISTS_REQUESTS,
+        // > compute_start_slot_at_epoch(HEZE_FORK_EPOCH))`
+        let minimum_request_slot = current_slot
+            .saturating_sub(chain_config.min_slots_for_inclusion_lists_requests)
+            .max(misc::compute_start_slot_at_epoch::<P>(
+                chain_config.heze_fork_epoch,
+            ));
+
+        // > If `slot` in the request content references a slot earlier than `minimum_request_slot`,
+        // > peers MAY respond with error code `3: ResourceUnavailable`
+        if slot < minimum_request_slot {
+            debug_with_peers!(
+                "InclusionListsByIndices request before minimum_request_slot \
+                (peer_id: {peer_id}, slot: {slot}, minimum_request_slot: {minimum_request_slot})",
+            );
+
+            ServiceInboundMessage::SendErrorResponse(
+                peer_id,
+                inbound_request_id,
+                RpcErrorResponse::ResourceUnavailable,
+                "requested inclusion lists before minimum_request_slot",
+            )
+            .send(&self.network_to_service_tx);
+
+            return;
+        }
+
+        // Lists for future slots cannot be stored yet. Not looking them up also avoids processing
+        // states to arbitrary slots on behalf of the peer.
+        if slot > current_slot || indices.count_ones() == 0 {
+            ServiceInboundMessage::SendResponse(
+                peer_id,
+                inbound_request_id,
+                Box::new(Response::InclusionListsByIndices(None)),
+            )
+            .send(&self.network_to_service_tx);
+
+            return;
+        }
+
+        let max_request_inclusion_list =
+            usize::try_from(chain_config.max_request_inclusion_list).unwrap_or(usize::MAX);
+        let controller = self.controller.clone_arc();
+        let network_to_service_tx = self.network_to_service_tx.clone();
+
+        self.dedicated_executor
+            .spawn(async move {
+                // The lookup cannot fail (missing data yields an empty `Vec`), so the stream is
+                // always terminated below.
+                let inclusion_lists = controller
+                    .inclusion_lists_by_indices(slot, dependent_root, &indices)
+                    .into_iter()
+                    // > Clients MAY limit the number of inclusion lists in the response.
+                    .take(max_request_inclusion_list);
+
+                for inclusion_list in inclusion_lists {
+                    debug_with_peers!(
+                        "sending InclusionListsByIndices response chunk \
+                        (inbound_request_id: {inbound_request_id:?}, peer_id: {peer_id}, \
+                        slot: {}, validator_index: {})",
+                        inclusion_list.message.slot,
+                        inclusion_list.message.validator_index,
+                    );
+
+                    ServiceInboundMessage::SendResponse(
+                        peer_id,
+                        inbound_request_id,
+                        Box::new(Response::InclusionListsByIndices(Some(inclusion_list))),
+                    )
+                    .send(&network_to_service_tx);
+                }
+
+                debug_with_peers!("terminating InclusionListsByIndices response stream");
+
+                ServiceInboundMessage::SendResponse(
+                    peer_id,
+                    inbound_request_id,
+                    Box::new(Response::InclusionListsByIndices(None)),
+                )
+                .send(&network_to_service_tx);
             })
             .detach();
     }
@@ -2353,6 +2476,27 @@ impl<P: Preset, W: Wait> Network<P, W> {
                     (app_request_id: {app_request_id:?})"
                 );
             }
+            Response::InclusionListsByIndices(Some(signed_inclusion_list)) => {
+                debug_with_peers!(
+                    "received InclusionListsByIndices response chunk \
+                    (app_request_id: {app_request_id:?}, peer_id: {peer_id}, \
+                    slot: {}, validator_index: {})",
+                    signed_inclusion_list.message.slot,
+                    signed_inclusion_list.message.validator_index,
+                );
+
+                P2pToSync::RequestedInclusionList(signed_inclusion_list, peer_id)
+                    .send(&self.channels.p2p_to_sync_tx);
+            }
+            Response::InclusionListsByIndices(None) => {
+                // TODO(heze): the requested members this peer did not send are still missing.
+                // How to request them again (which peers to avoid or not, on what trigger, how
+                // many times, until when) is not decided yet.
+                debug_with_peers!(
+                    "peer {peer_id} terminated InclusionListsByIndices response stream \
+                    (app_request_id: {app_request_id:?})"
+                );
+            }
             Response::LightClientBootstrap(_) => {
                 // TODO(Altair Light Client Sync Protocol)
                 debug_with_peers!(
@@ -2895,6 +3039,24 @@ impl<P: Preset, W: Wait> Network<P, W> {
             peer_id,
             app_request_id,
             RequestType::ExecutionPayloadEnvelopesByRoot(request),
+        );
+    }
+
+    fn request_inclusion_lists_by_indices(
+        &self,
+        app_request_id: AppRequestId,
+        peer_id: PeerId,
+        request: InclusionListsByIndicesRequest<P>,
+    ) {
+        debug_with_peers!(
+            "sending InclusionListsByIndices request (app_request_id: {app_request_id:?}, \
+            peer_id: {peer_id}, request: {request:?})",
+        );
+
+        self.request(
+            peer_id,
+            app_request_id,
+            RequestType::InclusionListsByIndices(request),
         );
     }
 

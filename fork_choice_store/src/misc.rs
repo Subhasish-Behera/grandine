@@ -1298,6 +1298,7 @@ pub enum InclusionListAction<P: Preset> {
 #[derive(Debug)]
 pub enum InclusionListOrigin {
     Gossip(GossipId),
+    Requested(PeerId),
     Own,
 }
 
@@ -1306,7 +1307,7 @@ impl InclusionListOrigin {
     pub fn gossip_id(self) -> Option<GossipId> {
         match self {
             Self::Gossip(gossip_id) => Some(gossip_id),
-            Self::Own => None,
+            Self::Requested(_) | Self::Own => None,
         }
     }
 
@@ -1314,6 +1315,7 @@ impl InclusionListOrigin {
     pub const fn peer_id(&self) -> Option<PeerId> {
         match self {
             Self::Gossip(gossip_id) => Some(gossip_id.source),
+            Self::Requested(peer_id) => Some(*peer_id),
             Self::Own => None,
         }
     }
@@ -1321,7 +1323,7 @@ impl InclusionListOrigin {
     #[must_use]
     pub const fn verify_signatures(&self) -> bool {
         match self {
-            Self::Gossip(_) => true,
+            Self::Gossip(_) | Self::Requested(_) => true,
             Self::Own => false,
         }
     }
@@ -1329,6 +1331,11 @@ impl InclusionListOrigin {
     #[must_use]
     pub const fn is_from_gossip(&self) -> bool {
         matches!(self, Self::Gossip(_))
+    }
+
+    #[must_use]
+    pub const fn is_requested(&self) -> bool {
+        matches!(self, Self::Requested(_))
     }
 }
 
