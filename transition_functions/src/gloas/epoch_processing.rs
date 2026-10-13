@@ -100,7 +100,7 @@ pub fn process_epoch(
     clippy::useless_let_if_seq,
     reason = "assignments with multiple variables are more readable with conditional affectation"
 )]
-fn process_pending_deposits<P: Preset>(
+pub fn process_pending_deposits<P: Preset>(
     config: &Config,
     pubkey_cache: &PubkeyCache,
     state: &mut impl PostElectraBeaconState<P>,
@@ -179,7 +179,7 @@ fn process_pending_deposits<P: Preset>(
     Ok(())
 }
 
-fn process_ptc_window<P: Preset>(state: &mut impl PostGloasBeaconState<P>) -> Result<()> {
+pub fn process_ptc_window<P: Preset>(state: &mut impl PostGloasBeaconState<P>) -> Result<()> {
     let mut ptc_window = state.ptc_window().into_iter().collect::<Vec<_>>();
     let last_epoch_start = ptc_window.len().try_sub(P::SlotsPerEpoch::USIZE)?;
 
@@ -201,7 +201,7 @@ fn process_ptc_window<P: Preset>(state: &mut impl PostGloasBeaconState<P>) -> Re
     Ok(())
 }
 
-fn process_builder_pending_payments<P: Preset>(
+pub fn process_builder_pending_payments<P: Preset>(
     state: &mut impl PostGloasBeaconState<P>,
 ) -> Result<()> {
     let quorum = get_builder_payment_quorum_threshold(state)?;

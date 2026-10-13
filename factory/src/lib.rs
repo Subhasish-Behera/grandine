@@ -58,6 +58,11 @@ use types::{
             SignedExecutionPayloadEnvelope,
         },
     },
+    heze::containers::{
+        BeaconBlock as HezeBeaconBlock, BeaconBlockBody as HezeBeaconBlockBody,
+        ExecutionPayloadBid as HezeExecutionPayloadBid,
+        SignedExecutionPayloadBid as HezeSignedExecutionPayloadBid,
+    },
     nonstandard::{AttestationEpoch, Phase, RelativeEpoch},
     phase0::{
         consts::GENESIS_SLOT,
@@ -502,6 +507,23 @@ fn signed_execution_payload_bid<P: Preset>(
             signature: SignatureBytes::empty(),
         }
         .into(),
+        Phase::Heze => HezeSignedExecutionPayloadBid {
+            message: HezeExecutionPayloadBid {
+                parent_block_hash,
+                parent_block_root,
+                block_hash,
+                prev_randao,
+                builder_index: BUILDER_INDEX_SELF_BUILD,
+                slot,
+                value: 0,
+                execution_payment: 0,
+                blob_kzg_commitments: ProgressiveList::default(),
+                execution_requests_root,
+                ..Default::default()
+            },
+            signature: SignatureBytes::empty(),
+        }
+        .into(),
         Phase::Phase0
         | Phase::Altair
         | Phase::Bellatrix
@@ -555,15 +577,17 @@ pub fn execution_payload<P: Preset>(
             ..CapellaExecutionPayload::default()
         }
         .into(),
-        Phase::Deneb | Phase::Electra | Phase::Fulu | Phase::Gloas => DenebExecutionPayload {
-            parent_hash,
-            prev_randao,
-            timestamp,
-            block_hash,
-            withdrawals,
-            ..DenebExecutionPayload::default()
+        Phase::Deneb | Phase::Electra | Phase::Fulu | Phase::Gloas | Phase::Heze => {
+            DenebExecutionPayload {
+                parent_hash,
+                prev_randao,
+                timestamp,
+                block_hash,
+                withdrawals,
+                ..DenebExecutionPayload::default()
+            }
+            .into()
         }
-        .into(),
     };
 
     Ok(execution_payload)
@@ -784,6 +808,22 @@ fn block_with_parent_payload<P: Preset>(
                 deposits: deposits.into(),
                 sync_aggregate,
                 ..GloasBeaconBlockBody::default()
+            },
+        }))
+        .with_signed_execution_payload_bid(signed_execution_payload_bid),
+        Phase::Heze => BeaconBlock::from(Hc::new(HezeBeaconBlock {
+            slot,
+            proposer_index,
+            parent_root,
+            state_root: H256::zero(),
+            body: HezeBeaconBlockBody {
+                randao_reveal,
+                eth1_data,
+                graffiti,
+                attestations: gloas_attestations.try_into()?,
+                deposits: deposits.into(),
+                sync_aggregate,
+                ..HezeBeaconBlockBody::default()
             },
         }))
         .with_signed_execution_payload_bid(signed_execution_payload_bid),

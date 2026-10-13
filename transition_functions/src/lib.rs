@@ -241,6 +241,31 @@ pub mod fulu {
 pub mod gloas {
     pub use block_processing::{apply_parent_execution_payload, get_expected_withdrawals};
 
+    pub(crate) use block_processing::{
+        process_block, process_block_for_gossip, process_operations, process_withdrawals,
+    };
+    // Only used by Heze's block processing spec tests.
+    #[cfg(test)]
+    pub(crate) use block_processing::{
+        apply_attestation, process_payload_attestation, process_proposer_slashing,
+        validate_attestation_with_verifier,
+    };
+    pub(crate) use epoch_processing::{
+        process_builder_pending_payments, process_epoch, process_pending_deposits,
+        process_ptc_window,
+    };
+    pub(crate) use slot_processing::{process_slot, process_slots};
+    pub(crate) use state_transition::{state_transition, verify_signatures};
+
+    mod block_processing;
+    mod epoch_intermediates;
+    mod epoch_processing;
+    pub(crate) mod execution_payload_processing;
+    mod slot_processing;
+    mod state_transition;
+}
+
+pub mod heze {
     pub(crate) use block_processing::{process_block, process_block_for_gossip};
     pub(crate) use epoch_processing::process_epoch;
     pub(crate) use slot_processing::process_slots;
@@ -249,7 +274,6 @@ pub mod gloas {
     mod block_processing;
     mod epoch_intermediates;
     mod epoch_processing;
-    mod execution_payload_processing;
     mod slot_processing;
     mod state_transition;
 }
