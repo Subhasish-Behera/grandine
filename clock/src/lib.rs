@@ -407,7 +407,12 @@ pub fn ticks<P: Preset>(
                         .ok_or(ClockError::NextInstantOverflow)?;
 
                     // Emit only ticks that the application currently uses.
-                    if current_tick.is_start_of_interval() || current_tick.is_end_of_interval() {
+                    // From Heze, `AggregateSecond` triggers own inclusion lists.
+                    if current_tick.is_start_of_interval()
+                        || current_tick.is_end_of_interval()
+                        || (current_tick.kind == TickKind::AggregateSecond
+                            && config.phase_at_slot::<P>(current_tick.slot) >= Phase::Heze)
+                    {
                         return Ok(Some((current_tick, (next_tick, deadline))));
                     }
                 }

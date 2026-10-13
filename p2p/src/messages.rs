@@ -32,6 +32,7 @@ use types::{
         PayloadAttestationMessage, PayloadEnvelopeIdentifier, SignedExecutionPayloadEnvelope,
         SignedProposerPreferences,
     },
+    heze::containers::SignedInclusionList,
     nonstandard::Phase,
     phase0::{
         containers::{Checkpoint, ProposerSlashing, SignedVoluntaryExit},
@@ -233,6 +234,7 @@ pub enum ValidatorToP2p<P: Preset> {
     PublishContributionAndProof(Box<SignedContributionAndProof<P>>),
     PublishPayloadAttestation(Arc<PayloadAttestationMessage>),
     PublishProposerPreferences(Arc<SignedProposerPreferences>),
+    PublishInclusionList(Arc<SignedInclusionList<P>>),
     UpdateDataColumnSubnets(u64),
 }
 
