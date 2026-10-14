@@ -63,6 +63,7 @@ use types::{
     combined::{
         AttesterSlashing, BeaconBlock, BeaconState, BlindedBeaconBlock, ExecutionPayload,
         ExecutionPayloadHeader, ExecutionRequests, SignedBlindedBeaconBlock,
+        SignedExecutionPayloadBid,
     },
     config::Config as ChainConfig,
     deneb::{
@@ -82,9 +83,10 @@ use types::{
         consts::BUILDER_INDEX_SELF_BUILD,
         containers::{
             AttesterSlashing as GloasAttesterSlashing, BeaconBlock as GloasBeaconBlock,
-            BeaconBlockBody as GloasBeaconBlockBody, ExecutionPayloadBid, ExecutionPayloadEnvelope,
+            BeaconBlockBody as GloasBeaconBlockBody,
+            ExecutionPayloadBid as GloasExecutionPayloadBid, ExecutionPayloadEnvelope,
             ExecutionRequests as GloasExecutionRequests, PayloadAttestation,
-            SignedExecutionPayloadBid,
+            SignedExecutionPayloadBid as GloasSignedExecutionPayloadBid,
         },
     },
     nonstandard::{BlockRewards, KzgProofs, Phase, WEI_IN_GWEI, WithBlobsAndMev},
@@ -1212,7 +1214,8 @@ impl<P: Preset, W: Wait> BlockBuildContext<P, W> {
                                 voluntary_exits: voluntary_exits.into(),
                                 sync_aggregate,
                                 bls_to_execution_changes: bls_to_execution_changes.into(),
-                                signed_execution_payload_bid: SignedExecutionPayloadBid::default(),
+                                signed_execution_payload_bid:
+                                    GloasSignedExecutionPayloadBid::default(),
                                 payload_attestations,
                                 parent_execution_requests,
                             },
@@ -1405,34 +1408,34 @@ impl<P: Preset, W: Wait> BlockBuildContext<P, W> {
 
         let has_local_payload = execution_payload.is_some();
 
-        let mut without_state_root_with_payload = if let Some(state) =
-            self.beacon_state.post_gloas()
-        {
-            let builder_bid = self.select_best_builder_bid(state, block_mev, has_local_payload);
+        let mut without_state_root_with_payload =
+            if let Some(state) = self.beacon_state.post_gloas() {
+                let builder_bid = self.select_best_builder_bid(state, block_mev, has_local_payload);
 
-            let signed_payload_bid = if let Some(bid) = builder_bid {
-                // Set block_mev value to the in-protocol builder bid value
-                block_mev = Some(Uint256::from_u64(bid.message.value).saturating_mul(WEI_IN_GWEI));
+                let signed_payload_bid = if let Some(bid) = builder_bid {
+                    // Set block_mev value to the in-protocol builder bid value
+                    block_mev =
+                        Some(Uint256::from_u64(bid.message().value()).saturating_mul(WEI_IN_GWEI));
 
-                Some(bid)
+                    Some(bid)
+                } else {
+                    // No builder bid selected — self-build using the local payload that was
+                    // already prepared via engine_forkchoiceUpdated
+                    self.cache_and_build_self_payload_bid(state, execution_payload, commitments)
+                        .await?
+                };
+
+                let Some(signed_payload_bid) = signed_payload_bid else {
+                    return Ok(None);
+                };
+
+                block_without_state_root.with_signed_execution_payload_bid(Some(signed_payload_bid))
             } else {
-                // No builder bid selected — self-build using the local payload that was
-                // already prepared via engine_forkchoiceUpdated
-                self.cache_and_build_self_payload_bid(state, execution_payload, commitments)
-                    .await?
+                block_without_state_root
+                    .with_execution_payload(execution_payload)?
+                    .with_blob_kzg_commitments(commitments)
+                    .with_execution_requests(execution_requests)
             };
-
-            let Some(signed_payload_bid) = signed_payload_bid else {
-                return Ok(None);
-            };
-
-            block_without_state_root.with_signed_execution_payload_bid(Some(signed_payload_bid))
-        } else {
-            block_without_state_root
-                .with_execution_payload(execution_payload)?
-                .with_blob_kzg_commitments(commitments)
-                .with_execution_requests(execution_requests)
-        };
 
         if !self.options.disable_blockprint_graffiti {
             let graffiti = build_graffiti(self.options.graffiti, client_versions);
@@ -1926,26 +1929,45 @@ impl<P: Preset, W: Wait> BlockBuildContext<P, W> {
 
         let parent_root = state.latest_block_header().hash_tree_root();
 
-        let payload_bid = ExecutionPayloadBid {
-            parent_block_hash: payload.parent_hash(),
-            parent_block_root: parent_root,
-            block_hash: payload.block_hash(),
-            prev_randao: payload.prev_randao(),
-            fee_recipient,
-            gas_limit: payload.gas_limit(),
-            builder_index: BUILDER_INDEX_SELF_BUILD,
-            slot: state.slot(),
-            value: 0,
-            execution_payment: 0,
-            blob_kzg_commitments: blob_kzg_commitments_opt.unwrap_or_default().into(),
-            execution_requests_root,
-            phantom: PhantomData,
+        let parent_block_hash = payload.parent_hash();
+        let block_hash = payload.block_hash();
+        let prev_randao = payload.prev_randao();
+        let gas_limit = payload.gas_limit();
+        let slot = state.slot();
+        let blob_kzg_commitments = blob_kzg_commitments_opt.unwrap_or_default().into();
+
+        let signed_bid = match self.beacon_state.phase() {
+            Phase::Gloas => GloasSignedExecutionPayloadBid {
+                message: GloasExecutionPayloadBid {
+                    parent_block_hash,
+                    parent_block_root: parent_root,
+                    block_hash,
+                    prev_randao,
+                    fee_recipient,
+                    gas_limit,
+                    builder_index: BUILDER_INDEX_SELF_BUILD,
+                    slot,
+                    value: 0,
+                    execution_payment: 0,
+                    blob_kzg_commitments,
+                    execution_requests_root,
+                    phantom: PhantomData,
+                },
+                signature: SignatureBytes::empty(),
+            }
+            .into(),
+            Phase::Phase0
+            | Phase::Altair
+            | Phase::Bellatrix
+            | Phase::Capella
+            | Phase::Deneb
+            | Phase::Electra
+            | Phase::Fulu => {
+                return Err(anyhow!("self payload bid requested before Gloas"));
+            }
         };
 
-        Ok(Some(SignedExecutionPayloadBid {
-            message: payload_bid,
-            signature: SignatureBytes::empty(),
-        }))
+        Ok(Some(signed_bid))
     }
 
     #[instrument(skip_all, level = "debug")]
@@ -2066,7 +2088,7 @@ impl<P: Preset, W: Wait> BlockBuildContext<P, W> {
                     )?;
 
                     gloas::get_expected_withdrawals(&state_copy)?.0
-                } else if state.latest_execution_payload_bid().block_hash
+                } else if state.latest_execution_payload_bid().block_hash()
                     == state.latest_block_hash()
                 {
                     debug_with_peers!(
@@ -2181,9 +2203,9 @@ impl<P: Preset, W: Wait> BlockBuildContext<P, W> {
             if snapshot.should_build_on_full(state.slot())
                 || chain_config.phase_at_slot::<P>(parent_slot) < Phase::Gloas
             {
-                parent_bid.block_hash
+                parent_bid.block_hash()
             } else {
-                parent_bid.parent_block_hash
+                parent_bid.parent_hash()
             }
         } else if let Some(state) = state.post_capella() {
             state.latest_execution_payload_header().block_hash()
@@ -2291,21 +2313,21 @@ impl<P: Preset, W: Wait> BlockBuildContext<P, W> {
         }
 
         let parent_block_hash = if snapshot.should_build_on_full(state.slot()) {
-            state.latest_execution_payload_bid().block_hash
+            state.latest_execution_payload_bid().block_hash()
         } else {
-            state.latest_execution_payload_bid().parent_block_hash
+            state.latest_execution_payload_bid().parent_hash()
         };
 
         let bid = snapshot
             .selectable_payload_bids(state, state.slot(), parent_block_hash, self.head_block_root)
-            .max_by_key(|bid| bid.message.value)?;
+            .max_by_key(|bid| bid.message().value())?;
 
         // The bid value is what the builder pays the proposer for the slot, so it is comparable to
         // the MEV of a locally built payload. `builder_boost_factor` biases the comparison the same
         // way it does for the pre-Gloas builder API.
         if let Some(local_mev) = local_mev {
             let builder_boost_factor = self.options.builder_boost_factor;
-            let builder_mev = Uint256::from_u64(bid.message.value).saturating_mul(WEI_IN_GWEI);
+            let builder_mev = Uint256::from_u64(bid.message().value()).saturating_mul(WEI_IN_GWEI);
 
             let boosted_builder_mev = builder_mev
                 .div(Uint256::from_u64(100))

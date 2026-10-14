@@ -106,8 +106,8 @@ use crate::{
         containers::{
             Attestation as GloasAttestation, AttesterSlashing as GloasAttesterSlashing,
             BeaconBlock as GloasBeaconBlock, BeaconBlockBody as GloasBeaconBlockBody,
-            ExecutionPayloadBid, IndexedAttestation as GloasIndexedAttestation, PayloadAttestation,
-            SignedExecutionPayloadBid,
+            ExecutionPayloadBid as GloasExecutionPayloadBid,
+            IndexedAttestation as GloasIndexedAttestation, PayloadAttestation,
         },
         primitives::BuilderIndex,
     },
@@ -123,8 +123,8 @@ use crate::{
             SignedVoluntaryExit, Validator,
         },
         primitives::{
-            DepositIndex, Epoch, ExecutionBlockHash, ExecutionBlockNumber, Gwei, H256, Slot,
-            UnixSeconds, ValidatorIndex,
+            DepositIndex, Epoch, ExecutionAddress, ExecutionBlockHash, ExecutionBlockNumber, Gwei,
+            H256, Slot, UnixSeconds, ValidatorIndex,
         },
     },
     preset::{Preset, SlotsPerHistoricalRoot},
@@ -949,7 +949,7 @@ impl<P: Preset> PostFuluBeaconState<P> for GloasBeaconState<P> {
 }
 
 pub trait PostGloasBeaconState<P: Preset>: PostFuluBeaconState<P> {
-    fn latest_execution_payload_bid(&self) -> &ExecutionPayloadBid<P>;
+    fn latest_execution_payload_bid(&self) -> &dyn PayloadBid<P>;
     fn execution_payload_availability(&self) -> BitVector<SlotsPerHistoricalRoot<P>>;
     fn builder_pending_payments(&self) -> &BuilderPendingPayments<P>;
     fn builder_pending_withdrawals(&self) -> &BuilderPendingWithdrawals;
@@ -959,7 +959,6 @@ pub trait PostGloasBeaconState<P: Preset>: PostFuluBeaconState<P> {
     fn next_withdrawal_builder_index(&self) -> BuilderIndex;
     fn ptc_window(&self) -> &PtcWindow<P>;
 
-    fn latest_execution_payload_bid_mut(&mut self) -> &mut ExecutionPayloadBid<P>;
     fn execution_payload_availability_mut(&mut self) -> &mut BitVector<SlotsPerHistoricalRoot<P>>;
     fn builder_pending_payments_mut(&mut self) -> &mut BuilderPendingPayments<P>;
     fn builder_pending_withdrawals_mut(&mut self) -> &mut BuilderPendingWithdrawals;
@@ -1002,7 +1001,7 @@ impl<parameters> PostGloasBeaconState<P> for implementor {
 
     #[duplicate_item(
         field                               return_type;
-        [latest_execution_payload_bid]      [ExecutionPayloadBid<P>];
+        [latest_execution_payload_bid]      [dyn PayloadBid<P>];
         [builder_pending_payments]          [BuilderPendingPayments<P>];
         [builder_pending_withdrawals]       [BuilderPendingWithdrawals];
         [payload_expected_withdrawals]      [PayloadExpectedWithdrawals];
@@ -1015,7 +1014,6 @@ impl<parameters> PostGloasBeaconState<P> for implementor {
 
     #[duplicate_item(
         field                              method                                 return_type;
-        [latest_execution_payload_bid]     [latest_execution_payload_bid_mut]     [ExecutionPayloadBid<P>];
         [execution_payload_availability]   [execution_payload_availability_mut]   [BitVector<SlotsPerHistoricalRoot<P>>];
         [builder_pending_payments]         [builder_pending_payments_mut]         [BuilderPendingPayments<P>];
         [builder_pending_withdrawals]      [builder_pending_withdrawals_mut]      [BuilderPendingWithdrawals];
@@ -1110,14 +1108,8 @@ pub trait BeaconBlock<P: Preset>: SszHash<PackingFactor = U1> {
     fn state_root(&self) -> H256;
     fn body(&self) -> &dyn BeaconBlockBody<P>;
 
-    fn payload_bid(&self) -> Option<&ExecutionPayloadBid<P>> {
-        Some(
-            &self
-                .body()
-                .with_payload_bid()?
-                .signed_execution_payload_bid()
-                .message,
-        )
+    fn payload_bid(&self) -> Option<&dyn PayloadBid<P>> {
+        Some(self.body().with_payload_bid()?.payload_bid())
     }
 
     fn to_header(&self) -> BeaconBlockHeader {
@@ -1704,7 +1696,7 @@ impl<P: Preset> BlockBodyWithBlobKzgCommitments<P> for FuluBlindedBeaconBlockBod
 
 impl<P: Preset> BlockBodyWithBlobKzgCommitments<P> for GloasBeaconBlockBody<P> {
     fn blob_kzg_commitments(&self) -> &dyn SszList<KzgCommitment> {
-        self.signed_execution_payload_bid().blob_kzg_commitments()
+        self.signed_execution_payload_bid.blob_kzg_commitments()
     }
 }
 
@@ -1797,12 +1789,12 @@ impl<P: Preset> BlockBodyWithExecutionRequests<P> for FuluBlindedBeaconBlockBody
 }
 
 pub trait BlockBodyWithPayloadBid<P: Preset>: BeaconBlockBody<P> {
-    fn signed_execution_payload_bid(&self) -> &SignedExecutionPayloadBid<P>;
+    fn payload_bid(&self) -> &dyn PayloadBid<P>;
 }
 
 impl<P: Preset> BlockBodyWithPayloadBid<P> for GloasBeaconBlockBody<P> {
-    fn signed_execution_payload_bid(&self) -> &SignedExecutionPayloadBid<P> {
-        &self.signed_execution_payload_bid
+    fn payload_bid(&self) -> &dyn PayloadBid<P> {
+        &self.signed_execution_payload_bid.message
     }
 }
 
@@ -1813,6 +1805,64 @@ pub trait BlockBodyWithPayloadAttestations<P: Preset>: BeaconBlockBody<P> {
 impl<P: Preset> BlockBodyWithPayloadAttestations<P> for GloasBeaconBlockBody<P> {
     fn payload_attestations(&self) -> &ProgressiveList<PayloadAttestation<P>> {
         &self.payload_attestations
+    }
+}
+
+/// Read-only fields shared by execution payload bids across forks.
+///
+/// Whole-bid replacement remains fork-specific because different forks may use
+/// different concrete bid containers.
+pub trait PayloadBid<P: Preset>: ExecutionPayload<P> {
+    fn parent_block_root(&self) -> H256;
+    fn prev_randao(&self) -> H256;
+    fn fee_recipient(&self) -> ExecutionAddress;
+    fn builder_index(&self) -> BuilderIndex;
+    fn slot(&self) -> Slot;
+    fn value(&self) -> Gwei;
+    fn execution_payment(&self) -> Gwei;
+    fn blob_kzg_commitments(&self) -> &ProgressiveList<KzgCommitment>;
+    fn execution_requests_root(&self) -> H256;
+}
+
+#[duplicate_item(
+    implementor;
+    [GloasExecutionPayloadBid<P>];
+)]
+impl<P: Preset> PayloadBid<P> for implementor {
+    fn parent_block_root(&self) -> H256 {
+        self.parent_block_root
+    }
+
+    fn prev_randao(&self) -> H256 {
+        self.prev_randao
+    }
+
+    fn fee_recipient(&self) -> ExecutionAddress {
+        self.fee_recipient
+    }
+
+    fn builder_index(&self) -> BuilderIndex {
+        self.builder_index
+    }
+
+    fn slot(&self) -> Slot {
+        self.slot
+    }
+
+    fn value(&self) -> Gwei {
+        self.value
+    }
+
+    fn execution_payment(&self) -> Gwei {
+        self.execution_payment
+    }
+
+    fn blob_kzg_commitments(&self) -> &ProgressiveList<KzgCommitment> {
+        &self.blob_kzg_commitments
+    }
+
+    fn execution_requests_root(&self) -> H256 {
+        self.execution_requests_root
     }
 }
 
@@ -1982,7 +2032,7 @@ impl<P: Preset> ExecutionPayload<P> for DenebExecutionPayloadHeader<P> {
     }
 }
 
-impl<P: Preset> ExecutionPayload<P> for ExecutionPayloadBid<P> {
+impl<P: Preset> ExecutionPayload<P> for GloasExecutionPayloadBid<P> {
     fn block_hash(&self) -> ExecutionBlockHash {
         self.block_hash
     }

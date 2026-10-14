@@ -3423,10 +3423,7 @@ where
         // > - If `execution_payload` verification of block's execution payload parent by an execution node **is complete**:
         // >   - [REJECT] The block's execution payload parent (defined by `bid.parent_block_hash`) passes all validation.
         if let Some(body) = block.message().body().with_payload_bid() {
-            let parent_block_hash = body
-                .signed_execution_payload_bid()
-                .message
-                .parent_block_hash;
+            let parent_block_hash = body.payload_bid().parent_hash();
 
             // Request payload envelope if fork choice hasn't accepted yet.
             if !origin.is_own() && !self.store.is_payload_verified(block_root) {
@@ -3885,7 +3882,7 @@ where
         let head_block_hash = if let Some(post_gloas_state) = new_head_state.post_gloas() {
             // Match the branch the current-slot proposer will build on.
             if store.should_build_on_full(store.slot()) {
-                post_gloas_state.latest_execution_payload_bid().block_hash
+                post_gloas_state.latest_execution_payload_bid().block_hash()
             } else {
                 post_gloas_state.latest_block_hash()
             }

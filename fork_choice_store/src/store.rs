@@ -49,7 +49,7 @@ use typenum::Unsigned as _;
 use types::{
     combined::{
         Attestation, AttesterSlashing, BeaconState, DataColumnSidecar, ExecutionPayloadParams,
-        SignedAggregateAndProof, SignedBeaconBlock,
+        SignedAggregateAndProof, SignedBeaconBlock, SignedExecutionPayloadBid,
     },
     config::Config as ChainConfig,
     deneb::{
@@ -64,9 +64,8 @@ use types::{
             PAYLOAD_STATUS_FULL,
         },
         containers::{
-            Builder, BuilderExitRequest, CombinedPayloadAttestation, ExecutionPayloadBid,
-            ExecutionRequests, SignedExecutionPayloadBid, SignedExecutionPayloadEnvelope,
-            SignedProposerPreferences,
+            Builder, BuilderExitRequest, CombinedPayloadAttestation, ExecutionRequests,
+            SignedExecutionPayloadEnvelope, SignedProposerPreferences,
         },
         primitives::{BuilderIndex, PayloadStatus as ExecutionPayloadStatus},
     },
@@ -82,7 +81,10 @@ use types::{
         primitives::{Epoch, ExecutionBlockHash, Gwei, H256, Slot, ValidatorIndex},
     },
     preset::{DataAvailabilityTimelyThreshold, PayloadTimelyThreshold, Preset},
-    traits::{BeaconState as _, PostGloasBeaconState, SignedBeaconBlock as _, SszValidatorList},
+    traits::{
+        BeaconState as BeaconStateTrait, PayloadBid, PostGloasBeaconState, SignedBeaconBlock as _,
+        SszValidatorList,
+    },
 };
 use unwrap_none::UnwrapNone as _;
 
@@ -503,8 +505,8 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
             .into_iter()
             .flat_map(HashMap::values)
             .filter(move |bid| {
-                bid.message.parent_block_hash == parent_block_hash
-                    && bid.message.parent_block_root == parent_block_root
+                bid.message().parent_hash() == parent_block_hash
+                    && bid.message().parent_block_root() == parent_block_root
             })
     }
 
@@ -516,10 +518,10 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         parent_block_root: H256,
     ) -> impl Iterator<Item = &'a SignedExecutionPayloadBid<P>> {
         let parent_execution_requests = (parent_block_hash
-            == state.latest_execution_payload_bid().block_hash)
-            .then(|| self.cached_execution_payload_envelope_by_root(parent_block_root))
-            .flatten()
-            .map(|envelope| &envelope.message.execution_requests);
+            == state.latest_execution_payload_bid().block_hash())
+        .then(|| self.cached_execution_payload_envelope_by_root(parent_block_root))
+        .flatten()
+        .map(|envelope| &envelope.message.execution_requests);
 
         self.accepted_payload_bids_for_parent(slot, parent_block_hash, parent_block_root)
             .filter(move |bid| {
@@ -529,7 +531,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
                 parent_execution_requests.is_none_or(|execution_requests| {
                     state
                         .builders()
-                        .get(bid.message.builder_index)
+                        .get(bid.message().builder_index())
                         .is_ok_and(|builder| !is_builder_exiting(builder, execution_requests))
                 })
             })
@@ -550,8 +552,8 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         self.accepted_payload_bids
             .get(&slot)?
             .values()
-            .filter(|bid| bid.message.builder_index == builder_index)
-            .max_by_key(|bid| bid.message.value)
+            .filter(|bid| bid.message().builder_index() == builder_index)
+            .max_by_key(|bid| bid.message().value())
     }
 
     #[must_use]
@@ -1028,29 +1030,29 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
             && !self.payload_data_availability(head.block_root, false)
     }
 
-    pub fn is_bid_compatible_with_head(&self, bid: &ExecutionPayloadBid<P>) -> bool {
+    pub fn is_bid_compatible_with_head(&self, bid: &dyn PayloadBid<P>) -> bool {
         let head = self.head();
         let head_block = head.block.message();
 
         // The head is the last pre-Gloas block, so there is no empty/full variant to
         // pick between. Fall back to only requiring that the parent block is known.
         let Some(head_bid) = head_block.payload_bid() else {
-            return self.contains_block(bid.parent_block_root);
+            return self.contains_block(bid.parent_block_root());
         };
 
-        let builds_on_parent_block = bid.parent_block_root == head_block.parent_root();
-        let builds_on_parent_payload = bid.parent_block_hash == head_bid.parent_block_hash;
+        let builds_on_parent_block = bid.parent_block_root() == head_block.parent_root();
+        let builds_on_parent_payload = bid.parent_hash() == head_bid.parent_hash();
 
         if builds_on_parent_block && builds_on_parent_payload {
             return true;
         }
 
-        if bid.parent_block_root != head.block_root {
+        if bid.parent_block_root() != head.block_root {
             return false;
         }
 
-        if self.should_build_on_full(bid.slot) {
-            return bid.parent_block_hash == head_bid.block_hash;
+        if self.should_build_on_full(bid.slot()) {
+            return bid.parent_hash() == head_bid.block_hash();
         }
 
         builds_on_parent_payload
@@ -1581,7 +1583,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
             return PayloadOutcome::Unknown;
         };
 
-        if payload_bid.builder_index == BUILDER_INDEX_SELF_BUILD {
+        if payload_bid.builder_index() == BUILDER_INDEX_SELF_BUILD {
             return PayloadOutcome::Unknown;
         }
 
@@ -1877,10 +1879,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         let block = chain_link.block.message();
 
         if let Some(body_with_payload_bid) = block.body().with_payload_bid() {
-            return body_with_payload_bid
-                .signed_execution_payload_bid()
-                .message
-                .parent_block_hash;
+            return body_with_payload_bid.payload_bid().parent_hash();
         }
 
         block
@@ -2299,8 +2298,8 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         payload_bid: Arc<SignedExecutionPayloadBid<P>>,
         origin: &ExecutionPayloadBidOrigin,
     ) -> Result<ExecutionPayloadBidAction<P>> {
-        let bid = &payload_bid.message;
-        let builder_index = bid.builder_index;
+        let bid = payload_bid.message();
+        let builder_index = bid.builder_index();
 
         // Deviation from the spec: a self-build bid is included in a block by the proposer that
         // built the payload and is never broadcast, so one arriving here is unsigned, forgeable and
@@ -2312,26 +2311,26 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
 
         // > off-protocol payment is disallowed to gossip via p2p and API, the `bid.execution_payment` MUST be zero
         ensure!(
-            bid.execution_payment == 0,
+            bid.execution_payment() == 0,
             Error::<P>::ExecutionPayloadBidOffProtocolPaymentDisallowed { payload_bid }
         );
 
         // > The bid's block hash is not equal to its parent block hash
         ensure!(
-            bid.block_hash != bid.parent_block_hash,
+            bid.block_hash() != bid.parent_hash(),
             Error::<P>::ExecutionPayloadBidBlockHashEqualsParent { payload_bid }
         );
 
         // > the `bid.slot` is the current slot or the next slot
-        if bid.slot < self.slot() || bid.slot > self.slot().saturating_add(1) {
+        if bid.slot() < self.slot() || bid.slot() > self.slot().saturating_add(1) {
             return Ok(ExecutionPayloadBidAction::Ignore(
                 "the `bid.slot` is the current slot or the next slot",
             ));
         }
 
         // > Verify commitments are under limit
-        let bid_epoch = misc::compute_epoch_at_slot::<P>(bid.slot);
-        let in_bid = bid.blob_kzg_commitments.len();
+        let bid_epoch = misc::compute_epoch_at_slot::<P>(bid.slot());
+        let in_bid = bid.blob_kzg_commitments().len();
         let maximum = self
             .chain_config
             .get_blob_schedule_entry(bid_epoch)
@@ -2341,12 +2340,12 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
             Error::<P>::TooManyBlobKzgCommitments { maximum, in_bid }
         );
 
-        if let Some(payload_bids) = self.accepted_payload_bids.get(&bid.slot) {
+        if let Some(payload_bids) = self.accepted_payload_bids.get(&bid.slot()) {
             // > this is the first signed bid seen with a valid signature from the given builder for the tuple (bid.slot, bid.parent_block_hash, bid.parent_block_root)
             if payload_bids.contains_key(&(
                 builder_index,
-                bid.parent_block_hash,
-                bid.parent_block_root,
+                bid.parent_hash(),
+                bid.parent_block_root(),
             )) {
                 return Ok(ExecutionPayloadBidAction::Ignore(
                     "this is the first signed bid seen from the given builder for the tuple (bid.slot, bid.parent_block_hash, bid.parent_block_root)",
@@ -2356,12 +2355,12 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
             // > this bid is the highest value bid seen for the tuple (bid.slot, bid.parent_block_hash, bid.parent_block_root)
             if let Some(highest_bid) = self
                 .accepted_payload_bids_for_parent(
-                    bid.slot,
-                    bid.parent_block_hash,
-                    bid.parent_block_root,
+                    bid.slot(),
+                    bid.parent_hash(),
+                    bid.parent_block_root(),
                 )
-                .max_by_key(|b| b.message.value)
-                && bid.value <= highest_bid.message.value
+                .max_by_key(|b| b.message().value())
+                && bid.value() <= highest_bid.message().value()
             {
                 return Ok(ExecutionPayloadBidAction::Ignore(
                     "this bid is the highest value bid seen for the tuple (bid.slot, bid.parent_block_hash, bid.parent_block_root)",
@@ -2369,7 +2368,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
             }
         }
 
-        let Some(parent) = self.chain_link(bid.parent_block_root) else {
+        let Some(parent) = self.chain_link(bid.parent_block_root()) else {
             return Ok(ExecutionPayloadBidAction::Ignore(
                 "the `bid.parent_block_root` is the hash tree root of a known beacon block in fork choice",
             ));
@@ -2379,9 +2378,9 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         // is greater than the slot of the block with root `bid.parent_block_root`.
         let parent_slot = parent.slot();
         ensure!(
-            bid.slot > parent_slot,
+            bid.slot() > parent_slot,
             Error::<P>::ExecutionPayloadBidSlotNotGreaterThanParent {
-                bid_slot: bid.slot,
+                bid_slot: bid.slot(),
                 parent_slot,
             }
         );
@@ -2407,7 +2406,8 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         }
 
         // > the `SignedProposerPreferences` where `preferences.proposal_slot` is equal to `bid.slot` has been seen.
-        let Some(dependent_root) = self.shuffling_dependent_root(bid.parent_block_root, bid_epoch)
+        let Some(dependent_root) =
+            self.shuffling_dependent_root(bid.parent_block_root(), bid_epoch)
         else {
             return Ok(ExecutionPayloadBidAction::Ignore(
                 "shuffling dependent root unavailable for bid validation",
@@ -2416,12 +2416,12 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         let proposer_index = accessors::get_beacon_proposer_index_at_slot(
             &self.chain_config,
             &parent_state,
-            bid.slot,
+            bid.slot(),
         )?;
 
         let Some(proposer_preference) =
             self.accepted_proposer_preferences
-                .get(&(dependent_root, bid.slot, proposer_index))
+                .get(&(dependent_root, bid.slot(), proposer_index))
         else {
             return Ok(ExecutionPayloadBidAction::Ignore(
                 "the `SignedProposerPreferences` where `preferences.proposal_slot` is equal to `bid.slot` has been seen",
@@ -2429,7 +2429,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         };
 
         // > `bid.fee_recipient` matches the `fee_recipient` from the proposer's `SignedProposerPreferences` associated with `bid.slot`.
-        if bid.fee_recipient != proposer_preference.message.fee_recipient {
+        if bid.fee_recipient() != proposer_preference.message.fee_recipient {
             return Ok(ExecutionPayloadBidAction::Ignore(
                 "`bid.fee_recipient` does not match the `fee_recipient` from the proposer's `SignedProposerPreferences` associated with `bid.slot`",
             ));
@@ -2437,7 +2437,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
 
         // > the `bid.parent_block_hash` is the block hash of a known execution payload in fork choice
         let Some(parent_gas_limit) = self
-            .unfinalized_chain_link_by_execution_block_hash(bid.parent_block_hash)
+            .unfinalized_chain_link_by_execution_block_hash(bid.parent_hash())
             .and_then(|chain_link| chain_link.block.execution_gas_limit())
         else {
             return Ok(ExecutionPayloadBidAction::Ignore(
@@ -2454,7 +2454,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         // block's payload was withheld. Pre-Gloas blocks carry the payload itself.
         if !predicates::is_gas_limit_target_compatible(
             parent_gas_limit,
-            bid.gas_limit,
+            bid.gas_limit(),
             proposer_preference.message.target_gas_limit,
         ) {
             return Ok(ExecutionPayloadBidAction::Ignore(
@@ -2467,9 +2467,9 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         let epoch = accessors::get_current_epoch(&parent_state);
         let prev_randao = accessors::get_randao_mix(&parent_state, epoch);
         ensure!(
-            bid.prev_randao == prev_randao,
+            bid.prev_randao() == prev_randao,
             Error::<P>::ExecutionPayloadBidPrevRandaoIncorrect {
-                bid_prev_randao: Box::new(bid.prev_randao),
+                bid_prev_randao: Box::new(bid.prev_randao()),
                 prev_randao: Box::new(prev_randao),
             }
         );
@@ -2477,8 +2477,8 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         let Ok(state) = self.state_cache.state_at_slot(
             &self.pubkey_cache,
             self,
-            bid.parent_block_root,
-            bid.slot,
+            bid.parent_block_root(),
+            bid.slot(),
         ) else {
             return Ok(ExecutionPayloadBidAction::Ignore(
                 "fail to preprocess beacon state for bid validation",
@@ -2512,16 +2512,16 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         );
 
         // > the `bid.value` is less or equal than the builder's excess balance
-        if !predicates::can_builder_cover_bid(post_gloas_state, builder_index, bid.value)? {
+        if !predicates::can_builder_cover_bid(post_gloas_state, builder_index, bid.value())? {
             return Ok(ExecutionPayloadBidAction::Ignore(
                 "the `bid.value` is less or equal than the builder's excess balance",
             ));
         }
 
         // > The parent's payload does not try to exit the builder
-        if bid.parent_block_hash == post_gloas_state.latest_execution_payload_bid().block_hash {
+        if bid.parent_hash() == post_gloas_state.latest_execution_payload_bid().block_hash() {
             let parent_payload_exits_builder = self
-                .cached_execution_payload_envelope_by_root(bid.parent_block_root)
+                .cached_execution_payload_envelope_by_root(bid.parent_block_root())
                 .is_some_and(|envelope| {
                     is_builder_exiting(builder, &envelope.message.execution_requests)
                 });
@@ -2535,9 +2535,15 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
             let pubkey = self.pubkey_cache.get_or_insert(builder.pubkey)?;
 
             // > `signed_execution_payload_bid.signature` is valid builder's signature
-            if let Err(error) =
-                bid.verify(&self.chain_config, &state, payload_bid.signature, pubkey)
-            {
+            let verification_result = match payload_bid.as_ref() {
+                SignedExecutionPayloadBid::Gloas(signed) => {
+                    signed
+                        .message
+                        .verify(&self.chain_config, &state, signed.signature, pubkey)
+                }
+            };
+
+            if let Err(error) = verification_result {
                 bail!(
                     error.context(Error::<P>::InvalidExecutionPayloadBidSignature { payload_bid })
                 );
@@ -3632,7 +3638,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
                 .message()
                 .body()
                 .with_payload_bid()
-                .map(|body| body.signed_execution_payload_bid().blob_kzg_commitments())
+                .map(|body| body.payload_bid().blob_kzg_commitments())
                 .ok_or_else(|| Error::DataColumnSidecarBlockWithoutPayloadBid {
                     data_column_sidecar: data_column_sidecar.clone_arc(),
                 })?
@@ -4000,7 +4006,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
             .message()
             .body()
             .with_payload_bid()
-            .map(|body| &body.signed_execution_payload_bid().message)
+            .map(|body| body.payload_bid())
         else {
             return Err(Error::PayloadEnvelopeInvalidBlock {
                 payload_envelope: envelope,
@@ -4010,35 +4016,35 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
 
         // [REJECT] envelope.builder_index == bid.builder_index
         ensure!(
-            builder_index == bid.builder_index,
+            builder_index == bid.builder_index(),
             Error::<P>::BuilderIndexMismatch {
-                expected: bid.builder_index,
+                expected: bid.builder_index(),
                 actual: builder_index,
             },
         );
 
         ensure!(
-            envelope.message.payload.prev_randao == bid.prev_randao,
+            envelope.message.payload.prev_randao == bid.prev_randao(),
             Error::<P>::ExecutionPayloadPrevRandaoMismatch {
                 envelope,
-                expected: Box::new(bid.prev_randao),
+                expected: Box::new(bid.prev_randao()),
             },
         );
 
         ensure!(
-            envelope.message.payload.gas_limit == bid.gas_limit,
+            envelope.message.payload.gas_limit == bid.gas_limit(),
             Error::<P>::ExecutionPayloadGasLimitMismatch {
                 envelope,
-                expected: bid.gas_limit,
+                expected: bid.gas_limit(),
             },
         );
 
         // [REJECT] payload.block_hash == bid.block_hash
         ensure!(
-            envelope.message.payload.block_hash == bid.block_hash,
+            envelope.message.payload.block_hash == bid.block_hash(),
             Error::<P>::ExecutionPayloadBlockHashMismatch {
                 envelope,
-                expected: Box::new(bid.block_hash),
+                expected: Box::new(bid.block_hash()),
             },
         );
 
@@ -4095,10 +4101,10 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
 
         // [REJECT] hash_tree_root(envelope.execution_requests) == bid.execution_requests_root
         ensure!(
-            envelope.message.execution_requests.hash_tree_root() == bid.execution_requests_root,
+            envelope.message.execution_requests.hash_tree_root() == bid.execution_requests_root(),
             Error::<P>::ExecutionPayloadRequestsHashMismatch {
                 envelope,
-                expected: Box::new(bid.execution_requests_root),
+                expected: Box::new(bid.execution_requests_root()),
             },
         );
 
@@ -4158,7 +4164,7 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         }
 
         let versioned_hashes = bid
-            .blob_kzg_commitments
+            .blob_kzg_commitments()
             .iter()
             .copied()
             .map(misc::kzg_commitment_to_versioned_hash)
@@ -4442,7 +4448,6 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
         if epoch_updated && finalized_checkpoint_updated {
             self.prune_after_finalization();
         }
-
         self.blob_cache.on_slot(new_tick.slot);
         self.reset_current_slot_blocks_in_processing();
 
@@ -4851,16 +4856,15 @@ impl<P: Preset, S: Storage<P>> Store<P, S> {
     }
 
     pub fn apply_execution_payload_bid(&mut self, payload_bid: Arc<SignedExecutionPayloadBid<P>>) {
-        let accepted_bids = self
-            .accepted_payload_bids
-            .entry(payload_bid.message.slot)
-            .or_default();
-
+        let bid = payload_bid.message();
+        let slot = bid.slot();
         let key = (
-            payload_bid.message.builder_index,
-            payload_bid.message.parent_block_hash,
-            payload_bid.message.parent_block_root,
+            bid.builder_index(),
+            bid.parent_hash(),
+            bid.parent_block_root(),
         );
+
+        let accepted_bids = self.accepted_payload_bids.entry(slot).or_default();
 
         accepted_bids.insert(key, Arc::unwrap_or_clone(payload_bid));
     }

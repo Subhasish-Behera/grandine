@@ -107,7 +107,8 @@ use crate::{
             LightClientOptimisticUpdate as GloasLightClientOptimisticUpdate,
             LightClientUpdate as GloasLightClientUpdate,
             SignedAggregateAndProof as GloasSignedAggregateAndProof,
-            SignedBeaconBlock as GloasSignedBeaconBlock, SignedExecutionPayloadBid,
+            SignedBeaconBlock as GloasSignedBeaconBlock,
+            SignedExecutionPayloadBid as GloasSignedExecutionPayloadBid,
         },
     },
     nonstandard::Phase,
@@ -128,9 +129,9 @@ use crate::{
     preset::{Mainnet, Preset},
     traits::{
         BeaconBlock as _, BeaconState as _, BlockBodyWithExecutionRequests,
-        ExecutionPayload as ExecutionPayloadTrait, PostAltairBeaconState, PostBellatrixBeaconState,
-        PostCapellaBeaconState, PostElectraBeaconState, PostFuluBeaconState, PostGloasBeaconState,
-        SignedBeaconBlock as _,
+        ExecutionPayload as ExecutionPayloadTrait, PayloadBid, PostAltairBeaconState,
+        PostBellatrixBeaconState, PostCapellaBeaconState, PostElectraBeaconState,
+        PostFuluBeaconState, PostGloasBeaconState, SignedBeaconBlock as _,
     },
 };
 
@@ -725,7 +726,7 @@ impl<P: Preset> SignedBeaconBlock<P> {
         self.message()
             .body()
             .with_payload_bid()
-            .map(|body| body.signed_execution_payload_bid().message.block_hash)
+            .map(|body| body.payload_bid().block_hash())
             .or_else(|| {
                 self.message()
                     .body()
@@ -738,7 +739,7 @@ impl<P: Preset> SignedBeaconBlock<P> {
         self.message()
             .body()
             .with_payload_bid()
-            .map(|body| body.signed_execution_payload_bid().message.gas_limit)
+            .map(|body| body.payload_bid().gas_limit())
             .or_else(|| {
                 self.message()
                     .body()
@@ -767,7 +768,7 @@ impl<P: Preset> SignedBeaconBlock<P> {
     }
 
     #[must_use]
-    pub fn payload_bid(&self) -> Option<&ExecutionPayloadBid<P>> {
+    pub fn payload_bid(&self) -> Option<&dyn PayloadBid<P>> {
         self.message().payload_bid()
     }
 }
@@ -1017,8 +1018,10 @@ impl<P: Preset> BeaconBlock<P> {
             return self;
         };
 
-        match &mut self {
-            Self::Gloas(block) => block.body.signed_execution_payload_bid = payload_bid,
+        match (&mut self, payload_bid) {
+            (Self::Gloas(block), SignedExecutionPayloadBid::Gloas(payload_bid)) => {
+                block.body.signed_execution_payload_bid = payload_bid;
+            }
             _ => {
                 // This match arm will silently match any new phases.
                 // Cause a compilation error if a new phase is added.
@@ -1623,6 +1626,73 @@ pub enum ExecutionPayloadHeader<P: Preset> {
     Capella(CapellaExecutionPayloadHeader<P>),
     Deneb(DenebExecutionPayloadHeader<P>),
     Gloas(ExecutionPayloadBid<P>),
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, From, Deserialize, Serialize)]
+#[serde(bound = "", untagged)]
+pub enum SignedExecutionPayloadBid<P: Preset> {
+    Gloas(GloasSignedExecutionPayloadBid<P>),
+}
+
+impl<P: Preset> SszSize for SignedExecutionPayloadBid<P> {
+    const SIZE: Size = Size::for_untagged_union::<{ Phase::CARDINALITY - 7 }>([
+        GloasSignedExecutionPayloadBid::<P>::SIZE,
+    ]);
+}
+
+impl<P: Preset> SszRead<Phase> for SignedExecutionPayloadBid<P> {
+    fn from_ssz_unchecked(phase: &Phase, bytes: &[u8]) -> Result<Self, ReadError> {
+        match phase {
+            Phase::Gloas => Ok(Self::Gloas(SszReadDefault::from_ssz_default(bytes)?)),
+            Phase::Phase0
+            | Phase::Altair
+            | Phase::Bellatrix
+            | Phase::Capella
+            | Phase::Deneb
+            | Phase::Electra
+            | Phase::Fulu => Err(ReadError::Custom {
+                message: "signed execution payload bid is not available before Gloas",
+            }),
+        }
+    }
+}
+
+impl<P: Preset> SszWrite for SignedExecutionPayloadBid<P> {
+    fn write_variable(&self, bytes: &mut Vec<u8>) -> Result<(), WriteError> {
+        match self {
+            Self::Gloas(bid) => bid.write_variable(bytes),
+        }
+    }
+}
+
+impl<P: Preset> SszHash for SignedExecutionPayloadBid<P> {
+    type PackingFactor = U1;
+
+    fn hash_tree_root(&self) -> H256 {
+        match self {
+            Self::Gloas(bid) => bid.hash_tree_root(),
+        }
+    }
+}
+
+impl<P: Preset> SignedExecutionPayloadBid<P> {
+    pub const fn phase(&self) -> Phase {
+        match self {
+            Self::Gloas(_) => Phase::Gloas,
+        }
+    }
+
+    pub fn message(&self) -> &dyn PayloadBid<P> {
+        match self {
+            Self::Gloas(bid) => &bid.message,
+        }
+    }
+
+    pub const fn signature(&self) -> SignatureBytes {
+        match self {
+            Self::Gloas(bid) => bid.signature,
+        }
+    }
 }
 
 impl<P: Preset> ExecutionPayloadHeader<P> {

@@ -22,14 +22,15 @@ use transition_functions::unphased::StateRootPolicy;
 use types::{
     combined::{
         Attestation, BeaconState, DataColumnSidecar, SignedAggregateAndProof, SignedBeaconBlock,
+        SignedExecutionPayloadBid,
     },
     config::Config as ChainConfig,
     deneb::containers::BlobSidecar,
     gloas::{
         consts::{PAYLOAD_STATUS_EMPTY, PAYLOAD_STATUS_FULL},
         containers::{
-            CombinedPayloadAttestation, PayloadAttestationData, SignedExecutionPayloadBid,
-            SignedExecutionPayloadEnvelope, SignedProposerPreferences,
+            CombinedPayloadAttestation, PayloadAttestationData, SignedExecutionPayloadEnvelope,
+            SignedProposerPreferences,
         },
         primitives::PayloadStatus as RawPayloadPresence,
     },
@@ -161,7 +162,7 @@ impl PayloadPresence {
             return Self::Pending;
         };
 
-        if block_payload_bid.parent_block_hash == parent_payload_bid.block_hash {
+        if block_payload_bid.parent_hash() == parent_payload_bid.block_hash() {
             Self::Full
         } else {
             Self::Empty
