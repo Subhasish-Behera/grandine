@@ -279,6 +279,17 @@ pub trait Preset: Copy + Eq + Ord + Hash + Default + Debug + Send + Sync + 'stat
     // unreachable in practice (a list this long does not fit in a gossip message).
     type GloasDepositRequestsBound: MerkleElements<DepositRequest> + Eq + Debug + Send + Sync;
 
+    // Heze
+    type InclusionListCommitteeSize: ContiguousVectorElements<ValidatorIndex>
+        + MerkleElements<ValidatorIndex>
+        + BitVectorBits
+        + MerkleBits
+        + Eq
+        + Ord
+        + Debug
+        + Send
+        + Sync;
+
     // Derived type-level variables
     type MaxAttestersPerSlot: MerkleElements<ValidatorIndex>
         + MerkleBits
@@ -431,6 +442,9 @@ impl Preset for Mainnet {
     type MaxBuilderExitRequestsPerPayload = U16;
     type GloasDepositRequestsBound = U65536;
 
+    // Heze
+    type InclusionListCommitteeSize = U16;
+
     // Derived type-level variables
     type MaxAttestersPerSlot = Prod<Self::MaxValidatorsPerCommittee, Self::MaxCommitteesPerSlot>;
     type MaxCellProofsPerBlock =
@@ -515,6 +529,9 @@ impl Preset for Minimal {
         type MaxBuilderDepositRequestsPerPayload;
         type MaxBuilderExitRequestsPerPayload;
         type GloasDepositRequestsBound;
+
+        // Heze
+        type InclusionListCommitteeSize;
     }
 
     // Phase 0
@@ -639,6 +656,9 @@ impl Preset for Medalla {
         type MaxBuilderDepositRequestsPerPayload;
         type MaxBuilderExitRequestsPerPayload;
         type GloasDepositRequestsBound;
+
+        // Heze
+        type InclusionListCommitteeSize;
 
         // Derived type-level variables
         type MaxAttestersPerSlot;
