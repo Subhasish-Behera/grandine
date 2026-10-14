@@ -34,7 +34,10 @@ use types::{
         BeaconBlock as CapellaBeaconBlock, BeaconBlockBody as CapellaBeaconBlockBody,
         ExecutionPayload as CapellaExecutionPayload,
     },
-    combined::{Attestation, BeaconBlock, BeaconState, ExecutionPayload, SignedBeaconBlock},
+    combined::{
+        Attestation, BeaconBlock, BeaconState, ExecutionPayload, SignedBeaconBlock,
+        SignedExecutionPayloadBid,
+    },
     config::Config,
     deneb::containers::{
         BeaconBlock as DenebBeaconBlock, BeaconBlockBody as DenebBeaconBlockBody,
@@ -49,8 +52,9 @@ use types::{
         consts::BUILDER_INDEX_SELF_BUILD,
         containers::{
             BeaconBlock as GloasBeaconBlock, BeaconBlockBody as GloasBeaconBlockBody,
-            ExecutionPayload as GloasExecutionPayload, ExecutionPayloadBid,
-            ExecutionPayloadEnvelope, ExecutionRequests, SignedExecutionPayloadBid,
+            ExecutionPayload as GloasExecutionPayload,
+            ExecutionPayloadBid as GloasExecutionPayloadBid, ExecutionPayloadEnvelope,
+            ExecutionRequests, SignedExecutionPayloadBid as GloasSignedExecutionPayloadBid,
             SignedExecutionPayloadEnvelope,
         },
     },
@@ -64,7 +68,9 @@ use types::{
         primitives::{Epoch, ExecutionBlockHash, H256, Slot, SubnetId, ValidatorIndex},
     },
     preset::Preset,
-    traits::{BeaconState as _, PostGloasBeaconState, SignedBeaconBlock as _},
+    traits::{
+        BeaconState as _, BlockBodyWithPayloadBid, PostGloasBeaconState, SignedBeaconBlock as _,
+    },
 };
 
 type BlockWithState<P> = (Arc<SignedBeaconBlock<P>>, Arc<BeaconState<P>>);
@@ -298,7 +304,7 @@ pub fn execution_payload_envelope<P: Preset>(
         .message()
         .body()
         .with_payload_bid()
-        .map(|body| &body.signed_execution_payload_bid().message)
+        .map(BlockBodyWithPayloadBid::payload_bid)
     else {
         bail!("block should be post-Gloas");
     };
@@ -307,10 +313,10 @@ pub fn execution_payload_envelope<P: Preset>(
 
     let payload = GloasExecutionPayload {
         parent_hash: post_gloas_state.latest_block_hash(),
-        prev_randao: bid.prev_randao,
-        gas_limit: bid.gas_limit,
+        prev_randao: bid.prev_randao(),
+        gas_limit: bid.gas_limit(),
         timestamp: misc::compute_timestamp_at_slot(config, state, slot)?,
-        block_hash: bid.block_hash,
+        block_hash: bid.block_hash(),
         withdrawals: post_gloas_state
             .payload_expected_withdrawals()
             .into_iter()
@@ -462,6 +468,7 @@ pub fn singular_attestation<P: Preset>(
 }
 
 fn signed_execution_payload_bid<P: Preset>(
+    phase: Phase,
     state: &(impl PostGloasBeaconState<P> + ?Sized),
     extend_parent_payload: bool,
 ) -> SignedExecutionPayloadBid<P> {
@@ -470,26 +477,40 @@ fn signed_execution_payload_bid<P: Preset>(
     // The parent's bid names the hash its payload would have.
     // Pointing at it builds on the full node. Pointing at the latest hash builds on the empty one.
     let parent_block_hash = if extend_parent_payload {
-        state.latest_execution_payload_bid().block_hash
+        state.latest_execution_payload_bid().block_hash()
     } else {
         state.latest_block_hash()
     };
+    let parent_block_root = state.latest_block_header().hash_tree_root();
+    let slot = state.slot();
+    let block_hash = ExecutionBlockHash::from_low_u64_be(slot);
+    let execution_requests_root = ExecutionRequests::<P>::default().hash_tree_root();
 
-    SignedExecutionPayloadBid {
-        message: ExecutionPayloadBid {
-            parent_block_hash,
-            parent_block_root: state.latest_block_header().hash_tree_root(),
-            block_hash: ExecutionBlockHash::from_low_u64_be(state.slot()),
-            prev_randao,
-            builder_index: BUILDER_INDEX_SELF_BUILD,
-            slot: state.slot(),
-            value: 0,
-            execution_payment: 0,
-            blob_kzg_commitments: ProgressiveList::default(),
-            execution_requests_root: ExecutionRequests::<P>::default().hash_tree_root(),
-            ..Default::default()
-        },
-        signature: SignatureBytes::empty(),
+    match phase {
+        Phase::Gloas => GloasSignedExecutionPayloadBid {
+            message: GloasExecutionPayloadBid {
+                parent_block_hash,
+                parent_block_root,
+                block_hash,
+                prev_randao,
+                builder_index: BUILDER_INDEX_SELF_BUILD,
+                slot,
+                value: 0,
+                execution_payment: 0,
+                blob_kzg_commitments: ProgressiveList::default(),
+                execution_requests_root,
+                ..Default::default()
+            },
+            signature: SignatureBytes::empty(),
+        }
+        .into(),
+        Phase::Phase0
+        | Phase::Altair
+        | Phase::Bellatrix
+        | Phase::Capella
+        | Phase::Deneb
+        | Phase::Electra
+        | Phase::Fulu => unreachable!("post-Gloas state has a pre-Gloas phase"),
     }
 }
 
@@ -643,9 +664,9 @@ fn block_with_parent_payload<P: Preset>(
         )?);
     }
 
-    let signed_execution_payload_bid = advanced_state
-        .post_gloas()
-        .map(|state| signed_execution_payload_bid(state, extend_parent_payload));
+    let signed_execution_payload_bid = advanced_state.post_gloas().map(|state| {
+        signed_execution_payload_bid(advanced_state.phase(), state, extend_parent_payload)
+    });
 
     let without_state_root = match advanced_state.phase() {
         Phase::Phase0 => BeaconBlock::from(Hc::new(Phase0BeaconBlock {

@@ -285,7 +285,7 @@ impl<P: Preset> AttestationPacker<P> {
         let parent_slot = self
             .state
             .post_gloas()
-            .map(|state| state.latest_execution_payload_bid().slot);
+            .map(|state| state.latest_execution_payload_bid().slot());
 
         accessors::get_attestation_participation_flags(
             &self.state,

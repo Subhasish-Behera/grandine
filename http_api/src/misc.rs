@@ -27,7 +27,7 @@ use types::{
     },
     combined::{
         Attestation, BeaconBlock, SignedAggregateAndProof, SignedBeaconBlock,
-        SignedBlindedBeaconBlock,
+        SignedBlindedBeaconBlock, SignedExecutionPayloadBid,
     },
     deneb::{
         containers::{
@@ -48,8 +48,8 @@ use types::{
     gloas::containers::{
         ExecutionPayloadEnvelope, PayloadAttestationMessage,
         SignedAggregateAndProof as GloasSignedAggregateAndProof,
-        SignedBeaconBlock as GloasSignedBeaconBlock, SignedExecutionPayloadBid,
-        SignedProposerPreferences,
+        SignedBeaconBlock as GloasSignedBeaconBlock,
+        SignedExecutionPayloadBid as GloasSignedExecutionPayloadBid, SignedProposerPreferences,
     },
     nonstandard::{KzgProofs, Phase, WithBlobsAndMev},
     phase0::{
@@ -398,10 +398,17 @@ impl<'de, P: Preset> DeserializeSeed<'de> for SignedExecutionPayloadBidPhaseDese
     where
         D: serde::Deserializer<'de>,
     {
-        if self.phase >= Phase::Gloas {
-            SignedExecutionPayloadBid::deserialize(deserializer).map(Arc::new)
-        } else {
-            Err(D::Error::custom("invalid phase"))
+        match self.phase {
+            Phase::Gloas => GloasSignedExecutionPayloadBid::deserialize(deserializer)
+                .map(SignedExecutionPayloadBid::Gloas)
+                .map(Arc::new),
+            Phase::Phase0
+            | Phase::Altair
+            | Phase::Bellatrix
+            | Phase::Capella
+            | Phase::Deneb
+            | Phase::Electra
+            | Phase::Fulu => Err(D::Error::custom("invalid phase")),
         }
     }
 }
