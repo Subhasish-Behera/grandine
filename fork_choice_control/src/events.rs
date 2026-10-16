@@ -31,6 +31,7 @@ use types::{
         containers::{PayloadAttestationMessage, SignedProposerPreferences},
         primitives::{BuilderIndex, PayloadStatus},
     },
+    heze::containers::SignedInclusionList,
     nonstandard::Phase,
     phase0::{
         containers::{Checkpoint, ProposerSlashing, SignedVoluntaryExit},
@@ -64,6 +65,7 @@ pub enum Topic {
     FinalizedCheckpoint,
     Head,
     HeadV2,
+    InclusionList,
     PayloadAttestationMessage,
     PayloadAttributes,
     ProposerPreferences,
@@ -90,6 +92,7 @@ pub enum Event<P: Preset> {
     FinalizedCheckpoint(FinalizedCheckpointEvent),
     Head(HeadEvent),
     HeadV2(HeadV2Event),
+    InclusionList(InclusionListEvent<P>),
     PayloadAttestation(PayloadAttestationEvent),
     PayloadAttributes(PayloadAttributesEvent),
     ProposerPreferences(ProposerPreferencesEvent),
@@ -118,6 +121,7 @@ impl<P: Preset> Event<P> {
             Self::FinalizedCheckpoint(_) => Topic::FinalizedCheckpoint,
             Self::Head(_) => Topic::Head,
             Self::HeadV2(_) => Topic::HeadV2,
+            Self::InclusionList(_) => Topic::InclusionList,
             Self::PayloadAttestation(_) => Topic::PayloadAttestationMessage,
             Self::PayloadAttributes(_) => Topic::PayloadAttributes,
             Self::ProposerPreferences(_) => Topic::ProposerPreferences,
@@ -147,6 +151,7 @@ pub struct EventChannels<P: Preset> {
     pub finalized_checkpoints: Sender<Event<P>>,
     pub heads: Sender<Event<P>>,
     pub heads_v2: Sender<Event<P>>,
+    pub inclusion_lists: Sender<Event<P>>,
     pub payload_attestations: Sender<Event<P>>,
     pub payload_attributes: Sender<Event<P>>,
     pub proposer_preferences: Sender<Event<P>>,
@@ -183,6 +188,7 @@ impl<P: Preset> EventChannels<P> {
             finalized_checkpoints: broadcast::channel(max_events).0,
             heads: broadcast::channel(max_events).0,
             heads_v2: broadcast::channel(max_events).0,
+            inclusion_lists: broadcast::channel(max_events).0,
             payload_attestations: broadcast::channel(max_events).0,
             payload_attributes: broadcast::channel(max_events).0,
             proposer_preferences: broadcast::channel(max_events).0,
@@ -212,6 +218,7 @@ impl<P: Preset> EventChannels<P> {
             Topic::FinalizedCheckpoint => &self.finalized_checkpoints,
             Topic::Head => &self.heads,
             Topic::HeadV2 => &self.heads_v2,
+            Topic::InclusionList => &self.inclusion_lists,
             Topic::PayloadAttestationMessage => &self.payload_attestations,
             Topic::PayloadAttributes => &self.payload_attributes,
             Topic::ProposerPreferences => &self.proposer_preferences,
@@ -410,6 +417,16 @@ impl<P: Preset> EventChannels<P> {
         if let Err(error) = self.send_head_v2_event_internal(head, payload_status, dependent_roots)
         {
             warn_with_peers!("unable to send head_v2 event: {error}");
+        }
+    }
+
+    pub fn send_inclusion_list_event(
+        &self,
+        phase: Phase,
+        signed_inclusion_list: Arc<SignedInclusionList<P>>,
+    ) {
+        if let Err(error) = self.send_inclusion_list_event_internal(phase, signed_inclusion_list) {
+            warn_with_peers!("unable to send inclusion list event: {error}");
         }
     }
 
@@ -748,6 +765,22 @@ impl<P: Preset> EventChannels<P> {
             let head_v2_event = HeadV2Event::new(head, payload_status, dependent_roots);
             let event = Event::HeadV2(head_v2_event);
             self.heads_v2.send(event)?;
+        }
+
+        Ok(())
+    }
+
+    fn send_inclusion_list_event_internal(
+        &self,
+        phase: Phase,
+        signed_inclusion_list: Arc<SignedInclusionList<P>>,
+    ) -> Result<()> {
+        if self.inclusion_lists.receiver_count() > 0 {
+            let event = Event::InclusionList(InclusionListEvent {
+                version: phase,
+                data: signed_inclusion_list,
+            });
+            self.inclusion_lists.send(event)?;
         }
 
         Ok(())
@@ -1104,6 +1137,14 @@ impl PayloadAttestationEvent {
 pub struct ExecutionPayloadBidEvent<P: Preset> {
     pub version: Phase,
     pub data: Arc<SignedExecutionPayloadBid<P>>,
+}
+
+// See <https://github.com/ethereum/beacon-APIs/pull/490>.
+#[derive(Clone, Debug, Serialize)]
+#[serde(bound = "")]
+pub struct InclusionListEvent<P: Preset> {
+    pub version: Phase,
+    pub data: Arc<SignedInclusionList<P>>,
 }
 
 #[derive(Clone, Debug, Serialize)]

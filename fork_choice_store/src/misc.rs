@@ -1337,6 +1337,12 @@ impl InclusionListOrigin {
     pub const fn is_requested(&self) -> bool {
         matches!(self, Self::Requested(_))
     }
+
+    // Requested lists follow the fork choice rules, not the gossip rules the event is for.
+    #[must_use]
+    pub const fn should_generate_event(&self) -> bool {
+        matches!(self, Self::Gossip(_) | Self::Own)
+    }
 }
 
 pub enum PartialBlockAction {
