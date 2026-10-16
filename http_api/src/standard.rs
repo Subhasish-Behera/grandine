@@ -2718,6 +2718,7 @@ pub async fn beacon_events<P: Preset>(
                 Event::FinalizedCheckpoint(data) => ssevent.json_data(data),
                 Event::Head(data) => ssevent.json_data(data),
                 Event::HeadV2(data) => ssevent.json_data(data),
+                Event::InclusionList(data) => ssevent.json_data(data),
                 Event::PayloadAttestation(data) => ssevent.json_data(data),
                 Event::PayloadAttributes(data) => ssevent.json_data(data),
                 Event::ProposerPreferences(data) => ssevent.json_data(data),

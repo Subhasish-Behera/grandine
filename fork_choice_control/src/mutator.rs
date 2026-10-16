@@ -2831,6 +2831,7 @@ where
         inclusion_list_identifier: InclusionListIdentifier,
     ) {
         let is_from_gossip = origin.is_from_gossip();
+        let should_generate_event = origin.should_generate_event();
         let gossip_id = origin.gossip_id();
 
         match result {
@@ -2851,6 +2852,16 @@ where
 
                 if let Some(gossip_id) = gossip_id {
                     self.send_to_p2p(P2pMessage::Accept(gossip_id));
+                }
+
+                if should_generate_event {
+                    let phase = self
+                        .store
+                        .chain_config()
+                        .phase_at_slot::<P>(signed_inclusion_list.message.slot);
+
+                    self.event_channels
+                        .send_inclusion_list_event(phase, signed_inclusion_list.clone_arc());
                 }
 
                 self.store_mut().apply_inclusion_list(
