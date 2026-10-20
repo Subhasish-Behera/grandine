@@ -1228,7 +1228,7 @@ impl GloasPreset {
 #[serde(deny_unknown_fields, rename_all = "SCREAMING_SNAKE_CASE")]
 pub struct HezePreset {
     #[serde(with = "serde_utils::string_or_native")]
-    inclusion_list_committee_size: u64,
+    inclusion_list_committee_size: NonZeroU64,
     #[serde(with = "serde_utils::string_or_native")]
     max_signed_execution_payload_bid_size_heze: u64,
     #[serde(with = "serde_utils::string_or_native")]
@@ -1239,7 +1239,7 @@ impl HezePreset {
     #[must_use]
     pub fn new<P: Preset>() -> Self {
         Self {
-            inclusion_list_committee_size: P::InclusionListCommitteeSize::U64,
+            inclusion_list_committee_size: P::InclusionListCommitteeSize::non_zero(),
             max_signed_execution_payload_bid_size_heze:
                 P::MAX_SIGNED_EXECUTION_PAYLOAD_BID_SIZE_HEZE,
             max_signed_inclusion_list_size: P::MAX_SIGNED_INCLUSION_LIST_SIZE,
